@@ -48,6 +48,27 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import func, case, and_, or_
 from sqlalchemy.orm import joinedload
 
+# Learning Data (LQ1–LQ11) + Churchgate-style auth mail
+try:
+    from learning_data import register_learning_routes, LEARNING_QUESTIONS, compute_indicators
+except ImportError:
+    register_learning_routes = None
+    LEARNING_QUESTIONS = {}
+    compute_indicators = None
+try:
+    from auth_mail import (
+        send_mail, branded, public_base, app_base_from_request,
+        issue_challenge, check_challenge, register_email_challenge_model,
+        send_password_reset_email, send_registration_confirm_email,
+        send_password_reset_success_email, OTP_MINUTES, CONFIRM_HOURS,
+    )
+except ImportError:
+    register_email_challenge_model = None
+    issue_challenge = check_challenge = None
+    send_password_reset_email = send_registration_confirm_email = None
+    send_password_reset_success_email = None
+    OTP_MINUTES, CONFIRM_HOURS = 5, 48
+
 # ---------------------------------------------------------------------------
 # App Config
 # ---------------------------------------------------------------------------
@@ -159,7 +180,7 @@ def _before_request_init_db():
     # Skip static and auth endpoints for onboarding gate
     if request.endpoint in (
         'static', 'login', 'logout', 'register', 'admin_access',
-        'forgot_password', 'reset_password', 'onboarding', None,
+        'forgot_password', 'reset_password', 'confirm_registration', 'onboarding', None,
         'assetlinks', 'web_manifest', 'index', 'about',
     ):
         return
@@ -473,6 +494,23 @@ class PasswordResetToken(db.Model):
 
     user = db.relationship('User')
 
+
+
+
+# Churchgate-style email challenges (OTP / registration confirm)
+if register_email_challenge_model:
+    EmailChallenge = register_email_challenge_model(db)
+else:
+    class EmailChallenge(db.Model):
+        __tablename__ = 'email_challenges'
+        id = db.Column(db.Integer, primary_key=True)
+        email = db.Column(db.String(120), nullable=False, index=True)
+        purpose = db.Column(db.String(40), nullable=False)
+        code_hash = db.Column(db.String(64), nullable=False)
+        pending_user_id = db.Column(db.Integer, nullable=True)
+        expires_at = db.Column(db.DateTime, nullable=False)
+        used = db.Column(db.Boolean, default=False)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class ExpenseCode(db.Model):
@@ -1141,7 +1179,19 @@ def register():
             user.set_password(password)
             db.session.add(user)
             db.session.commit()
-            flash('Registration submitted. An administrator will activate your account.', 'success')
+            if issue_challenge and EmailChallenge is not None and send_registration_confirm_email:
+                try:
+                    _tok = issue_challenge(db, EmailChallenge, email, 'register_confirm', user_id=user.id)
+                    mailed = send_registration_confirm_email(email, full_name, _tok, request=request)
+                    if mailed:
+                        flash('Registration submitted. Check your email to confirm, then an administrator will activate your account.', 'success')
+                    else:
+                        flash('Registration submitted. Confirmation email could not be sent (check MAIL_*). An administrator will activate your account.', 'warning')
+                except Exception as _re:
+                    app.logger.exception('reg confirm mail: %s', _re)
+                    flash('Registration submitted. An administrator will activate your account.', 'success')
+            else:
+                flash('Registration submitted. An administrator will activate your account.', 'success')
             return redirect(url_for('login'))
         except Exception as e:
             db.session.rollback()
@@ -2454,58 +2504,119 @@ def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start,
 # ---------------------------------------------------------------------------
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
+    """Churchgate-style: email a 6-digit code + reset link (OTP_MINUTES)."""
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
-        user = User.query.filter_by(email=email, is_active=True).first()
-        # Always show same message (do not reveal account existence)
-        msg = 'If an account exists for that email, a reset link is available below (demo mode) or was sent by email.'
-        if user:
-            import secrets
-            token = secrets.token_urlsafe(32)
-            prt = PasswordResetToken(
-                user_id=user.id,
-                token=token,
-                expires_at=datetime.utcnow() + timedelta(hours=2),
-            )
-            db.session.add(prt)
-            db.session.commit()
-            log_activity('password_reset_request', email, user=user)
-            # Demo / no-SMTP: show one-time link on screen
-            reset_url = url_for('reset_password', token=token, _external=True)
-            flash(msg, 'info')
-            flash(f'Reset link (valid 2 hours): {reset_url}', 'warning')
-        else:
-            flash(msg, 'info')
-        return redirect(url_for('forgot_password'))
-    return render_template('forgot_password.html')
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            flash('This email is not registered with CONTRAconnect.', 'danger')
+            return render_template('forgot_password.html', email=email, sent=False)
+        if issue_challenge and EmailChallenge is not None:
+            code = issue_challenge(db, EmailChallenge, email, 'reset', user_id=user.id)
+            mailed = False
+            if send_password_reset_email:
+                mailed = send_password_reset_email(email, code, request=request)
+            if not mailed:
+                base = app_base_from_request(request) if app_base_from_request else request.url_root.rstrip('/')
+                link = f"{base}/reset-password?email={email}&code={code}"
+                flash(f'Email could not be sent (check MAIL_*). Dev code: {code} · {link}', 'warning')
+            else:
+                flash(f'A reset code was sent to {email}. It expires in {OTP_MINUTES} minutes.', 'success')
+            try:
+                log_activity('password_reset_request', email, user=user)
+            except Exception:
+                pass
+            return render_template('forgot_password.html', email=email, sent=True)
+        # Fallback legacy token
+        import secrets as _sec
+        token = _sec.token_urlsafe(32)
+        prt = PasswordResetToken(user_id=user.id, token=token, expires_at=datetime.utcnow() + timedelta(hours=2))
+        db.session.add(prt); db.session.commit()
+        reset_url = url_for('reset_password', token=token, _external=True)
+        flash(f'Reset link (valid 2 hours): {reset_url}', 'warning')
+        return render_template('forgot_password.html', email=email, sent=True)
+    return render_template('forgot_password.html', email='', sent=False)
 
 
+@app.route('/reset-password', methods=['GET', 'POST'])
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
-def reset_password(token):
-    prt = PasswordResetToken.query.filter_by(token=token, used=False).first()
-    if not prt or prt.expires_at < datetime.utcnow():
-        flash('This reset link is invalid or has expired.', 'danger')
-        return redirect(url_for('forgot_password'))
-    user = db.session.get(User, prt.user_id)
+def reset_password(token=None):
+    """Churchgate-style form: email + 6-digit code + new password (legacy path token still works)."""
+    email = (request.args.get('email') or request.form.get('email') or '').strip().lower()
+    code = (request.args.get('code') or request.form.get('code') or '').strip()
+    if token and not code:
+        prt = PasswordResetToken.query.filter_by(token=token, used=False).first()
+        if prt and prt.expires_at >= datetime.utcnow():
+            user = db.session.get(User, prt.user_id)
+            if user:
+                email = user.email
     if request.method == 'POST':
-        pw = request.form.get('password', '')
-        confirm = request.form.get('confirm_password', '')
-        if pw != confirm:
+        email = request.form.get('email', '').strip().lower()
+        code = request.form.get('code', '').strip()
+        password = request.form.get('password', '')
+        password2 = request.form.get('confirm_password') or request.form.get('password2', '')
+        if password != password2:
             flash('Passwords do not match.', 'danger')
-            return redirect(url_for('reset_password', token=token))
-        strong = _is_admin_role(user.role) if user else False
-        ok, msg = validate_password_strength(pw, min_length=10 if strong else 8, require_strong=strong)
+            return render_template('reset_password.html', email=email, code=code)
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            flash('This email is not registered with CONTRAconnect.', 'danger')
+            return render_template('reset_password.html', email=email, code=code)
+        strong = _is_admin_role(user.role)
+        ok, msg = validate_password_strength(password, min_length=10 if strong else 8, require_strong=strong)
         if not ok:
             flash(msg, 'danger')
-            return redirect(url_for('reset_password', token=token))
-        user.set_password(pw)
+            return render_template('reset_password.html', email=email, code=code)
+        row = None
+        if check_challenge and EmailChallenge is not None and code:
+            row = check_challenge(db, EmailChallenge, email, 'reset', code)
+        if not row and token:
+            prt = PasswordResetToken.query.filter_by(token=token, used=False).first()
+            if prt and prt.expires_at >= datetime.utcnow() and prt.user_id == user.id:
+                prt.used = True
+                row = prt
+                db.session.commit()
+        if not row:
+            flash(f'Invalid or expired code. Codes expire in {OTP_MINUTES} minutes. Request a new link.', 'danger')
+            return render_template('reset_password.html', email=email, code='')
+        user.set_password(password)
         user.password_changed_at = datetime.utcnow()
-        prt.used = True
         db.session.commit()
-        log_activity('password_reset_complete', user=user)
-        flash('Password updated. You can sign in now.', 'success')
+        try:
+            if send_password_reset_success_email:
+                send_password_reset_success_email(email)
+            log_activity('password_reset_complete', email, user=user)
+        except Exception:
+            pass
+        flash('Your password has been reset. You can sign in now.', 'success')
         return redirect(url_for('login'))
-    return render_template('reset_password.html', token=token)
+    return render_template('reset_password.html', email=email, code=code)
+
+
+@app.route('/confirm-registration', methods=['GET', 'POST'])
+def confirm_registration():
+    email = (request.args.get('email') or request.form.get('email') or '').strip().lower()
+    token = (request.args.get('token') or request.form.get('token') or '').strip()
+    if not email or not token:
+        return render_template('confirm_registration.html', ok=False, message='Missing email or token.')
+    if not (check_challenge and EmailChallenge is not None):
+        return render_template('confirm_registration.html', ok=False, message='Confirmation system not configured.')
+    row = check_challenge(db, EmailChallenge, email, 'register_confirm', token)
+    if not row:
+        return render_template('confirm_registration.html', ok=False,
+            message='Link expired or already used. Register again or contact support.')
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return render_template('confirm_registration.html', ok=False, message='Account not found.')
+    try:
+        if hasattr(user, 'email_verified'):
+            user.email_verified = True
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    return render_template('confirm_registration.html', ok=True,
+        message='Email confirmed. An administrator will activate your account if required. You may try signing in.')
+
 
 
 @app.route('/onboarding', methods=['GET', 'POST'])
@@ -3002,6 +3113,22 @@ def staff_dashboard():
         Invoice.created_at.desc()
     ).limit(8).all()
     recent_all = Invoice.query.order_by(Invoice.created_at.desc()).limit(10).all()
+    # Learning Data (LQ1–LQ11) summary for PM / assigned staff
+    learning_counts = {}
+    learning_total = 0
+    my_lq_assignments = []
+    try:
+        LS = globals().get('LearningSubmission')
+        LA = globals().get('LearningAssignment')
+        if LS is not None:
+            from sqlalchemy import func as _func
+            rows = db.session.query(LS.lq_code, _func.count(LS.id)).group_by(LS.lq_code).all()
+            learning_counts = dict(rows)
+            learning_total = sum(learning_counts.values())
+        if LA is not None:
+            my_lq_assignments = LA.query.filter_by(staff_user_id=current_user.id, is_active=True).all()
+    except Exception:
+        pass
     return render_template(
         'staff_dashboard.html',
         pending_finance=pending_finance,
@@ -3009,6 +3136,10 @@ def staff_dashboard():
         my_invoices=my_invoices,
         recent_all=recent_all,
         role=role,
+        learning_counts=learning_counts,
+        learning_total=learning_total,
+        my_lq_assignments=my_lq_assignments,
+        learning_questions=LEARNING_QUESTIONS if LEARNING_QUESTIONS else {},
     )
 
 
@@ -3916,6 +4047,25 @@ def assetlinks():
 @app.route('/static/manifest.json')
 def web_manifest():
     return app.send_static_file('manifest.json')
+
+
+
+# ---------------------------------------------------------------------------
+# Learning Data module (LQ Headline + LQ1–LQ11): forms, DB, analysis, Excel/PPT
+# ---------------------------------------------------------------------------
+if register_learning_routes:
+    try:
+        _lr = register_learning_routes(
+            app, db, User, login_required, current_user,
+            STAFF_ROLES, ADMIN_ROLES, PROGRAM_OPS_ROLES,
+            log_activity, _is_admin_role,
+        )
+        # Expose models for staff_dashboard queries
+        globals()['LearningSubmission'] = _lr.get('LearningSubmission')
+        globals()['LearningAssignment'] = _lr.get('LearningAssignment')
+        print('Learning Data routes registered (/learning, /learning/export/excel, /learning/export/pptx)')
+    except Exception as _le:
+        print('Learning Data registration failed:', _le)
 
 
 application = app  # WSGI alias for gunicorn / Render

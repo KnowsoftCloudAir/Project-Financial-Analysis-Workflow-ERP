@@ -1,5 +1,40 @@
 {% extends "base.html" %}
-{% block title %}My workspace – Project Financial Management Workflow{% endblock %}
+{% block title %}My workspace – Project Financial Management Workflow
+<!-- Learning Questions LQ1–LQ11 -->
+<div class="card mb-4 border-0 shadow-sm">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center" style="background:#0d9488;color:#fff">
+    <span><i class="bi bi-clipboard-data me-2"></i>Learning Data — Headline + LQ1 to LQ11</span>
+    <span class="badge bg-light text-dark">{{ learning_total|default(0) }} submissions</span>
+  </div>
+  <div class="card-body">
+    <p class="small text-muted mb-3">
+      Fill assigned templates, view analysis charts, and download Excel / PPT reports aligned to the Benin City Learning Data Template.
+    </p>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <a href="{{ url_for('learning_hub') }}" class="btn btn-success btn-sm"><i class="bi bi-pencil-square"></i> Open templates</a>
+      <a href="{{ url_for('learning_analysis') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-graph-up"></i> Analysis &amp; charts</a>
+      <a href="{{ url_for('learning_export_excel') }}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Download Excel</a>
+      <a href="{{ url_for('learning_export_pptx') }}" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-ppt"></i> PPT Report</a>
+      {% if current_user.role in ['project_manager','program_admin','general_admin','admin'] %}
+      <a href="{{ url_for('learning_assign') }}" class="btn btn-outline-dark btn-sm"><i class="bi bi-person-gear"></i> Assign staff</a>
+      {% endif %}
+    </div>
+    <div class="row g-2">
+      {% for code in ['H','LQ1','LQ2','LQ3','LQ4','LQ5','LQ6','LQ7','LQ8','LQ9','LQ10','LQ11'] %}
+      <div class="col-6 col-md-3 col-lg-2">
+        <a href="{{ url_for('learning_template', lq_code=code) }}" class="text-decoration-none">
+          <div class="border rounded p-2 text-center h-100" style="background:#f0fdfa">
+            <div class="fw-bold" style="color:#0d9488">{{ code }}</div>
+            <div class="small text-muted">{{ learning_counts.get(code, 0) if learning_counts is defined else 0 }} entries</div>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}
 {% block content %}
 <div class="mb-4">
     <h2 class="mb-1">{{ current_user.full_name }}</h2>

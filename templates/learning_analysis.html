@@ -55,6 +55,35 @@
     </table>
   </div>
 
+  <!-- Charts -->
+  <h2 class="h6 text-muted mb-3">Graphics</h2>
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="card h-100"><div class="card-body">
+        <h3 class="h6">Submissions by Learning Question</h3>
+        <canvas id="chartBarLQ" height="220"></canvas>
+      </div></div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card h-100"><div class="card-body">
+        <h3 class="h6">Share of submissions (pie)</h3>
+        <canvas id="chartPieLQ" height="220"></canvas>
+      </div></div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card h-100"><div class="card-body">
+        <h3 class="h6">Headline uptake conversion over time</h3>
+        <canvas id="chartLineH" height="220"></canvas>
+      </div></div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card h-100"><div class="card-body">
+        <h3 class="h6">Target compliance (Met / Below / Monitor)</h3>
+        <canvas id="chartStatus" height="220"></canvas>
+      </div></div>
+    </div>
+  </div>
+
   <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
     <span class="small text-muted">Filter by LQ:</span>
     <a href="{{ url_for('learning_analysis') }}" class="btn btn-sm {% if not lq_filter %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
@@ -102,10 +131,72 @@
           <td><a href="{{ url_for('learning_submission_detail', sid=r.id) }}" class="btn btn-link btn-sm p-0">Open</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="text-center text-muted py-4">No submissions yet.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">No submissions yet. Open a template from the hub to collect data.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<script>
+(function(){
+  const counts = {{ chart_counts|default({})|tojson }};
+  const labels = Object.keys(counts);
+  const values = Object.values(counts);
+  const colors = ['#0d9488','#0ea5e9','#8b5cf6','#f59e0b','#ef4444','#10b981','#6366f1','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4'];
+
+  if (document.getElementById('chartBarLQ') && labels.length) {
+    new Chart(document.getElementById('chartBarLQ'), {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: 'Submissions', data: values, backgroundColor: colors }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+  }
+  if (document.getElementById('chartPieLQ') && labels.length) {
+    new Chart(document.getElementById('chartPieLQ'), {
+      type: 'pie',
+      data: { labels: labels, datasets: [{ data: values, backgroundColor: colors }] },
+      options: { responsive: true }
+    });
+  }
+
+  const lineH = {{ chart_line_h|default({'labels':[], 'values':[]})|tojson }};
+  if (document.getElementById('chartLineH') && lineH.labels && lineH.labels.length) {
+    new Chart(document.getElementById('chartLineH'), {
+      type: 'line',
+      data: {
+        labels: lineH.labels,
+        datasets: [{
+          label: 'Uptake conversion %',
+          data: lineH.values,
+          borderColor: '#0d9488',
+          backgroundColor: 'rgba(13,148,136,0.15)',
+          fill: true,
+          tension: 0.25
+        }, {
+          label: 'Target 60%',
+          data: lineH.labels.map(() => 60),
+          borderColor: '#ef4444',
+          borderDash: [6,4],
+          pointRadius: 0,
+          fill: false
+        }]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+    });
+  }
+
+  const status = {{ chart_status|default({'Met':0,'Below':0,'Monitor':0})|tojson }};
+  if (document.getElementById('chartStatus')) {
+    new Chart(document.getElementById('chartStatus'), {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(status),
+        datasets: [{ data: Object.values(status), backgroundColor: ['#10b981','#f59e0b','#94a3b8'] }]
+      },
+      options: { responsive: true }
+    });
+  }
+})();
+</script>
 {% endblock %}

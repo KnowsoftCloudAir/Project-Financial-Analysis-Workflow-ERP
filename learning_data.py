@@ -809,12 +809,45 @@ def register_learning_routes(
                 'computed': comp,
             })
 
+        # Chart data for graphics dashboard
+        chart_counts = {}
+        for code in LEARNING_QUESTIONS:
+            chart_counts[code] = LearningSubmission.query.filter_by(lq_code=code).count()
+
+        chart_line_h = {'labels': [], 'values': []}
+        h_subs = (
+            LearningSubmission.query.filter_by(lq_code='H')
+            .order_by(LearningSubmission.period_num, LearningSubmission.submitted_at)
+            .all()
+        )
+        for s in h_subs:
+            comp = json.loads(s.computed_json or '{}')
+            rate = comp.get('conversion_rate_pct')
+            if rate is None and comp.get('conversion_rate') is not None:
+                rate = float(comp['conversion_rate']) * 100
+            if rate is not None:
+                chart_line_h['labels'].append(s.period_label or str(s.period_num or s.id))
+                chart_line_h['values'].append(round(float(rate), 2))
+
+        chart_status = {'Met / Within limit': 0, 'Below / Above limit': 0, 'Monitor / —': 0}
+        for r in scorecard:
+            vs = r.get('vs_target')
+            if vs in ('Met', 'Within limit'):
+                chart_status['Met / Within limit'] += 1
+            elif vs in ('Below', 'Above limit'):
+                chart_status['Below / Above limit'] += 1
+            else:
+                chart_status['Monitor / —'] += 1
+
         return render_template(
             'learning_analysis.html',
             scorecard=scorecard,
             rows=rows,
             questions=LEARNING_QUESTIONS,
             lq_filter=lq_filter,
+            chart_counts=chart_counts,
+            chart_line_h=chart_line_h,
+            chart_status=chart_status,
         )
 
     @app.route('/learning/assign', methods=['GET', 'POST'])

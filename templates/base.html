@@ -127,6 +127,8 @@
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('export_financial_excel', days=90) }}"><i class="bi bi-file-earmark-excel"></i> Export financial</a></li>
                     {% endif %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint in ['invoice_list','invoice_detail','invoice_new'] %}active{% endif %}" href="{{ url_for('invoice_list') }}"><i class="bi bi-receipt"></i> Payment invoices</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint and request.endpoint.startswith('learning') %}active{% endif %}" href="{{ url_for('learning_hub') }}"><i class="bi bi-clipboard-data"></i> Learning Data (LQ)</a></li>
+
                     <li class="nav-item"><a class="nav-link {% if request.endpoint and request.endpoint.startswith('expense') %}active{% endif %}" href="{{ url_for('expense_list') }}"><i class="bi bi-cash-coin"></i> Expense requests</a></li>
                     {% if current_user.role in ['finance_analyst','finance_admin','general_admin','admin','project_manager'] %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'admin_budget' %}active{% endif %}" href="{{ url_for('admin_budget') }}"><i class="bi bi-table"></i> Budget template</a></li>
