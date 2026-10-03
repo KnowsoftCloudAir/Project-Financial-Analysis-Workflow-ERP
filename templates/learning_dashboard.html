@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+{% block title %}Learning Report Dashboard – CONTRAconnect{% endblock %}
+{% block content %}
+<style>
+  .lr-hero {
+    background: linear-gradient(135deg, #0f766e 0%, #0d9488 45%, #115e59 100%);
+    border-radius: 1rem; color: #fff; padding: 1.5rem 1.75rem;
+    box-shadow: 0 12px 40px rgba(13,148,136,.35);
+    transform: perspective(800px) rotateX(2deg);
+  }
+  .lr-card {
+    border: none; border-radius: 1rem; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(15,23,42,.08), 0 2px 6px rgba(15,23,42,.04);
+    transition: transform .2s, box-shadow .2s;
+    background: #fff;
+  }
+  .lr-card:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 16px 40px rgba(15,23,42,.12);
+  }
+  .lr-kpi {
+    border-radius: 1rem; padding: 1.1rem 1.25rem; color: #fff;
+    box-shadow: 0 10px 28px rgba(0,0,0,.15);
+    position: relative; overflow: hidden;
+  }
+  .lr-kpi::after {
+    content: ""; position: absolute; right: -20px; top: -20px;
+    width: 90px; height: 90px; border-radius: 50%;
+    background: rgba(255,255,255,.12);
+  }
+  .lr-kpi .val { font-size: 1.75rem; font-weight: 700; letter-spacing: -.02em; }
+  .chart-box { position: relative; height: 280px; }
+  .chart-box-lg { position: relative; height: 340px; }
+  .status-pill { border-radius: 999px; padding: .2rem .65rem; font-size: .75rem; font-weight: 600; }
+  .table-3d { box-shadow: 0 8px 24px rgba(15,23,42,.08); border-radius: .75rem; overflow: hidden; }
+</style>
+
+<div class="container-fluid py-3 px-3 px-lg-4">
+  <div class="lr-hero mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+      <div>
+        <div class="small text-uppercase opacity-75 mb-1">CONTRAconnect · Learning Report Dashboard</div>
+        <h1 class="h3 mb-1 text-white">Headline + LQ1–LQ11 Performance</h1>
+        <p class="mb-0 opacity-90 small">
+          Live from database · Charts, scorecard &amp; respondent audit · Access: PM, Finance Analyst, assigned staff
+        </p>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('learning_load_demo') }}" class="btn btn-light btn-sm"
+           onclick="return confirm('Load November 2026 demo entries?');">
+          <i class="bi bi-database-add"></i> Load demo
+        </a>
+        <a href="{{ url_for('learning_export_excel') }}" class="btn btn-success btn-sm">
+          <i class="bi bi-file-earmark-excel"></i> Excel
+        </a>
+        <a href="{{ url_for('learning_export_pptx') }}" class="btn btn-danger btn-sm">
+          <i class="bi bi-file-earmark-ppt"></i> PPT
+        </a>
+        <a href="{{ url_for('learning_hub') }}" class="btn btn-outline-light btn-sm">Templates</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="lr-kpi" style="background:linear-gradient(145deg,#0d9488,#0f766e)">
+        <div class="small opacity-75">Total submissions</div>
+        <div class="val">{{ total_subs }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="lr-kpi" style="background:linear-gradient(145deg,#0284c7,#0369a1)">
+        <div class="small opacity-75">LQs with data</div>
+        <div class="val">{{ lqs_with_data }} / 12</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="lr-kpi" style="background:linear-gradient(145deg,#059669,#047857)">
+        <div class="small opacity-75">On track (Met)</div>
+        <div class="val">{{ met_count }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="lr-kpi" style="background:linear-gradient(145deg,#d97706,#b45309)">
+        <div class="small opacity-75">Below / above limit</div>
+        <div class="val">{{ below_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="row g-3 mb-3">
+    <div class="col-lg-8">
+      <div class="card lr-card h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-3"><i class="bi bi-bar-chart-fill text-teal me-1" style="color:#0d9488"></i>
+            Submissions by Learning Question (3D-style bars)</h2>
+          <div class="chart-box-lg"><canvas id="chartBar3d"></canvas></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card lr-card h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-3"><i class="bi bi-pie-chart-fill me-1" style="color:#0d9488"></i>
+            Target compliance mix</h2>
+          <div class="chart-box"><canvas id="chartPie3d"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
+      <div class="card lr-card h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-3"><i class="bi bi-graph-up me-1" style="color:#0d9488"></i>
+            Headline uptake conversion trend</h2>
+          <div class="chart-box"><canvas id="chartLineH"></canvas></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card lr-card h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-3"><i class="bi bi-radar me-1" style="color:#0d9488"></i>
+            Multi-indicator radar (latest values scaled)</h2>
+          <div class="chart-box"><canvas id="chartRadar"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts row 3 -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="card lr-card h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-3"><i class="bi bi-circle-half me-1" style="color:#0d9488"></i>
+            Doughnut — entries by LQ</h2>
+          <div class="chart-box"><canvas id="chartDoughnut"></canvas></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card lr-card h-100">
+        <div class="card-body">
+          <h2 class="h6 mb-3"><i class="bi bi-distribute-vertical me-1" style="color:#0d9488"></i>
+            Horizontal bar — primary indicators</h2>
+          <div class="chart-box"><canvas id="chartHBar"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scorecard table -->
+  <div class="card lr-card table-3d mb-4">
+    <div class="card-header bg-white border-0 pt-3">
+      <h2 class="h6 mb-0">Scorecard table (latest vs target)</h2>
+    </div>
+    <div class="card-body pt-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>LQ</th><th>Question</th><th>Indicator</th><th>Latest</th>
+              <th>Target</th><th>Status</th><th>Period</th><th>Staff</th><th>When</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in scorecard %}
+            <tr>
+              <td><span class="badge" style="background:#0d9488">{{ r.code }}</span></td>
+              <td class="small">{{ r.title }}</td>
+              <td class="small">{{ r.indicator }}</td>
+              <td class="fw-semibold">{{ r.value if r.value is not none else '—' }}</td>
+              <td>{{ r.target }}</td>
+              <td>
+                {% if r.vs_target in ('Met','Within limit') %}
+                  <span class="status-pill bg-success bg-opacity-10 text-success">{{ r.vs_target }}</span>
+                {% elif r.vs_target %}
+                  <span class="status-pill bg-warning bg-opacity-25 text-dark">{{ r.vs_target }}</span>
+                {% else %}
+                  <span class="status-pill bg-secondary bg-opacity-10 text-secondary">Monitor</span>
+                {% endif %}
+              </td>
+              <td class="small">{{ r.period or '—' }}</td>
+              <td class="small">{{ r.staff or '—' }}</td>
+              <td class="small">{{ r.when.strftime('%Y-%m-%d %H:%M') if r.when else '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="text-center text-muted py-4">
+              No data yet. <a href="{{ url_for('learning_load_demo') }}">Load demo month</a> or fill templates.
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Respondent log -->
+  <div class="card lr-card table-3d mb-4">
+    <div class="card-header bg-white border-0 pt-3 d-flex justify-content-between">
+      <h2 class="h6 mb-0">Respondent-by-respondent log</h2>
+      <span class="badge bg-light text-dark">{{ rows|length }} shown</span>
+    </div>
+    <div class="card-body pt-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>ID</th><th>LQ</th><th>Period</th><th>Staff</th><th>Email</th>
+              <th>Submitted (UTC)</th><th>Outputs</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr>
+              <td>{{ r.id }}</td>
+              <td><span class="badge bg-secondary">{{ r.lq_code }}</span></td>
+              <td class="small">{{ r.period }}</td>
+              <td>{{ r.staff }}</td>
+              <td class="small">{{ r.email }}</td>
+              <td class="small">{{ r.when.strftime('%Y-%m-%d %H:%M:%S') if r.when else '—' }}</td>
+              <td class="small">
+                {% for k,v in r.computed.items() if k != 'vs_target' %}
+                  <code>{{ k }}</code>={{ v }}{% if not loop.last %}; {% endif %}
+                {% endfor %}
+              </td>
+              <td><a href="{{ url_for('learning_submission_detail', sid=r.id) }}" class="btn btn-link btn-sm p-0">Open</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-muted text-center py-3">No submissions.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  const TEAL = '#0d9488';
+  const colors = [
+    '#0d9488','#0284c7','#7c3aed','#f59e0b','#ef4444','#10b981',
+    '#6366f1','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4'
+  ];
+  const counts = {{ chart_counts|default({})|tojson }};
+  const labels = Object.keys(counts);
+  const values = Object.values(counts);
+  const status = {{ chart_status|default({})|tojson }};
+  const lineH = {{ chart_line_h|default({'labels':[], 'values':[]})|tojson }};
+  const radar = {{ chart_radar|default({'labels':[], 'values':[]})|tojson }};
+  const hbar = {{ chart_hbar|default({'labels':[], 'values':[]})|tojson }};
+
+  // 3D-style bar: stacked shadow series + main
+  if (document.getElementById('chartBar3d') && labels.length) {
+    const shadow = values.map(v => Math.max(v * 0.15, 0.05));
+    new Chart(document.getElementById('chartBar3d'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Submissions',
+            data: values,
+            backgroundColor: colors,
+            borderRadius: 8,
+            borderSkipped: false,
+            barPercentage: 0.7,
+          },
+          {
+            label: 'Depth',
+            data: shadow,
+            backgroundColor: colors.map(c => c + '44'),
+            borderRadius: 6,
+            borderSkipped: false,
+            barPercentage: 0.7,
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { mode: 'index' } },
+        scales: {
+          x: { stacked: true, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } }
+        }
+      }
+    });
+  }
+
+  if (document.getElementById('chartPie3d') && Object.keys(status).length) {
+    new Chart(document.getElementById('chartPie3d'), {
+      type: 'pie',
+      data: {
+        labels: Object.keys(status),
+        datasets: [{
+          data: Object.values(status),
+          backgroundColor: ['#10b981', '#f59e0b', '#94a3b8'],
+          borderWidth: 3,
+          borderColor: '#fff',
+          hoverOffset: 16
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: ctx => {
+            const t = ctx.dataset.data.reduce((a,b)=>a+b,0) || 1;
+            return ctx.label + ': ' + ctx.raw + ' (' + Math.round(ctx.raw/t*100) + '%)';
+          }}}
+        }
+      }
+    });
+  }
+
+  if (document.getElementById('chartLineH')) {
+    new Chart(document.getElementById('chartLineH'), {
+      type: 'line',
+      data: {
+        labels: lineH.labels.length ? lineH.labels : ['No data'],
+        datasets: [
+          {
+            label: 'Uptake conversion %',
+            data: lineH.values.length ? lineH.values : [0],
+            borderColor: TEAL,
+            backgroundColor: 'rgba(13,148,136,0.2)',
+            fill: true, tension: 0.35, pointRadius: 5, pointBackgroundColor: TEAL,
+            borderWidth: 3
+          },
+          {
+            label: 'Target 60%',
+            data: (lineH.labels.length ? lineH.labels : ['No data']).map(() => 60),
+            borderColor: '#ef4444', borderDash: [6,4], pointRadius: 0, fill: false, borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true, max: 100, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
+      }
+    });
+  }
+
+  if (document.getElementById('chartRadar') && radar.labels.length) {
+    new Chart(document.getElementById('chartRadar'), {
+      type: 'radar',
+      data: {
+        labels: radar.labels,
+        datasets: [{
+          label: 'Scaled 0–100',
+          data: radar.values,
+          backgroundColor: 'rgba(13,148,136,0.25)',
+          borderColor: TEAL,
+          pointBackgroundColor: TEAL,
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { r: { beginAtZero: true, max: 100, ticks: { display: false } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  if (document.getElementById('chartDoughnut') && labels.length) {
+    new Chart(document.getElementById('chartDoughnut'), {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderWidth: 3,
+          borderColor: '#fff',
+          hoverOffset: 12
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        cutout: '55%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } } }
+      }
+    });
+  }
+
+  if (document.getElementById('chartHBar') && hbar.labels.length) {
+    new Chart(document.getElementById('chartHBar'), {
+      type: 'bar',
+      data: {
+        labels: hbar.labels,
+        datasets: [{
+          label: 'Primary metric',
+          data: hbar.values,
+          backgroundColor: colors,
+          borderRadius: 6,
+          borderSkipped: false
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+          y: { grid: { display: false } }
+        }
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

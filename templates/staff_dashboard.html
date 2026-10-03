@@ -12,7 +12,8 @@
     </p>
     <div class="d-flex flex-wrap gap-2 mb-3">
       <a href="{{ url_for('learning_hub') }}" class="btn btn-success btn-sm"><i class="bi bi-pencil-square"></i> Open templates</a>
-      <a href="{{ url_for('learning_analysis') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-graph-up"></i> Analysis &amp; charts</a>
+      <a href="{{ url_for('learning_report_dashboard') }}" class="btn btn-primary btn-sm"><i class="bi bi-bar-chart-line"></i> Report Dashboard</a>
+      <a href="{{ url_for('learning_analysis') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-graph-up"></i> Analysis</a>
       <a href="{{ url_for('learning_export_excel') }}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Download Excel</a>
       <a href="{{ url_for('learning_export_pptx') }}" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-ppt"></i> PPT Report</a>
       <a href="{{ url_for('learning_load_demo') }}" class="btn btn-warning btn-sm"

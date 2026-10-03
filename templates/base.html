@@ -128,6 +128,7 @@
                     {% endif %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint in ['invoice_list','invoice_detail','invoice_new'] %}active{% endif %}" href="{{ url_for('invoice_list') }}"><i class="bi bi-receipt"></i> Payment invoices</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint and request.endpoint.startswith('learning') %}active{% endif %}" href="{{ url_for('learning_hub') }}"><i class="bi bi-clipboard-data"></i> Learning Data (LQ)</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'learning_report_dashboard' %}active{% endif %}" href="{{ url_for('learning_report_dashboard') }}"><i class="bi bi-bar-chart-line"></i> Learning Report</a></li>
 
                     <li class="nav-item"><a class="nav-link {% if request.endpoint and request.endpoint.startswith('expense') %}active{% endif %}" href="{{ url_for('expense_list') }}"><i class="bi bi-cash-coin"></i> Expense requests</a></li>
                     {% if current_user.role in ['finance_analyst','finance_admin','general_admin','admin','project_manager'] %}

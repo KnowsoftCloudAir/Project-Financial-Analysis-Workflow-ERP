@@ -902,6 +902,150 @@ def register_learning_routes(
             chart_status=chart_status,
         )
 
+
+    @app.route('/learning/dashboard')
+    @app.route('/learning/report')
+    @login_required
+    @staff_required
+    def learning_report_dashboard():
+        """Full Learning Report Dashboard — PM, finance analyst, assigned staff."""
+        # Access: PM roles, finance_analyst, or any staff with active LQ assignment
+        allowed = (
+            current_user.role in PM_ROLES
+            or current_user.role in ('finance_analyst', 'finance_admin', 'mel_consultant')
+            or current_user.role in STAFF_ROLES
+            or LearningAssignment.query.filter_by(staff_user_id=current_user.id, is_active=True).first() is not None
+        )
+        if not allowed and not _is_admin_role(current_user.role):
+            flash('You do not have access to the Learning Report Dashboard. Ask the Project Manager to assign you.', 'warning')
+            return redirect(url_for('learning_hub'))
+
+        # Reuse scorecard + chart builders (same as analysis)
+        submissions = (
+            LearningSubmission.query.order_by(
+                LearningSubmission.lq_code,
+                LearningSubmission.period_num,
+                LearningSubmission.submitted_at.desc(),
+            ).limit(500).all()
+        )
+        scorecard = []
+        key_map = {
+            'H': 'conversion_rate_pct', 'LQ1': 'avg_satisfaction', 'LQ2': 'overall',
+            'LQ3': 'nps', 'LQ4': 'unassisted_pct', 'LQ5': 'attrition_rate',
+            'LQ6': 'ft_to_reg', 'LQ7': 'discontinuation_rate', 'LQ8': 'unit_cost',
+            'LQ9': 'channel_conversion', 'LQ10': 'sync_rate', 'LQ11': 'pct_achieved',
+        }
+        pct_keys = {
+            'unassisted_pct', 'attrition_rate', 'sync_rate', 'pct_achieved',
+            'ft_to_reg', 'channel_conversion', 'overall', 'discontinuation_rate',
+        }
+        radar_labels, radar_values = [], []
+        hbar_labels, hbar_values = [], []
+
+        for code, meta in LEARNING_QUESTIONS.items():
+            latest = (
+                LearningSubmission.query.filter_by(lq_code=code)
+                .order_by(LearningSubmission.submitted_at.desc())
+                .first()
+            )
+            primary = None
+            vs = None
+            period = staff = when = None
+            numeric_for_radar = None
+            if latest:
+                comp = json.loads(latest.computed_json or '{}')
+                period = latest.period_label
+                staff = latest.staff_name
+                when = latest.submitted_at
+                k = key_map.get(code)
+                primary = comp.get(k)
+                vs = comp.get('vs_target')
+                raw_num = primary
+                if k == 'conversion_rate_pct' and primary is not None:
+                    numeric_for_radar = float(primary)
+                    primary = f'{float(primary):.2f}%'
+                elif k in pct_keys and primary is not None:
+                    numeric_for_radar = float(primary) * 100
+                    primary = f'{float(primary) * 100:.1f}%'
+                elif k == 'nps' and primary is not None:
+                    numeric_for_radar = min(100, max(0, float(primary)))
+                    primary = f'{float(primary):.1f}'
+                elif k == 'unit_cost' and primary is not None:
+                    numeric_for_radar = min(100, float(primary) / 100)  # scale
+                    primary = f'{float(primary):,.2f}'
+                elif k == 'avg_satisfaction' and primary is not None:
+                    numeric_for_radar = float(primary) / 5 * 100
+                    primary = f'{float(primary):.2f}'
+                elif isinstance(primary, float):
+                    numeric_for_radar = primary
+                    primary = f'{primary:.2f}'
+                if numeric_for_radar is not None:
+                    radar_labels.append(code)
+                    radar_values.append(round(float(numeric_for_radar), 1))
+                    hbar_labels.append(code)
+                    hbar_values.append(round(float(numeric_for_radar), 1))
+
+            scorecard.append({
+                'code': code, 'title': meta['title'], 'indicator': meta['primary_indicator'],
+                'target': meta['target'], 'value': primary, 'vs_target': vs,
+                'period': period, 'staff': staff, 'when': when,
+            })
+
+        rows = []
+        for s in submissions:
+            rows.append({
+                'id': s.id, 'lq_code': s.lq_code, 'period': s.period_label,
+                'staff': s.staff_name, 'email': s.staff_email,
+                'when': s.submitted_at, 'status': s.status,
+                'raw': json.loads(s.data_json or '{}'),
+                'computed': json.loads(s.computed_json or '{}'),
+            })
+
+        chart_counts = {code: LearningSubmission.query.filter_by(lq_code=code).count()
+                        for code in LEARNING_QUESTIONS}
+        chart_line_h = {'labels': [], 'values': []}
+        for s in LearningSubmission.query.filter_by(lq_code='H').order_by(
+            LearningSubmission.period_num, LearningSubmission.submitted_at
+        ).all():
+            comp = json.loads(s.computed_json or '{}')
+            rate = comp.get('conversion_rate_pct')
+            if rate is None and comp.get('conversion_rate') is not None:
+                rate = float(comp['conversion_rate']) * 100
+            if rate is not None:
+                chart_line_h['labels'].append(s.period_label or str(s.id))
+                chart_line_h['values'].append(round(float(rate), 2))
+
+        chart_status = {'Met / Within limit': 0, 'Below / Above limit': 0, 'Monitor / —': 0}
+        for r in scorecard:
+            vs = r.get('vs_target')
+            if vs in ('Met', 'Within limit'):
+                chart_status['Met / Within limit'] += 1
+            elif vs in ('Below', 'Above limit'):
+                chart_status['Below / Above limit'] += 1
+            else:
+                chart_status['Monitor / —'] += 1
+
+        total_subs = sum(chart_counts.values())
+        lqs_with_data = sum(1 for v in chart_counts.values() if v > 0)
+        met_count = chart_status['Met / Within limit']
+        below_count = chart_status['Below / Above limit']
+
+        return render_template(
+            'learning_dashboard.html',
+            scorecard=scorecard,
+            rows=rows,
+            questions=LEARNING_QUESTIONS,
+            chart_counts=chart_counts,
+            chart_line_h=chart_line_h,
+            chart_status=chart_status,
+            chart_radar={'labels': radar_labels, 'values': radar_values},
+            chart_hbar={'labels': hbar_labels, 'values': hbar_values},
+            total_subs=total_subs,
+            lqs_with_data=lqs_with_data,
+            met_count=met_count,
+            below_count=below_count,
+        )
+
     @app.route('/learning/assign', methods=['GET', 'POST'])
     @login_required
     @pm_required
@@ -1793,10 +1937,10 @@ def register_learning_routes(
             pass
         flash(
             f'Demo month (Nov 2026) loaded: {added} LQ entries. '
-            'Open Analysis for charts, or Download Excel / PPT.',
+            'Open the Report Dashboard for charts, or Download Excel / PPT.',
             'success',
         )
-        return redirect(url_for('learning_analysis'))
+        return redirect(url_for('learning_report_dashboard'))
 
 
     # ------------------------------------------------------------------
