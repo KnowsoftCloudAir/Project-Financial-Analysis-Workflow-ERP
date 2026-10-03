@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Learning Analysis – CONTRAconnect{% endblock %}
+{% block content %}
+<div class="container-fluid py-4 px-3 px-lg-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h1 class="h4 mb-0"><i class="bi bi-graph-up me-2"></i>Learning indicator analysis</h1>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('learning_export_excel') }}" class="btn btn-success btn-sm">
+        <i class="bi bi-file-earmark-excel"></i> Download Excel (H + LQ1–LQ11)
+      </a>
+      <a href="{{ url_for('learning_export_pptx') }}" class="btn btn-danger btn-sm">
+        <i class="bi bi-file-earmark-ppt"></i> PPT Report
+      </a>
+      <a href="{{ url_for('learning_hub') }}" class="btn btn-outline-secondary btn-sm">Hub</a>
+    </div>
+  </div>
+
+  <h2 class="h6 text-muted">Scorecard (latest submission per LQ vs target)</h2>
+  <div class="table-responsive mb-4">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>LQ</th>
+          <th>Learning question</th>
+          <th>Primary indicator</th>
+          <th>Target / limit</th>
+          <th>Latest value</th>
+          <th>vs target</th>
+          <th>Period</th>
+          <th>Staff</th>
+          <th>Date / time (UTC)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in scorecard %}
+        <tr>
+          <td><span class="badge bg-secondary">{{ r.code }}</span></td>
+          <td>{{ r.title }}</td>
+          <td>{{ r.indicator }}</td>
+          <td>{{ r.target }}</td>
+          <td class="fw-semibold">{{ r.value if r.value is not none else '—' }}</td>
+          <td>
+            {% if r.vs_target in ('Met', 'Within limit') %}
+              <span class="badge bg-success">{{ r.vs_target }}</span>
+            {% elif r.vs_target %}
+              <span class="badge bg-warning text-dark">{{ r.vs_target }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ r.period or '—' }}</td>
+          <td>{{ r.staff or '—' }}</td>
+          <td class="small">{{ r.when.strftime('%Y-%m-%d %H:%M') if r.when else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+    <span class="small text-muted">Filter by LQ:</span>
+    <a href="{{ url_for('learning_analysis') }}" class="btn btn-sm {% if not lq_filter %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+    {% for code in questions %}
+    <a href="{{ url_for('learning_analysis', lq=code) }}"
+       class="btn btn-sm {% if lq_filter==code %}btn-primary{% else %}btn-outline-primary{% endif %}">{{ code }}</a>
+    {% endfor %}
+  </div>
+
+  <h2 class="h6 text-muted">Respondent-by-respondent log</h2>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>LQ</th>
+          <th>Period</th>
+          <th>Staff</th>
+          <th>Email</th>
+          <th>Date &amp; time (UTC)</th>
+          <th>Key outputs</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td><span class="badge bg-secondary">{{ r.lq_code }}</span></td>
+          <td>{{ r.period }}</td>
+          <td>{{ r.staff }}</td>
+          <td class="small">{{ r.email }}</td>
+          <td class="small">{{ r.when.strftime('%Y-%m-%d %H:%M:%S') if r.when else '—' }}</td>
+          <td class="small">
+            {% for k,v in r.computed.items() %}
+              {% if k != 'vs_target' %}
+                <span class="me-2"><code>{{ k }}</code>=
+                  {% if v is number and 0 <= v <= 1 and k not in ['nps','avg_satisfaction','unit_cost'] %}
+                    {{ '%.1f%%'|format(v*100) }}
+                  {% else %}{{ v }}{% endif %}
+                </span>
+              {% endif %}
+            {% endfor %}
+          </td>
+          <td><a href="{{ url_for('learning_submission_detail', sid=r.id) }}" class="btn btn-link btn-sm p-0">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="text-center text-muted py-4">No submissions yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

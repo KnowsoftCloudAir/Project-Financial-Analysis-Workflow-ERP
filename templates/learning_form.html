@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ lq_code }} – {{ meta.title }}{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:720px">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('learning_hub') }}">Learning Data</a></li>
+      <li class="breadcrumb-item active">{{ lq_code }}</li>
+    </ol>
+  </nav>
+
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0d9488;color:#fff">
+      <h1 class="h5 mb-0">{{ lq_code }}: {{ meta.title }}</h1>
+    </div>
+    <div class="card-body">
+      <p class="text-muted small">{{ meta.question }}</p>
+      <p class="small mb-3">
+        <strong>Primary indicator:</strong> {{ meta.primary_indicator }}
+        · <strong>Target:</strong> {{ meta.target }}
+        · <strong>Frequency:</strong> {{ meta.frequency }}
+      </p>
+      <div class="alert alert-info small py-2">
+        Yellow fields = inputs (as in the Excel template). Derived indicators are calculated on save.
+        Your name, date and time are recorded automatically.
+      </div>
+
+      <form method="post" novalidate>
+        {% for f in meta.fields %}
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="{{ f.key }}">
+            {{ f.label }}
+            {% if f.get('required') %}<span class="text-danger">*</span>{% endif %}
+          </label>
+          {% if f.type == 'text' %}
+          <textarea class="form-control" id="{{ f.key }}" name="{{ f.key }}" rows="3"
+            style="background:#fffde7">{{ form_data.get(f.key, '') }}</textarea>
+          {% elif f.type == 'date' %}
+          <input type="date" class="form-control" id="{{ f.key }}" name="{{ f.key }}"
+            value="{{ form_data.get(f.key, '') }}" style="background:#fffde7">
+          {% elif f.type in ('integer','float') %}
+          <input type="number" step="{{ 'any' if f.type=='float' else '1' }}"
+            class="form-control" id="{{ f.key }}" name="{{ f.key }}"
+            value="{{ form_data.get(f.key, '') }}" style="background:#fffde7"
+            {% if f.get('required') %}required{% endif %}>
+          {% else %}
+          <input type="text" class="form-control" id="{{ f.key }}" name="{{ f.key }}"
+            value="{{ form_data.get(f.key, '') }}" style="background:#fffde7"
+            {% if f.get('required') %}required{% endif %}>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        {% if meta.computed %}
+        <div class="border rounded p-3 mb-3 bg-light">
+          <div class="small text-muted mb-1">Will be calculated (Excel grey cells):</div>
+          <ul class="mb-0 small">
+            {% for c in meta.computed %}
+            <li>{{ c.label }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-save"></i> Save submission
+          </button>
+          <a href="{{ url_for('learning_hub') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
