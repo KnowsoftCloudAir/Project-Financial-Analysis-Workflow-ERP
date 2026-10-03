@@ -70,7 +70,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'Implementation partner & city M&E',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'engaged_app', 'label': 'Unique clients engaged: App', 'type': 'integer'},
             {'key': 'engaged_mobilizer', 'label': 'Unique clients engaged: Mobilizer', 'type': 'integer'},
             {'key': 'engaged_walkin', 'label': 'Unique clients engaged: Walk-in', 'type': 'integer'},
@@ -94,7 +94,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'City team / M&E',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'exit_surveys', 'label': 'Exit surveys completed', 'type': 'integer'},
             {'key': 'surveys_with_barrier', 'label': 'Surveys citing ≥1 barrier', 'type': 'integer'},
             {'key': 'avg_satisfaction', 'label': 'Avg client satisfaction (1–5)', 'type': 'float'},
@@ -144,7 +144,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'City team / M&E',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'responses', 'label': 'NPS responses', 'type': 'integer'},
             {'key': 'promoters', 'label': 'Promoters (9–10)', 'type': 'integer'},
             {'key': 'passives', 'label': 'Passives (7–8)', 'type': 'integer'},
@@ -165,7 +165,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'Implementation partner',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'started', 'label': 'Digital journeys started', 'type': 'integer'},
             {'key': 'completed_unassisted', 'label': 'Completed without staff help', 'type': 'integer'},
             {'key': 'completed_assisted', 'label': 'Completed with staff help', 'type': 'integer'},
@@ -186,7 +186,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'City team / HR',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'staff_start', 'label': 'Staff at month start', 'type': 'integer'},
             {'key': 'staff_end', 'label': 'Staff at month end', 'type': 'integer'},
             {'key': 'leavers', 'label': 'Leavers during month', 'type': 'integer'},
@@ -234,7 +234,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'Implementation partner & kiosk providers',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'method', 'label': 'Method (Pill/Injectable/Implant/IUD/Condom/EC/Other)', 'type': 'string'},
             {'key': 'issued', 'label': 'Units / clients issued', 'type': 'integer'},
             {'key': 'discontinued', 'label': 'Discontinuations reported', 'type': 'integer'},
@@ -256,7 +256,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'City finance lead & project manager',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'facility_or_kiosk', 'label': 'Facility / kiosk', 'type': 'string'},
             {'key': 'total_op_cost', 'label': 'Total operational cost (NGN)', 'type': 'float'},
             {'key': 'clients_served', 'label': 'Clients served', 'type': 'integer'},
@@ -279,7 +279,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'Implementation partner',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'channel', 'label': 'Channel (App/Mobilizer/Walk-in/Social media/Radio/Event/Digital referral)', 'type': 'string'},
             {'key': 'age_group', 'label': 'Age group (15-19/20-24/25-34/35-49)', 'type': 'string'},
             {'key': 'acquired', 'label': 'Clients acquired', 'type': 'integer'},
@@ -300,7 +300,7 @@ LEARNING_QUESTIONS = {
         'frequency': 'Monthly',
         'owner_hint': 'Technical / M&E lead',
         'fields': [
-            {'key': 'month_num', 'label': 'Month #', 'type': 'integer', 'required': True},
+            {'key': 'period_month', 'label': 'Month (calendar)', 'type': 'month', 'required': True},
             {'key': 'sync_attempts', 'label': 'Sync attempts', 'type': 'integer'},
             {'key': 'sync_successes', 'label': 'Successful syncs', 'type': 'integer'},
             {'key': 'avg_latency_hours', 'label': 'Avg reporting latency (hours)', 'type': 'float'},
@@ -612,7 +612,7 @@ def register_learning_routes(
     @login_required
     @staff_required
     def learning_template(lq_code):
-        """Fillable form for one LQ (or Headline H)."""
+        """Fillable form for one LQ (or Headline H) with calendar month + kiosk selector."""
         lq_code = lq_code.upper()
         meta = LEARNING_QUESTIONS.get(lq_code)
         if not meta:
@@ -622,6 +622,36 @@ def register_learning_routes(
         if not _can_submit_lq(current_user, lq_code):
             flash(f'You are not assigned to collect data for {lq_code}. Contact the Project Manager.', 'warning')
             return redirect(url_for('learning_hub'))
+
+        # Registered kiosks / service points (active facilities)
+        try:
+            Facility = db.Model.registry._class_registry.get('Facility')  # may fail
+        except Exception:
+            Facility = None
+        try:
+            from flask import current_app
+            # Prefer model from app context tables
+            fac_rows = db.session.execute(
+                db.text("SELECT id, name, facility_type FROM facilities WHERE is_active = true OR is_active = 1 ORDER BY name")
+            ).fetchall()
+            facilities = [{'id': r[0], 'name': r[1], 'type': r[2]} for r in fac_rows]
+        except Exception:
+            try:
+                # SQLAlchemy model query if Facility is mapped
+                FacilityModel = None
+                for m in db.Model.registry.mappers:
+                    if m.class_.__tablename__ == 'facilities':
+                        FacilityModel = m.class_
+                        break
+                if FacilityModel:
+                    facilities = [
+                        {'id': f.id, 'name': f.name, 'type': getattr(f, 'facility_type', '')}
+                        for f in FacilityModel.query.filter_by(is_active=True).order_by(FacilityModel.name).all()
+                    ]
+                else:
+                    facilities = []
+            except Exception:
+                facilities = []
 
         if request.method == 'POST':
             raw = {}
@@ -634,14 +664,28 @@ def register_learning_routes(
                     raw[key] = _safe_float(val)
                 elif field['type'] == 'date':
                     raw[key] = val or None
+                elif field['type'] == 'month':
+                    raw[key] = val or None
                 else:
                     raw[key] = val or None
 
-            # Required checks
+            # Facility / kiosk selection (required for operational LQs)
+            fac_id = _safe_int(request.form.get('facility_id'))
+            fac_name = request.form.get('facility_name', '').strip()
+            raw['facility_id'] = fac_id
+            raw['facility_name'] = fac_name
+            if fac_id and not fac_name:
+                for f in facilities:
+                    if f['id'] == fac_id:
+                        raw['facility_name'] = f"{f['name']} ({f['type']})"
+                        break
+
             missing = [
                 f['label'] for f in meta['fields']
                 if f.get('required') and (raw.get(f['key']) is None or raw.get(f['key']) == '')
             ]
+            if not fac_id and lq_code not in ('LQ11',):  # sustainability may be city-level
+                missing.append('Kiosk / service point')
             if missing:
                 flash(f'Required fields missing: {", ".join(missing)}', 'danger')
                 return render_template(
@@ -650,20 +694,27 @@ def register_learning_routes(
                     lq_code=lq_code,
                     form_data=request.form,
                     computed=None,
+                    facilities=facilities,
                 )
 
             computed = compute_indicators(lq_code, raw)
 
-            # Period label
-            period_num = raw.get('month_num') or raw.get('week_num') or raw.get('quarter_num')
-            if raw.get('month_num'):
-                period_label = f"Month {raw['month_num']}"
+            period_num = raw.get('week_num') or raw.get('quarter_num')
+            period_month = raw.get('period_month') or ''
+            if period_month:
+                period_label = str(period_month)
+                try:
+                    period_num = int(str(period_month).replace('-', '')[:6])
+                except Exception:
+                    pass
             elif raw.get('week_num'):
                 period_label = f"Week {raw['week_num']}"
             elif raw.get('quarter_num'):
                 period_label = f"Q{raw['quarter_num']}"
             else:
                 period_label = datetime.utcnow().strftime('%Y-%m-%d')
+            if raw.get('facility_name'):
+                period_label = f"{period_label} · {raw['facility_name']}"
 
             sub = LearningSubmission(
                 lq_code=lq_code,
@@ -696,6 +747,7 @@ def register_learning_routes(
             lq_code=lq_code,
             form_data={},
             computed=None,
+            facilities=facilities,
         )
 
     @app.route('/learning/submission/<int:sid>')
@@ -1509,6 +1561,128 @@ def register_learning_routes(
             download_name=fname,
             mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation',
         )
+
+
+    # ------------------------------------------------------------------
+    # Client feedback (public – no login)
+    # ------------------------------------------------------------------
+    class ClientFeedback(db.Model):
+        __tablename__ = 'client_feedback'
+        id = db.Column(db.Integer, primary_key=True)
+        client_name = db.Column(db.String(120))
+        contact = db.Column(db.String(120))
+        facility_id = db.Column(db.Integer, nullable=True)
+        facility_name = db.Column(db.String(120))
+        ratings_json = db.Column(db.Text)  # {service: score 1-5}
+        comments = db.Column(db.Text)
+        request_type = db.Column(db.String(40), default='feedback_only')
+        preferred_date = db.Column(db.String(20))
+        preferred_time = db.Column(db.String(20))
+        requested_service = db.Column(db.String(120))
+        submitted_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    CLIENT_SERVICES = [
+        'Counseling / information',
+        'Contraceptive method provision',
+        'Digital app / self-referral journey',
+        'Kiosk wait time & hospitality',
+        'Privacy & respect',
+        'Follow-up / appointment',
+    ]
+
+    def _list_facilities_simple():
+        try:
+            fac_rows = db.session.execute(
+                db.text("SELECT id, name, facility_type FROM facilities WHERE is_active = true OR is_active = 1 ORDER BY name")
+            ).fetchall()
+            return [{'id': r[0], 'name': r[1], 'type': r[2]} for r in fac_rows]
+        except Exception:
+            try:
+                for m in db.Model.registry.mappers:
+                    if getattr(m.class_, '__tablename__', None) == 'facilities':
+                        return [
+                            {'id': f.id, 'name': f.name, 'type': getattr(f, 'facility_type', '')}
+                            for f in m.class_.query.filter_by(is_active=True).order_by(m.class_.name).all()
+                        ]
+            except Exception:
+                pass
+            return []
+
+    @app.route('/feedback', methods=['GET', 'POST'])
+    @app.route('/client-feedback', methods=['GET', 'POST'])
+    def client_feedback():
+        """Public form: rate services 1–5 stars, comments, request service/appointment."""
+        facilities = _list_facilities_simple()
+        if request.method == 'POST':
+            n = _safe_int(request.form.get('service_count')) or len(CLIENT_SERVICES)
+            ratings = {}
+            for i in range(n):
+                svc = request.form.get(f'service_{i}') or (CLIENT_SERVICES[i] if i < len(CLIENT_SERVICES) else f'Service {i}')
+                score = _safe_int(request.form.get(f'rating_{i}')) or 0
+                if score > 0:
+                    ratings[svc] = min(5, max(1, score))
+            fac_id = _safe_int(request.form.get('facility_id'))
+            fac_name = ''
+            if fac_id:
+                for f in facilities:
+                    if f['id'] == fac_id:
+                        fac_name = f"{f['name']} ({f['type']})"
+                        break
+            row = ClientFeedback(
+                client_name=(request.form.get('client_name') or '').strip() or None,
+                contact=(request.form.get('contact') or '').strip() or None,
+                facility_id=fac_id,
+                facility_name=fac_name or None,
+                ratings_json=json.dumps(ratings),
+                comments=(request.form.get('comments') or '').strip() or None,
+                request_type=request.form.get('request_type') or 'feedback_only',
+                preferred_date=request.form.get('preferred_date') or None,
+                preferred_time=request.form.get('preferred_time') or None,
+                requested_service=request.form.get('requested_service') or None,
+                submitted_at=datetime.utcnow(),
+            )
+            db.session.add(row)
+            db.session.commit()
+            try:
+                log_activity('client_feedback', f'id={row.id} type={row.request_type}')
+            except Exception:
+                pass
+            return render_template(
+                'client_feedback.html',
+                submitted=True,
+                facilities=facilities,
+                services=CLIENT_SERVICES,
+            )
+        return render_template(
+            'client_feedback.html',
+            submitted=False,
+            facilities=facilities,
+            services=CLIENT_SERVICES,
+        )
+
+    @app.route('/learning/feedback-list')
+    @login_required
+    @staff_required
+    def learning_feedback_list():
+        """Staff view of client feedback submissions."""
+        rows = ClientFeedback.query.order_by(ClientFeedback.submitted_at.desc()).limit(200).all()
+        parsed = []
+        for r in rows:
+            parsed.append({
+                'id': r.id,
+                'name': r.client_name or '—',
+                'contact': r.contact or '—',
+                'facility': r.facility_name or '—',
+                'ratings': json.loads(r.ratings_json or '{}'),
+                'comments': r.comments or '',
+                'request_type': r.request_type,
+                'preferred_date': r.preferred_date,
+                'preferred_time': r.preferred_time,
+                'requested_service': r.requested_service,
+                'when': r.submitted_at,
+            })
+        return render_template('client_feedback_list.html', rows=parsed)
+
 
     # Ensure tables exist when routes are registered
     with app.app_context():

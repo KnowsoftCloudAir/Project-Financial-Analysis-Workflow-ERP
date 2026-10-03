@@ -180,7 +180,7 @@ def _before_request_init_db():
     # Skip static and auth endpoints for onboarding gate
     if request.endpoint in (
         'static', 'login', 'logout', 'register', 'admin_access',
-        'forgot_password', 'reset_password', 'confirm_registration', 'onboarding', None,
+        'forgot_password', 'reset_password', 'confirm_registration', 'client_feedback', 'onboarding', None,
         'assetlinks', 'web_manifest', 'index', 'about',
     ):
         return

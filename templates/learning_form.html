@@ -9,23 +9,49 @@
     </ol>
   </nav>
 
-  <div class="card shadow-sm">
-    <div class="card-header" style="background:#0d9488;color:#fff">
-      <h1 class="h5 mb-0">{{ lq_code }}: {{ meta.title }}</h1>
+  <div class="rounded-3 p-3 mb-3 text-white" style="background:linear-gradient(135deg,#0d9488,#0f766e)">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+      <div>
+        <span class="badge bg-light text-dark mb-1" style="font-size:1rem;letter-spacing:.05em">{{ lq_code }}</span>
+        <h1 class="h4 mb-1 text-white">{{ meta.title }}</h1>
+        <p class="mb-0 small opacity-90">{{ meta.question }}</p>
+      </div>
+      <div class="text-end small">
+        <div><strong>Primary indicator</strong><br>{{ meta.primary_indicator }}</div>
+        <div class="mt-1"><strong>Target:</strong> {{ meta.target }}</div>
+        <div><strong>Frequency:</strong> {{ meta.frequency }}</div>
+      </div>
     </div>
+  </div>
+
+  <div class="card shadow-sm">
     <div class="card-body">
-      <p class="text-muted small">{{ meta.question }}</p>
-      <p class="small mb-3">
-        <strong>Primary indicator:</strong> {{ meta.primary_indicator }}
-        · <strong>Target:</strong> {{ meta.target }}
-        · <strong>Frequency:</strong> {{ meta.frequency }}
-      </p>
       <div class="alert alert-info small py-2">
-        Yellow fields = inputs (as in the Excel template). Derived indicators are calculated on save.
-        Your name, date and time are recorded automatically.
+        <strong>Calendar month</strong> and <strong>kiosk / service point</strong> are required where shown.
+        Yellow fields = inputs. Your name, date and time are recorded automatically.
       </div>
 
       <form method="post" novalidate>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="facility_id">
+            Kiosk / service point <span class="text-danger">*</span>
+          </label>
+          <select class="form-select" id="facility_id" name="facility_id" required
+                  style="background:#fffde7"
+                  onchange="var o=this.options[this.selectedIndex]; document.getElementById('facility_name').value=o.dataset.label||'';">
+            <option value="">— Select registered facility —</option>
+            {% for f in facilities|default([]) %}
+            <option value="{{ f.id }}" data-label="{{ f.name }} ({{ f.type }})"
+              {% if form_data.get('facility_id')|string == f.id|string %}selected{% endif %}>
+              {{ f.name }} · {{ f.type }}
+            </option>
+            {% else %}
+            <option value="" disabled>No active facilities — ask Admin to register kiosks/PHCs</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="facility_name" id="facility_name" value="{{ form_data.get('facility_name','') }}">
+        </div>
+
         {% for f in meta.fields %}
         <div class="mb-3">
           <label class="form-label fw-semibold" for="{{ f.key }}">
@@ -38,6 +64,11 @@
           {% elif f.type == 'date' %}
           <input type="date" class="form-control" id="{{ f.key }}" name="{{ f.key }}"
             value="{{ form_data.get(f.key, '') }}" style="background:#fffde7">
+          {% elif f.type == 'month' %}
+          <input type="month" class="form-control" id="{{ f.key }}" name="{{ f.key }}"
+            value="{{ form_data.get(f.key, '') }}" style="background:#fffde7"
+            {% if f.get('required') %}required{% endif %}>
+          <div class="form-text">Use the calendar to pick year and month.</div>
           {% elif f.type in ('integer','float') %}
           <input type="number" step="{{ 'any' if f.type=='float' else '1' }}"
             class="form-control" id="{{ f.key }}" name="{{ f.key }}"
@@ -53,23 +84,22 @@
 
         {% if meta.computed %}
         <div class="border rounded p-3 mb-3 bg-light">
-          <div class="small text-muted mb-1">Will be calculated (Excel grey cells):</div>
-          <ul class="mb-0 small">
-            {% for c in meta.computed %}
-            <li>{{ c.label }}</li>
-            {% endfor %}
-          </ul>
+          <div class="small text-muted mb-1">Calculated on save:</div>
+          <ul class="mb-0 small">{% for c in meta.computed %}<li>{{ c.label }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
 
-        <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-success">
-            <i class="bi bi-save"></i> Save submission
-          </button>
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="submit" class="btn btn-success"><i class="bi bi-save"></i> Save {{ lq_code }}</button>
           <a href="{{ url_for('learning_hub') }}" class="btn btn-outline-secondary">Cancel</a>
         </div>
       </form>
     </div>
+  </div>
+
+  <div class="mt-3 small text-muted">
+    Client feedback link:
+    <a href="{{ url_for('client_feedback') }}" target="_blank">{{ url_for('client_feedback', _external=True) }}</a>
   </div>
 </div>
 {% endblock %}

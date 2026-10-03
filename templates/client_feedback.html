@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Client feedback – CONTRAconnect</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    body { background: #f0fdfa; min-height: 100vh; }
+    .star-rating { font-size: 1.75rem; cursor: pointer; color: #cbd5e1; }
+    .star-rating .bi-star-fill { color: #f59e0b; }
+    .service-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .header-bar { background: linear-gradient(135deg,#0d9488,#0f766e); color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="header-bar py-4 mb-4">
+    <div class="container" style="max-width:640px">
+      <div class="small text-uppercase opacity-75">CONTRAconnect · Knowsoft</div>
+      <h1 class="h4 mb-0">Client feedback &amp; service request</h1>
+      <p class="mb-0 small opacity-90">Rate services, leave comments, or request an appointment</p>
+    </div>
+  </div>
+
+  <div class="container pb-5" style="max-width:640px">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% if submitted %}
+    <div class="card border-0 shadow text-center p-5">
+      <div style="font-size:3rem;color:#0d9488">✓</div>
+      <h2 class="h4 mt-2">Submitted. Thank you!</h2>
+      <p class="text-muted">Your feedback has been received. We appreciate you taking the time to help improve services.</p>
+      <a href="{{ url_for('client_feedback') }}" class="btn btn-outline-success mt-2">Submit another response</a>
+    </div>
+    {% else %}
+
+    <form method="post" class="service-card p-4 shadow-sm">
+      <h2 class="h6 text-muted mb-3">About you (optional)</h2>
+      <div class="row g-2 mb-3">
+        <div class="col-md-6">
+          <label class="form-label small">Name</label>
+          <input type="text" name="client_name" class="form-control" placeholder="Your name">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small">Phone or email</label>
+          <input type="text" name="contact" class="form-control" placeholder="Optional contact">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">Kiosk / service point</label>
+        <select name="facility_id" class="form-select">
+          <option value="">— Select if known —</option>
+          {% for f in facilities %}
+          <option value="{{ f.id }}">{{ f.name }} ({{ f.type }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <hr>
+      <h2 class="h6 text-muted mb-3">Rate our services (1–5 stars)</h2>
+      {% for svc in services %}
+      <div class="mb-3">
+        <label class="form-label small mb-0">{{ svc }}</label>
+        <div class="star-rating" data-service="{{ loop.index0 }}">
+          {% for i in range(1, 6) %}
+          <i class="bi bi-star" data-value="{{ i }}"></i>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="rating_{{ loop.index0 }}" id="rating_{{ loop.index0 }}" value="0">
+        <input type="hidden" name="service_{{ loop.index0 }}" value="{{ svc }}">
+      </div>
+      {% endfor %}
+      <input type="hidden" name="service_count" value="{{ services|length }}">
+
+      <hr>
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">Comments</label>
+        <textarea name="comments" class="form-control" rows="3" placeholder="Tell us about your experience…"></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">What would you like to do?</label>
+        <select name="request_type" class="form-select" id="request_type" onchange="toggleAppt()">
+          <option value="feedback_only">Feedback only</option>
+          <option value="request_service">Request a service</option>
+          <option value="request_appointment">Request an appointment</option>
+        </select>
+      </div>
+
+      <div id="appt_fields" class="mb-3 d-none">
+        <label class="form-label small">Preferred date</label>
+        <input type="date" name="preferred_date" class="form-control mb-2">
+        <label class="form-label small">Preferred time (optional)</label>
+        <input type="time" name="preferred_time" class="form-control mb-2">
+        <label class="form-label small">Service requested</label>
+        <select name="requested_service" class="form-select">
+          <option value="">— Select —</option>
+          {% for svc in services %}
+          <option value="{{ svc }}">{{ svc }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-success w-100" style="background:#0d9488;border-color:#0d9488">
+        Submit feedback
+      </button>
+    </form>
+    {% endif %}
+
+    <p class="text-center small text-muted mt-4">Powered by CONTRAconnect · Knowsoft</p>
+  </div>
+
+  <script>
+  function toggleAppt() {
+    var v = document.getElementById('request_type').value;
+    document.getElementById('appt_fields').classList.toggle('d-none', v === 'feedback_only');
+  }
+  document.querySelectorAll('.star-rating').forEach(function(wrap) {
+    var idx = wrap.dataset.service;
+    wrap.querySelectorAll('i').forEach(function(star) {
+      star.addEventListener('click', function() {
+        var val = parseInt(this.dataset.value, 10);
+        document.getElementById('rating_' + idx).value = val;
+        wrap.querySelectorAll('i').forEach(function(s) {
+          var v = parseInt(s.dataset.value, 10);
+          s.className = v <= val ? 'bi bi-star-fill' : 'bi bi-star';
+        });
+      });
+    });
+  });
+  </script>
+</body>
+</html>
