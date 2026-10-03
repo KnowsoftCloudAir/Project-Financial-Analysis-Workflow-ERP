@@ -11,6 +11,10 @@
       <a href="{{ url_for('learning_export_pptx') }}" class="btn btn-danger btn-sm">
         <i class="bi bi-file-earmark-ppt"></i> PPT Report
       </a>
+      <a href="{{ url_for('learning_load_demo') }}" class="btn btn-warning btn-sm"
+         onclick="return confirm('Load November 2026 demo entries for all LQs?');">
+        <i class="bi bi-database-add"></i> Load demo month
+      </a>
       <a href="{{ url_for('learning_hub') }}" class="btn btn-outline-secondary btn-sm">Hub</a>
     </div>
   </div>

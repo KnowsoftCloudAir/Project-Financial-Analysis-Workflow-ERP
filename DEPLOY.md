@@ -79,3 +79,14 @@ Optional: `MAIL_DISABLED=1` for log-only emails while testing.
 2. Analysis page aggregates vs targets (60%, NPS 40, 95% sync, etc.) and draws charts
 3. Excel export mirrors template structure (Dashboard, Headline, LQ1–LQ11, Audit, Targets)
 4. PPT export: title, scorecard, one slide per LQ
+
+
+## Demo month in the app (after deploy)
+
+1. Sign in as PM or staff (`pm@contraconnect.local` or admin).
+2. Open **Learning Data (LQ)** in the sidebar (or staff dashboard).
+3. Click **Load demo month** → confirms and inserts Nov 2026 sample for H + LQ1–LQ11.
+4. You are redirected to **Analysis**: scorecard + bar / pie / line / doughnut charts.
+5. Click **Download Excel** or **PPT Report** — files are generated from the live database (including the demo rows).
+
+Route: `GET/POST /learning/load-demo` · replace with `?replace=1`.

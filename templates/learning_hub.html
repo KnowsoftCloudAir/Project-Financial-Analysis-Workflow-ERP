@@ -17,6 +17,14 @@
       <a href="{{ url_for('learning_export_pptx') }}" class="btn btn-outline-danger btn-sm">
         <i class="bi bi-file-earmark-ppt"></i> PPT Report
       </a>
+      <a href="{{ url_for('learning_load_demo') }}" class="btn btn-warning btn-sm"
+         onclick="return confirm('Load November 2026 demo entries for all LQs into the database?');">
+        <i class="bi bi-database-add"></i> Load demo month
+      </a>
+      <a href="{{ url_for('learning_load_demo', replace=1) }}" class="btn btn-outline-warning btn-sm"
+         onclick="return confirm('Replace existing Nov 2026 demo data and reload?');">
+        Reload demo
+      </a>
       {% if is_pm %}
       <a href="{{ url_for('learning_assign') }}" class="btn btn-primary btn-sm">
         <i class="bi bi-person-gear"></i> Assign staff

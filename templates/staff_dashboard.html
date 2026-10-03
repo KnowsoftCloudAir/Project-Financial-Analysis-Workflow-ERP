@@ -15,6 +15,10 @@
       <a href="{{ url_for('learning_analysis') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-graph-up"></i> Analysis &amp; charts</a>
       <a href="{{ url_for('learning_export_excel') }}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Download Excel</a>
       <a href="{{ url_for('learning_export_pptx') }}" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-ppt"></i> PPT Report</a>
+      <a href="{{ url_for('learning_load_demo') }}" class="btn btn-warning btn-sm"
+         onclick="return confirm('Load November 2026 demo LQ data into the app?');">
+        <i class="bi bi-database-add"></i> Load demo month
+      </a>
       {% if current_user.role in ['project_manager','program_admin','general_admin','admin'] %}
       <a href="{{ url_for('learning_assign') }}" class="btn btn-outline-dark btn-sm"><i class="bi bi-person-gear"></i> Assign staff</a>
       {% endif %}

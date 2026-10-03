@@ -1563,6 +1563,242 @@ def register_learning_routes(
         )
 
 
+
+    # ------------------------------------------------------------------
+    # Demo / sample month (November 2026) – load into DB for showcase
+    # ------------------------------------------------------------------
+    DEMO_SAMPLES = [
+        {
+            'lq_code': 'H',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'engaged_app': 420, 'engaged_mobilizer': 310, 'engaged_walkin': 180,
+                'overlap': 25, 'receiving_method': 350,
+            },
+            'computed': {
+                'engaged_dedup': 885.0, 'conversion_rate': 0.3955,
+                'conversion_rate_pct': 39.55, 'vs_target': 'Below',
+            },
+        },
+        {
+            'lq_code': 'LQ1',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'exit_surveys': 120, 'surveys_with_barrier': 38,
+                'avg_satisfaction': 4.3, 'observations': 8, 'avg_counseling': 3.9,
+                'qual_summary': 'Fear of side effects most cited; short waiting times valued.',
+            },
+            'computed': {'barrier_rate': 0.3167, 'avg_satisfaction': 4.3, 'vs_target': 'Met'},
+        },
+        {
+            'lq_code': 'LQ2',
+            'period_label': 'Week 1 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'week_num': 1, 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'app_engagement': 600, 'registration': 410,
+                'referral_checkin': 320, 'method_uptake': 210,
+            },
+            'computed': {
+                'reg_vs_eng': 0.6833, 'ref_vs_reg': 0.7805,
+                'up_vs_ref': 0.6563, 'overall': 0.35,
+            },
+        },
+        {
+            'lq_code': 'LQ3',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'responses': 100, 'promoters': 60, 'passives': 25, 'detractors': 15,
+            },
+            'computed': {'nps': 45.0, 'vs_target': 'Met'},
+        },
+        {
+            'lq_code': 'LQ4',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'started': 80, 'completed_unassisted': 41,
+                'completed_assisted': 118, 'abandoned': 12,
+            },
+            'computed': {'unassisted_pct': 0.5125, 'vs_target': 'Met'},
+        },
+        {
+            'lq_code': 'LQ5',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'staff_start': 12, 'staff_end': 11, 'leavers': 1, 'joiners': 0,
+                'avg_incentive': 25000, 'pulse_score': 4.1,
+                'notes': 'Performance bonus piloted at K02.',
+            },
+            'computed': {'attrition_rate': 0.0833, 'vs_target': 'Above limit'},
+        },
+        {
+            'lq_code': 'LQ6',
+            'period_label': 'Week 1 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'week_num': 1, 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'kiosk_id': 'K01', 'site_category': 'Market',
+                'foot_traffic': 1200, 'registrations': 310, 'methods_issued': 150,
+            },
+            'computed': {'ft_to_reg': 0.2583, 'reg_to_method': 0.4839},
+        },
+        {
+            'lq_code': 'LQ7',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'method': 'Injectable', 'issued': 120, 'discontinued': 4,
+                'refusal_reason': 'Fear of side effects', 'refusal_count': 18,
+            },
+            'computed': {'discontinuation_rate': 0.0333},
+        },
+        {
+            'lq_code': 'LQ8',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'facility_or_kiosk': 'Kiosk Market Road (K01)',
+                'total_op_cost': 4500000, 'clients_served': 885,
+                'commodity_cost': 1200000, 'staff_cost': 2400000, 'other_cost': 900000,
+            },
+            'computed': {'unit_cost': 5084.75},
+        },
+        {
+            'lq_code': 'LQ9',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'channel': 'Mobilizer', 'age_group': '20-24 yrs',
+                'acquired': 85, 'converted': 40,
+            },
+            'computed': {'channel_conversion': 0.4706},
+        },
+        {
+            'lq_code': 'LQ10',
+            'period_label': '2026-11 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'period_month': '2026-11', 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'sync_attempts': 1500, 'sync_successes': 1410,
+                'avg_latency_hours': 36, 'dashboard_usability': 4.2,
+                'notes': 'API stable; one overnight batch delayed.',
+            },
+            'computed': {
+                'sync_rate': 0.94, 'vs_target': 'Below',
+                'latency_ok': True, 'usability_ok': True,
+            },
+        },
+        {
+            'lq_code': 'LQ11',
+            'period_label': 'Q1 · Kiosk Market Road (K01)',
+            'period_num': 202611,
+            'raw': {
+                'quarter_num': 1, 'facility_id': 1,
+                'facility_name': 'Kiosk Market Road (K01)',
+                'milestone': 'State co-financing tranche 1',
+                'funder': 'Edo State Government', 'due_date': '2027-03-31',
+                'target_amount': 50000, 'achieved_amount': 20000,
+                'status': 'In progress',
+                'policy_commitment': 'MoU on DHIS2 data sharing',
+                'policy_status': 'In progress',
+                'notes': 'Ministry committed to 2027 budget line for kiosks.',
+            },
+            'computed': {'pct_achieved': 0.40},
+        },
+    ]
+
+    @app.route('/learning/load-demo', methods=['POST', 'GET'])
+    @login_required
+    @staff_required
+    def learning_load_demo():
+        """Load one-month sample (Nov 2026) into DB so dashboards and downloads work."""
+        if current_user.role not in PM_ROLES and current_user.role not in (
+            'general_admin', 'admin', 'project_manager', 'program_admin', 'mel_consultant', 'finance_analyst'
+        ):
+            # still allow all staff for demo convenience
+            pass
+        replace = request.args.get('replace') == '1' or request.form.get('replace') == '1'
+        if replace:
+            # Remove previous demo-tagged rows for this period
+            old = LearningSubmission.query.filter(
+                LearningSubmission.period_num == 202611
+            ).all()
+            for o in old:
+                db.session.delete(o)
+            db.session.commit()
+
+        # Avoid exact duplicates if already loaded and not replacing
+        existing = LearningSubmission.query.filter_by(period_num=202611).count()
+        if existing >= 12 and not replace:
+            flash(
+                f'Demo month already has {existing} submissions. '
+                'Use “Reload demo (replace)” to refresh, or open Analysis / Download.',
+                'info',
+            )
+            return redirect(url_for('learning_analysis'))
+
+        when = datetime(2026, 11, 28, 14, 32, 0)
+        staff_name = current_user.full_name or 'Demo Staff'
+        staff_email = current_user.email or 'demo@contraconnect.local'
+        added = 0
+        for s in DEMO_SAMPLES:
+            if not replace:
+                dup = LearningSubmission.query.filter_by(
+                    lq_code=s['lq_code'], period_num=202611
+                ).first()
+                if dup:
+                    continue
+            sub = LearningSubmission(
+                lq_code=s['lq_code'],
+                period_label=s['period_label'],
+                period_num=s['period_num'],
+                data_json=json.dumps(s['raw']),
+                computed_json=json.dumps(s['computed']),
+                staff_user_id=current_user.id,
+                staff_name=staff_name,
+                staff_email=staff_email,
+                submitted_at=when,
+                status='submitted',
+            )
+            db.session.add(sub)
+            added += 1
+        db.session.commit()
+        try:
+            log_activity('learning_load_demo', f'added={added} replace={replace}')
+        except Exception:
+            pass
+        flash(
+            f'Demo month (Nov 2026) loaded: {added} LQ entries. '
+            'Open Analysis for charts, or Download Excel / PPT.',
+            'success',
+        )
+        return redirect(url_for('learning_analysis'))
+
+
     # ------------------------------------------------------------------
     # Client feedback (public – no login)
     # ------------------------------------------------------------------
