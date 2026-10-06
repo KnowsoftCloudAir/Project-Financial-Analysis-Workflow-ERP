@@ -70,7 +70,7 @@ def admin_required(f):
 def _bind_models(database):
     global ChartOfAccount, Vendor, FixedAsset, ProcurementService, ProcurementCommittee
     global ProcurementCommitteeMember, ProcurementRFQ, ProcurementQuote, QuoteMemberScore
-    global PurchaseOrder, ProcurementDocument, GoodsReceipt, ProcurementInvoice, JournalEntry
+    global PurchaseOrder, ProcurementDocument, GoodsReceipt, ProcurementInvoice, JournalEntry, InventoryBatch, InventoryMovement
 
     class ChartOfAccount(database.Model):
         __tablename__ = 'erp_chart_of_accounts'
@@ -198,6 +198,7 @@ def _bind_models(database):
 
     class PurchaseOrder(database.Model):
         __tablename__ = 'erp_purchase_orders'
+        __table_args__ = {'extend_existing': True}
         id = database.Column(database.Integer, primary_key=True)
         po_no = database.Column(database.String(50), unique=True, nullable=False)
         rfq_id = database.Column(database.Integer, database.ForeignKey('erp_procurement_rfqs.id'))
@@ -206,7 +207,8 @@ def _bind_models(database):
         vendor_name = database.Column(database.String(200), default='')
         amount = database.Column(database.Numeric(14, 2), default=0)
         description = database.Column(database.Text, default='')
-        status = database.Column(database.String(30), default='pending_officer')
+        status = database.Column(database.String(30), default='open')
+        delivery_progress_pct = database.Column(database.Integer, default=0)
         created_by = database.Column(database.Integer, database.ForeignKey('users.id'))
         created_at = database.Column(database.DateTime, default=datetime.utcnow)
         is_demo = database.Column(database.Boolean, default=False)
@@ -267,6 +269,42 @@ def _bind_models(database):
         created_at = database.Column(database.DateTime, default=datetime.utcnow)
         is_demo = database.Column(database.Boolean, default=False)
 
+    
+    class InventoryBatch(database.Model):
+        __tablename__ = 'erp_inventory_batches'
+        __table_args__ = {'extend_existing': True}
+        id = database.Column(database.Integer, primary_key=True)
+        product_id = database.Column(database.Integer)
+        product_name = database.Column(database.String(200), default='')
+        batch_no = database.Column(database.String(80), default='')
+        expiry_date = database.Column(database.Date)
+        qty_received = database.Column(database.Numeric(14, 2), default=0)
+        qty_remaining = database.Column(database.Numeric(14, 2), default=0)
+        unit_cost = database.Column(database.Numeric(14, 4), default=0)
+        grn_id = database.Column(database.Integer)
+        received_at = database.Column(database.DateTime, default=datetime.utcnow)
+        is_demo = database.Column(database.Boolean, default=False)
+
+    class InventoryMovement(database.Model):
+        __tablename__ = 'erp_inventory_movements'
+        __table_args__ = {'extend_existing': True}
+        id = database.Column(database.Integer, primary_key=True)
+        movement_type = database.Column(database.String(30), nullable=False)
+        product_id = database.Column(database.Integer)
+        product_name = database.Column(database.String(200), default='')
+        facility_id = database.Column(database.Integer)
+        facility_name = database.Column(database.String(200), default='')
+        batch_id = database.Column(database.Integer)
+        quantity = database.Column(database.Numeric(14, 2), default=0)
+        unit_cost = database.Column(database.Numeric(14, 4), default=0)
+        total_cost = database.Column(database.Numeric(14, 2), default=0)
+        costing_method = database.Column(database.String(10), default='FEFO')
+        reference = database.Column(database.String(80), default='')
+        notes = database.Column(database.Text, default='')
+        created_by = database.Column(database.Integer)
+        created_at = database.Column(database.DateTime, default=datetime.utcnow)
+        is_demo = database.Column(database.Boolean, default=False)
+
     class JournalEntry(database.Model):
         __tablename__ = 'erp_journal_entries'
         id = database.Column(database.Integer, primary_key=True)
@@ -286,6 +324,7 @@ def _bind_models(database):
 
 # Models will be set on first init
 ChartOfAccount = Vendor = FixedAsset = ProcurementService = ProcurementCommittee = None
+InventoryBatch = InventoryMovement = None
 ProcurementCommitteeMember = ProcurementRFQ = ProcurementQuote = QuoteMemberScore = None
 PurchaseOrder = ProcurementDocument = GoodsReceipt = ProcurementInvoice = JournalEntry = None
 
@@ -296,7 +335,7 @@ def bind_and_create(app, database):
     """Bind model classes to the app's SQLAlchemy instance and create tables (idempotent)."""
     global ChartOfAccount, Vendor, FixedAsset, ProcurementService, ProcurementCommittee
     global ProcurementCommitteeMember, ProcurementRFQ, ProcurementQuote, QuoteMemberScore
-    global PurchaseOrder, ProcurementDocument, GoodsReceipt, ProcurementInvoice, JournalEntry
+    global PurchaseOrder, ProcurementDocument, GoodsReceipt, ProcurementInvoice, JournalEntry, InventoryBatch, InventoryMovement
     global db, _models_bound
 
     db = database
@@ -321,6 +360,8 @@ def bind_and_create(app, database):
                 GoodsReceipt = ns['GoodsReceipt']
                 ProcurementInvoice = ns['ProcurementInvoice']
                 JournalEntry = ns['JournalEntry']
+                InventoryBatch = ns.get('InventoryBatch')
+                InventoryMovement = ns.get('InventoryMovement')
                 _models_bound = True
             except Exception as e:
                 # Table already defined — ignore on reload
@@ -552,9 +593,14 @@ def erp_home():
     except Exception as e:
         flash(f'ERP data error: {e}. Try Seed demo data after tables are created.', 'danger')
         rfqs, pos, invoices, vendors = [], [], [], []
+    quotes = []
+    try:
+        quotes = ProcurementQuote.query.order_by(ProcurementQuote.final_score.desc()).limit(40).all()
+    except Exception:
+        pass
     return render_template(
         'erp_dashboard.html',
-        rfqs=rfqs, pos=pos, invoices=invoices, vendors=vendors,
+        rfqs=rfqs, pos=pos, invoices=invoices, vendors=vendors, quotes=quotes,
     )
 
 
@@ -736,8 +782,33 @@ def create_grn(poid):
         notes=request.form.get('notes', ''),
     )
     db.session.add(grn)
+    db.session.flush()
+    if all_ok:
+        # Post inventory asset + AP; create batch for commodity tracking
+        try:
+            item_name = (PurchaseOrder.query.get(poid).description or 'Commodity')[:180]
+            qty = Decimal('1')
+            unit_cost = Decimal(str(PurchaseOrder.query.get(poid).amount or 0))
+            batch = InventoryBatch(
+                product_name=item_name, batch_no=f'B-{grn.grn_no}',
+                expiry_date=date.today() + __import__('datetime').timedelta(days=540),
+                qty_received=qty, qty_remaining=qty, unit_cost=unit_cost, grn_id=grn.id,
+            )
+            db.session.add(batch)
+            db.session.flush()
+            db.session.add(InventoryMovement(
+                movement_type='receive', product_name=item_name, batch_id=batch.id,
+                quantity=qty, unit_cost=unit_cost, total_cost=unit_cost,
+                costing_method='FEFO', reference=grn.grn_no, created_by=current_user.id,
+            ))
+            po = PurchaseOrder.query.get(poid)
+            if po:
+                po.status = 'received'
+                po.delivery_progress_pct = 100
+        except Exception as _ie:
+            print('inventory post on GRN:', _ie)
     db.session.commit()
-    flash('GRN recorded: ' + ('ACCEPTED' if all_ok else 'REJECTED — conditions not met'), 'success' if all_ok else 'warning')
+    flash('GRN recorded: ' + ('ACCEPTED — inventory updated' if all_ok else 'REJECTED — conditions not met'), 'success' if all_ok else 'warning')
     return redirect(url_for('erp.po_detail', poid=poid))
 
 
@@ -829,6 +900,179 @@ def coa_list():
 def assets_list():
     rows = FixedAsset.query.order_by(FixedAsset.asset_code).all()
     return render_template('erp_assets.html', assets=rows)
+
+
+
+
+@erp_bp.route('/inventory')
+@login_required
+@admin_required
+def inventory_dashboard():
+    if not _ensure_models() and not (InventoryBatch and hasattr(InventoryBatch, 'query')):
+        flash('Inventory module initialising.', 'warning')
+        return redirect(url_for('erp.erp_home'))
+    batches = []
+    movements = []
+    try:
+        batches = InventoryBatch.query.order_by(InventoryBatch.id.desc()).limit(100).all()
+        movements = InventoryMovement.query.order_by(InventoryMovement.created_at.desc()).limit(50).all()
+    except Exception as e:
+        flash(str(e), 'warning')
+    by_product = {}
+    for b in batches:
+        k = b.product_name or str(b.product_id)
+        by_product.setdefault(k, {'name': k, 'on_hand': 0.0, 'value': 0.0})
+        by_product[k]['on_hand'] += float(b.qty_remaining or 0)
+        by_product[k]['value'] += float(b.qty_remaining or 0) * float(b.unit_cost or 0)
+    fac_rows = {}
+    for m in movements:
+        if not m.facility_id:
+            continue
+        key = (m.facility_name or m.facility_id, m.product_name)
+        fac_rows.setdefault(key, {'facility': m.facility_name, 'product': m.product_name, 'recv': 0.0, 'issue': 0.0})
+        if m.movement_type == 'dispatch':
+            fac_rows[key]['recv'] += float(m.quantity or 0)
+        elif m.movement_type in ('issue_use', 'issue'):
+            fac_rows[key]['issue'] += float(m.quantity or 0)
+    facility_balances = [
+        {**v, 'balance': v['recv'] - v['issue']} for v in fac_rows.values()
+    ]
+    srv = sys.modules.get('server')
+    facilities = srv.Facility.query.order_by(srv.Facility.name).all() if srv else []
+    products = srv.Product.query.order_by(srv.Product.name).all() if srv else []
+    return render_template(
+        'erp_inventory.html',
+        by_product=list(by_product.values()),
+        facility_balances=facility_balances,
+        batches=batches, movements=movements,
+        facilities=facilities, products=products,
+    )
+
+
+@erp_bp.route('/inventory/dispatch', methods=['POST'])
+@login_required
+@admin_required
+def inventory_dispatch():
+    product_id = request.form.get('product_id', type=int)
+    facility_id = request.form.get('facility_id', type=int)
+    qty = Decimal(request.form.get('quantity') or '0')
+    method = request.form.get('costing_method') or 'FEFO'
+    if qty <= 0 or not facility_id:
+        flash('Facility and positive quantity required.', 'danger')
+        return redirect(url_for('erp.inventory_dashboard'))
+    srv = sys.modules.get('server')
+    fac = srv.Facility.query.get(facility_id) if srv else None
+    # Take from oldest/FEFO batch with remaining qty
+    q = InventoryBatch.query.filter(InventoryBatch.qty_remaining > 0)
+    if product_id:
+        q = q.filter_by(product_id=product_id)
+    if method == 'LIFO':
+        batches = q.order_by(InventoryBatch.received_at.desc()).all()
+    elif method == 'FIFO':
+        batches = q.order_by(InventoryBatch.received_at.asc()).all()
+    else:
+        batches = q.order_by(InventoryBatch.expiry_date.asc().nullslast()).all()
+    remaining = qty
+    total_cost = Decimal('0')
+    for b in batches:
+        if remaining <= 0:
+            break
+        take = min(Decimal(str(b.qty_remaining)), remaining)
+        b.qty_remaining = Decimal(str(b.qty_remaining)) - take
+        cost = take * Decimal(str(b.unit_cost or 0))
+        total_cost += cost
+        db.session.add(InventoryMovement(
+            movement_type='dispatch', product_id=b.product_id, product_name=b.product_name,
+            facility_id=facility_id, facility_name=fac.name if fac else '',
+            batch_id=b.id, quantity=take, unit_cost=b.unit_cost, total_cost=cost,
+            costing_method=method, reference='DISP', created_by=current_user.id,
+        ))
+        if srv and fac and b.product_id:
+            si = srv.StockItem.query.filter_by(facility_id=facility_id, product_id=b.product_id).first()
+            if not si:
+                si = srv.StockItem(facility_id=facility_id, product_id=b.product_id, quantity_on_hand=0, reorder_level=10)
+                db.session.add(si)
+            si.quantity_on_hand = float(si.quantity_on_hand or 0) + float(take)
+        remaining -= take
+    if remaining > 0:
+        db.session.rollback()
+        flash(f'Insufficient stock (short {remaining}).', 'danger')
+        return redirect(url_for('erp.inventory_dashboard'))
+    db.session.commit()
+    flash(f'Dispatched {qty} via {method}. Cost {total_cost}.', 'success')
+    return redirect(url_for('erp.inventory_dashboard'))
+
+
+@erp_bp.route('/inventory/issue-use', methods=['POST'])
+@login_required
+@admin_required
+def inventory_issue_use():
+    facility_id = request.form.get('facility_id', type=int)
+    product_id = request.form.get('product_id', type=int)
+    qty = Decimal(request.form.get('quantity') or '0')
+    method = request.form.get('costing_method') or 'FEFO'
+    if qty <= 0:
+        flash('Positive quantity required.', 'danger')
+        return redirect(url_for('erp.inventory_dashboard'))
+    srv = sys.modules.get('server')
+    fac = srv.Facility.query.get(facility_id) if srv else None
+    prod = srv.Product.query.get(product_id) if srv and product_id else None
+    uc = Decimal(str(prod.unit_cost)) if prod else Decimal('0')
+    total = qty * uc
+    db.session.add(InventoryMovement(
+        movement_type='issue_use', product_id=product_id,
+        product_name=prod.name if prod else '',
+        facility_id=facility_id, facility_name=fac.name if fac else '',
+        quantity=qty, unit_cost=uc, total_cost=total, costing_method=method,
+        reference='USE', notes='Final programme commodity cost', created_by=current_user.id,
+    ))
+    if srv and fac and product_id:
+        si = srv.StockItem.query.filter_by(facility_id=facility_id, product_id=product_id).first()
+        if si:
+            si.quantity_on_hand = max(0.0, float(si.quantity_on_hand or 0) - float(qty))
+    db.session.commit()
+    flash(f'Use recorded. Expense cost {total}.', 'success')
+    return redirect(url_for('erp.inventory_dashboard'))
+
+
+@erp_bp.route('/reports/procurement.xlsx')
+@login_required
+@admin_required
+def report_procurement_xlsx():
+    from io import BytesIO
+    import csv
+    buf = BytesIO()
+    import io
+    t = io.StringIO()
+    w = csv.writer(t)
+    w.writerow(['RFQ', 'Title', 'Vendor', 'Total', 'TechPass', 'TechScore', 'Committee', 'Final', 'Rank', 'Status'])
+    for q in ProcurementQuote.query.order_by(ProcurementQuote.rfq_id).all():
+        rfq = ProcurementRFQ.query.get(q.rfq_id)
+        w.writerow([rfq.rfq_no if rfq else '', rfq.title if rfq else '', q.vendor_name,
+                    float(q.total_amount or 0), q.technical_pass, q.technical_score,
+                    q.committee_score, q.final_score, q.financial_rank, q.status])
+    buf.write(t.getvalue().encode('utf-8'))
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name='procurement_selection.csv', mimetype='text/csv')
+
+
+@erp_bp.route('/reports/inventory.xlsx')
+@login_required
+@admin_required
+def report_inventory_xlsx():
+    from io import BytesIO
+    import io, csv
+    buf = BytesIO()
+    t = io.StringIO()
+    w = csv.writer(t)
+    w.writerow(['Product', 'Batch', 'Expiry', 'On hand', 'Unit cost', 'Value'])
+    for b in InventoryBatch.query.all():
+        w.writerow([b.product_name, b.batch_no, b.expiry_date,
+                    float(b.qty_remaining or 0), float(b.unit_cost or 0),
+                    float(b.qty_remaining or 0) * float(b.unit_cost or 0)])
+    buf.write(t.getvalue().encode('utf-8'))
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name='inventory_batches.csv', mimetype='text/csv')
 
 
 @erp_bp.route('/demo/seed', methods=['POST'])

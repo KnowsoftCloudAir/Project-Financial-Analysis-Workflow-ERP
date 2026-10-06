@@ -3116,9 +3116,12 @@ def admin_budget():
     fy = request.args.get('fy', '2026')
     period = request.args.get('period', 'Pilot')
     codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
+    role = getattr(current_user, 'role', '')
     can_edit = (
         _can_review_expense(current_user)
-        or current_user.role in ('project_manager', 'general_admin', 'admin', 'program_admin', 'finance_analyst')
+        or role in ('project_manager', 'general_admin', 'admin', 'program_admin', 'finance_analyst', 'finance_admin')
+        or bool(getattr(current_user, 'can_view_finance', False))
+        or bool(getattr(current_user, 'can_finance_review', False))
     )
     if request.method == 'POST' and can_edit:
         fy = request.form.get('fiscal_year', fy)
