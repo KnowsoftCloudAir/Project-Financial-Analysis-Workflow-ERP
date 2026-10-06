@@ -60,6 +60,14 @@ contraconnect/
 5. Unit cost per facility = facility operating cost ÷ facility clients.
 6. Commodity cost by method derived from stock `issue` transactions × unit cost.
 
+## ERP / Procurement (single organisation)
+
+Integrated LTA procurement (Lot 1 FP commodities, Lot 2 medical consumables), vendors, chart of accounts, fixed assets, goods receipt condition gates, and invoice hand-off to existing **Expense requests**.
+
+- URL: `/erp/` (after login)
+- Auth: existing email/password only (no multi-company)
+- See `MERGE_NOTES.md`
+
 ## Extending
 
 - Split `app.py` into blueprints (`auth`, `admin`, `provider`, `api`).

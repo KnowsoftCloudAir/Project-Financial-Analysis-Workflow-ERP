@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}ERP — Procurement & Finance{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0"><i class="bi bi-briefcase"></i> ERP — Single Organisation</h2>
+    <div class="btn-group">
+      <form method="post" action="{{ url_for('erp.demo_seed') }}" class="d-inline">
+        <button class="btn btn-outline-secondary btn-sm">Seed demo data</button>
+      </form>
+      <form method="post" action="{{ url_for('erp.demo_delete') }}" class="d-inline" onsubmit="return confirm('Delete all ERP demo records?')">
+        <button class="btn btn-outline-danger btn-sm">Delete demo data</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3"><a class="card stat-card text-decoration-none p-3" href="{{ url_for('erp.rfqs_list') }}"><div class="text-muted small">RFQs / LTAs</div><div class="fs-3 fw-bold">{{ rfqs|length }}</div></a></div>
+    <div class="col-md-3"><a class="card stat-card text-decoration-none p-3" href="{{ url_for('erp.pos_list') }}"><div class="text-muted small">Purchase Orders</div><div class="fs-3 fw-bold">{{ pos|length }}</div></a></div>
+    <div class="col-md-3"><a class="card stat-card text-decoration-none p-3" href="{{ url_for('erp.invoices_list') }}"><div class="text-muted small">Proc. Invoices</div><div class="fs-3 fw-bold">{{ invoices|length }}</div></a></div>
+    <div class="col-md-3"><a class="card stat-card text-decoration-none p-3" href="{{ url_for('erp.vendors_list') }}"><div class="text-muted small">Vendors</div><div class="fs-3 fw-bold">{{ vendors|length }}</div></a></div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between">
+          <strong>Recent RFQs</strong>
+          <a href="{{ url_for('erp.rfq_new') }}" class="btn btn-sm btn-primary">New RFQ</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>No.</th><th>Title</th><th>Lot</th><th>Status</th></tr></thead>
+            <tbody>
+            {% for r in rfqs %}
+              <tr>
+                <td><a href="{{ url_for('erp.rfq_detail', rid=r.id) }}">{{ r.rfq_no }}</a></td>
+                <td>{{ r.title[:60] }}</td>
+                <td>{{ r.lot or '—' }}</td>
+                <td><span class="badge bg-secondary">{{ r.status }}</span></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" class="text-muted">No RFQs yet. Seed demo or create one.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card mb-3">
+        <div class="card-header"><strong>Modules</strong></div>
+        <div class="list-group list-group-flush">
+          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.rfqs_list') }}">RFQs / Evaluation</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.pos_list') }}">Purchase Orders & GRN</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.invoices_list') }}">Invoices → Finance</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.vendors_list') }}">Vendors</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.coa_list') }}">Chart of Accounts</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.assets_list') }}">Fixed Assets</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('expenses') }}">Expense Requests (Finance)</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body small text-muted">
+          <p class="mb-1"><strong>Workflow:</strong> RFQ → Bids (mandatory PDFs) → Technical Pass/Fail → Lowest price → PO → GRN (all conditions) → Invoice → Finance expense request.</p>
+          <p class="mb-0">Single organisation — no multi-company login. Auth remains email/password via existing login.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

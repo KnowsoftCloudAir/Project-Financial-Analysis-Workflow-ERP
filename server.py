@@ -137,6 +137,13 @@ def ensure_db():
         return
     try:
         db.create_all()
+        try:
+            from erp_extension import bind_and_create, seed_erp_demo, erp_bp
+            bind_and_create(app, db)
+            if 'erp' not in app.blueprints:
+                app.register_blueprint(erp_bp)
+        except Exception as _erp_err:
+            print('ERP extension init:', _erp_err)
         if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
             seed_data()
         ensure_expense_codes()
@@ -3961,6 +3968,11 @@ def seed_data():
     if os.environ.get('SEED_DEMO_DATA', '').strip() in ('1', 'true', 'yes'):
         _seed_demo_activity(admin, products, [fac1, fac2, fac3])
     print('Seed data created (clean facilities + catalogue + general admin).')
+    try:
+        from erp_extension import seed_erp_demo
+        seed_erp_demo(admin.id)
+    except Exception as _e:
+        print('ERP seed skip:', _e)
 
 
 

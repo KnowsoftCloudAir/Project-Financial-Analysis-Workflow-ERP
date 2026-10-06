@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Chart of Accounts{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Chart of Accounts</h3>
+  <div class="card"><table class="table mb-0">
+    <thead><tr><th>Code</th><th>Name</th><th>Type</th></tr></thead>
+    <tbody>
+    {% for a in accounts %}
+      <tr><td>{{ a.code }}</td><td>{{ a.name }}</td><td>{{ a.account_type }}</td></tr>
+    {% else %}<tr><td colspan="3" class="text-muted">Seed ERP demo to load COA</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

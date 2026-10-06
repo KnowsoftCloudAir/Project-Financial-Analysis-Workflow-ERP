@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Vendors{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between mb-3">
+    <h3>Vendors</h3>
+    <a href="{{ url_for('erp.vendor_new') }}" class="btn btn-primary btn-sm">Register vendor</a>
+  </div>
+  <div class="card"><table class="table mb-0">
+    <thead><tr><th>No.</th><th>Name</th><th>Exp. yrs</th><th>NAFDAC</th><th>Eligibility</th></tr></thead>
+    <tbody>
+    {% for v in vendors %}
+      <tr>
+        <td>{{ v.vendor_number }}</td>
+        <td>{{ v.name }}</td>
+        <td>{{ v.experience_years }}</td>
+        <td>{{ v.nafdac_status }}</td>
+        <td>{{ v.eligibility_status }}</td>
+      </tr>
+    {% else %}<tr><td colspan="5" class="text-muted">None</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}
