@@ -138,10 +138,10 @@ def ensure_db():
     try:
         db.create_all()
         try:
-            from erp_extension import bind_and_create, seed_erp_demo, erp_bp
-            bind_and_create(app, db)
+            from erp_extension import bind_and_create, erp_bp
             if 'erp' not in app.blueprints:
                 app.register_blueprint(erp_bp)
+            bind_and_create(app, db)
         except Exception as _erp_err:
             print('ERP extension init:', _erp_err)
         if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
@@ -4079,6 +4079,17 @@ if register_learning_routes:
     except Exception as _le:
         print('Learning Data registration failed:', _le)
 
+
+
+# Register ERP blueprint early so url_for /nav never BuildError
+try:
+    from erp_extension import bind_and_create, erp_bp
+    if 'erp' not in app.blueprints:
+        app.register_blueprint(erp_bp)
+    with app.app_context():
+        bind_and_create(app, db)
+except Exception as _erp_boot:
+    print('ERP boot:', _erp_boot)
 
 application = app  # WSGI alias for gunicorn / Render
 

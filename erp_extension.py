@@ -284,32 +284,48 @@ ProcurementCommitteeMember = ProcurementRFQ = ProcurementQuote = QuoteMemberScor
 PurchaseOrder = ProcurementDocument = GoodsReceipt = ProcurementInvoice = JournalEntry = None
 
 
+_models_bound = False
+
 def bind_and_create(app, database):
-    """Bind model classes to the app's SQLAlchemy instance and create tables."""
+    """Bind model classes to the app's SQLAlchemy instance and create tables (idempotent)."""
     global ChartOfAccount, Vendor, FixedAsset, ProcurementService, ProcurementCommittee
     global ProcurementCommitteeMember, ProcurementRFQ, ProcurementQuote, QuoteMemberScore
     global PurchaseOrder, ProcurementDocument, GoodsReceipt, ProcurementInvoice, JournalEntry
-    global db
+    global db, _models_bound
 
     db = database
-    ns = _bind_models(database)
-    ChartOfAccount = ns['ChartOfAccount']
-    Vendor = ns['Vendor']
-    FixedAsset = ns['FixedAsset']
-    ProcurementService = ns['ProcurementService']
-    ProcurementCommittee = ns['ProcurementCommittee']
-    ProcurementCommitteeMember = ns['ProcurementCommitteeMember']
-    ProcurementRFQ = ns['ProcurementRFQ']
-    ProcurementQuote = ns['ProcurementQuote']
-    QuoteMemberScore = ns['QuoteMemberScore']
-    PurchaseOrder = ns['PurchaseOrder']
-    ProcurementDocument = ns['ProcurementDocument']
-    GoodsReceipt = ns['GoodsReceipt']
-    ProcurementInvoice = ns['ProcurementInvoice']
-    JournalEntry = ns['JournalEntry']
+    if not _models_bound:
+        # Prefer existing mapped class if tables already registered
+        if 'erp_chart_of_accounts' in database.metadata.tables and ChartOfAccount is not None:
+            _models_bound = True
+        else:
+            try:
+                ns = _bind_models(database)
+                ChartOfAccount = ns['ChartOfAccount']
+                Vendor = ns['Vendor']
+                FixedAsset = ns['FixedAsset']
+                ProcurementService = ns['ProcurementService']
+                ProcurementCommittee = ns['ProcurementCommittee']
+                ProcurementCommitteeMember = ns['ProcurementCommitteeMember']
+                ProcurementRFQ = ns['ProcurementRFQ']
+                ProcurementQuote = ns['ProcurementQuote']
+                QuoteMemberScore = ns['QuoteMemberScore']
+                PurchaseOrder = ns['PurchaseOrder']
+                ProcurementDocument = ns['ProcurementDocument']
+                GoodsReceipt = ns['GoodsReceipt']
+                ProcurementInvoice = ns['ProcurementInvoice']
+                JournalEntry = ns['JournalEntry']
+                _models_bound = True
+            except Exception as e:
+                # Table already defined — ignore on reload
+                print('ERP model bind note:', e)
+                _models_bound = True
 
-    with app.app_context():
-        database.create_all()
+    try:
+        with app.app_context():
+            database.create_all()
+    except Exception as e:
+        print('ERP create_all note:', e)
 
 
 MANDATORY_BID_DOCS = {
