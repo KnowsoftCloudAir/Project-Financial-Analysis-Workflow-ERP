@@ -1277,6 +1277,78 @@ def admin_facilities():
     return render_template('admin_facilities.html', facilities=facilities)
 
 
+@app.route('/admin/facilities/new', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_facility_new():
+    """Add a new kiosk, PHC, or other service unit."""
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        ftype = (request.form.get('facility_type') or 'kiosk').strip().lower()
+        if ftype not in ('kiosk', 'phc', 'other', 'warehouse', 'mobile_unit'):
+            ftype = 'kiosk'
+        if not name:
+            flash('Facility name is required.', 'danger')
+            return render_template('admin_facility_form.html', facility=None)
+        try:
+            target = int(request.form.get('target_clients_monthly') or 0)
+        except Exception:
+            target = 0
+        fac = Facility(
+            name=name,
+            facility_type=ftype,
+            address=(request.form.get('address') or '').strip(),
+            city=(request.form.get('city') or 'Benin City').strip(),
+            contact_person=(request.form.get('contact_person') or '').strip(),
+            phone=(request.form.get('phone') or '').strip(),
+            target_clients_monthly=target,
+            is_active=request.form.get('is_active') == '1',
+        )
+        db.session.add(fac)
+        db.session.flush()
+        # Seed zero stock lines for all catalogue products
+        for prod in Product.query.all():
+            db.session.add(StockItem(
+                facility_id=fac.id, product_id=prod.id,
+                quantity_on_hand=0, reorder_level=10,
+            ))
+        db.session.commit()
+        try:
+            log_activity('facility_create', f'{fac.name} ({fac.facility_type})')
+        except Exception:
+            pass
+        flash(f'Service unit “{fac.name}” created.', 'success')
+        return redirect(url_for('admin_facility_detail', fid=fac.id))
+    return render_template('admin_facility_form.html', facility=None)
+
+
+@app.route('/admin/facilities/<int:fid>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_facility_edit(fid):
+    fac = db.session.get(Facility, fid)
+    if not fac:
+        abort(404)
+    if request.method == 'POST':
+        fac.name = (request.form.get('name') or fac.name).strip()
+        ftype = (request.form.get('facility_type') or fac.facility_type).strip().lower()
+        if ftype in ('kiosk', 'phc', 'other', 'warehouse', 'mobile_unit'):
+            fac.facility_type = ftype
+        fac.address = (request.form.get('address') or '').strip()
+        fac.city = (request.form.get('city') or 'Benin City').strip()
+        fac.contact_person = (request.form.get('contact_person') or '').strip()
+        fac.phone = (request.form.get('phone') or '').strip()
+        try:
+            fac.target_clients_monthly = int(request.form.get('target_clients_monthly') or 0)
+        except Exception:
+            pass
+        fac.is_active = request.form.get('is_active') == '1'
+        db.session.commit()
+        flash('Facility updated.', 'success')
+        return redirect(url_for('admin_facility_detail', fid=fac.id))
+    return render_template('admin_facility_form.html', facility=fac)
+
+
 @app.route('/admin/facilities/<int:fid>/activate', methods=['POST'])
 @login_required
 @admin_required
@@ -2443,16 +2515,22 @@ def _build_pptx_report(label, period, cost_data, uptake, fac_rows, charts, start
 def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start, end, testimonies=None, brand=None):
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=0.6*inch, rightMargin=0.6*inch,
-                            topMargin=0.5*inch, bottomMargin=0.5*inch)
+                            topMargin=0.55*inch, bottomMargin=0.6*inch)
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('T', parent=styles['Heading1'], textColor=colors.HexColor('#0d6e6e'))
+    title_style = ParagraphStyle('T', parent=styles['Heading1'], fontSize=14, textColor=colors.HexColor('#0d2137'), spaceAfter=2)
+    h2 = ParagraphStyle('H2p', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor('#0d6e6e'), spaceBefore=8, spaceAfter=6)
+    body = ParagraphStyle('Bp', parent=styles['Normal'], fontSize=9, leading=11)
     story = []
     brand = brand or report_branding()
     story.append(Paragraph(brand.get('programme_title', 'Benin City Mayor Challenge'), title_style))
-    story.append(Paragraph(f"{brand.get('app_name', 'Report')} {period.title()} Report — {label}", styles['Heading2']))
-    story.append(Paragraph(f'Period: {start.isoformat()} to {end.isoformat()}', styles['Normal']))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph('Key indicators', styles['Heading2']))
+    story.append(Paragraph(f"{brand.get('app_name', 'Report')} — Operational &amp; Cost Performance Report", h2))
+    story.append(Paragraph(
+        f"<b>Period:</b> {start.isoformat()} to {end.isoformat()} &nbsp;|&nbsp; <b>Scope:</b> {label} &nbsp;|&nbsp; "
+        f"<b>Frequency:</b> {period.title()}<br/>"
+        "Prepared for programme management. Unit costs exclude platform build costs (reported separately).",
+        body))
+    story.append(Spacer(1, 10))
+    story.append(Paragraph('1. Key performance indicators', h2))
     data = [
         ['Metric', 'Value'],
         ['Clients served', str(cost_data['total_clients'])],
@@ -2471,20 +2549,20 @@ def _build_pdf_report(label, period, cost_data, uptake, fac_rows, charts, start,
     story.append(t)
     story.append(Spacer(1, 14))
     if charts.get('uptake'):
-        story.append(Paragraph('Method uptake', styles['Heading2']))
+        story.append(Paragraph('2. Method uptake', h2))
         story.append(RLImage(charts['uptake'], width=5.5*inch, height=3.2*inch))
     if charts.get('kiosk'):
-        story.append(Paragraph('Operating cost by facility', styles['Heading2']))
+        story.append(Paragraph('3. Operating cost by facility', h2))
         story.append(RLImage(charts['kiosk'], width=5.5*inch, height=3.2*inch))
     story.append(PageBreak())
-    story.append(Paragraph('Cost analysis', styles['Heading2']))
+    story.append(Paragraph('4. Cost analysis', h2))
     story.append(Paragraph(
         'Unit cost per client = operational cost ÷ clients. Platform build costs are excluded from unit cost.',
         styles['Normal']))
     if charts.get('method'):
         story.append(RLImage(charts['method'], width=4*inch, height=4*inch))
     story.append(Spacer(1, 12))
-    story.append(Paragraph('Facilities summary', styles['Heading2']))
+    story.append(Paragraph('5. Facilities / service units summary', h2))
     fdata = [['Facility', 'Type', 'Active', 'Clients', 'Contact']]
     for r in fac_rows:
         fdata.append([r['name'], r['type'], 'Yes' if r['active'] else 'No', str(r['clients']), r['contact'][:30]])
@@ -3038,19 +3116,32 @@ def admin_budget():
     fy = request.args.get('fy', '2026')
     period = request.args.get('period', 'Pilot')
     codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
-    if request.method == 'POST' and _can_review_expense(current_user):
+    can_edit = (
+        _can_review_expense(current_user)
+        or current_user.role in ('project_manager', 'general_admin', 'admin', 'program_admin', 'finance_analyst')
+    )
+    if request.method == 'POST' and can_edit:
         fy = request.form.get('fiscal_year', fy)
         period = request.form.get('period_label', period)
-        for c in codes:
-            amt = request.form.get(f'budget_{c.id}', '').strip()
-            narr = request.form.get(f'narr_{c.id}', '').strip()
+        # Optional: add new expense code from same form
+        new_code = (request.form.get('new_code') or '').strip()
+        new_cat = (request.form.get('new_category') or '').strip()
+        new_desc = (request.form.get('new_description') or '').strip()
+        if new_code and new_cat:
+            if not ExpenseCode.query.filter_by(code=new_code).first():
+                db.session.add(ExpenseCode(code=new_code, category=new_cat, description=new_desc or new_cat, is_active=True))
+                db.session.flush()
+                codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
+        for code_row in codes:
+            amt = request.form.get(f'budget_{code_row.id}', '').strip()
+            narr = request.form.get(f'narr_{code_row.id}', '').strip()
             try:
                 budget_amt = Decimal(amt) if amt else Decimal('0')
             except Exception:
                 budget_amt = Decimal('0')
-            line = BudgetLine.query.filter_by(expense_code_id=c.id, fiscal_year=fy, period_label=period).first()
+            line = BudgetLine.query.filter_by(expense_code_id=code_row.id, fiscal_year=fy, period_label=period).first()
             if not line:
-                line = BudgetLine(expense_code_id=c.id, fiscal_year=fy, period_label=period)
+                line = BudgetLine(expense_code_id=code_row.id, fiscal_year=fy, period_label=period)
                 db.session.add(line)
             line.budget_amount = budget_amt
             line.variance_narration = narr
@@ -3066,18 +3157,20 @@ def admin_budget():
     for er in paid:
         actuals[er.expense_code_id] = actuals.get(er.expense_code_id, Decimal('0')) + (er.amount or 0)
     rows = []
-    for c in codes:
-        bl = lines.get(c.id)
+    for code_row in codes:
+        bl = lines.get(code_row.id)
         budget = float(bl.budget_amount) if bl else 0.0
-        actual = float(actuals.get(c.id, 0))
+        actual = float(actuals.get(code_row.id, 0))
         var = budget - actual
         rows.append({
-            'code': c, 'budget': budget, 'actual': actual, 'variance': var,
+            'code': code_row, 'budget': budget, 'actual': actual, 'variance': var,
             'narration': bl.variance_narration if bl else '',
             'line': bl,
         })
+    total_budget = sum(r['budget'] for r in rows)
+    total_actual = sum(r['actual'] for r in rows)
     return render_template('admin_budget.html', rows=rows, fy=fy, period=period,
-                           can_edit=_can_review_expense(current_user))
+                           can_edit=can_edit, total_budget=total_budget, total_actual=total_actual)
 
 
 @app.route('/admin/budget/variance-report')
@@ -3102,6 +3195,120 @@ def budget_variance_report():
             'narration': (bl.variance_narration if bl else '') or '',
         })
     return render_template('budget_variance.html', rows=rows, fy=fy, period=period)
+
+@app.route('/admin/budget/ifrs-pdf')
+@login_required
+@admin_required
+def budget_ifrs_pdf():
+    """Professional programme financial statement PDF (IAS 1 presentation style)."""
+    fy = request.args.get('fy', '2026')
+    period = request.args.get('period', 'Pilot')
+    codes = ExpenseCode.query.filter_by(is_active=True).order_by(ExpenseCode.code).all()
+    lines = {bl.expense_code_id: bl for bl in BudgetLine.query.filter_by(fiscal_year=fy, period_label=period).all()}
+    actuals = {}
+    for er in ExpenseRequest.query.filter_by(status='paid').all():
+        actuals[er.expense_code_id] = actuals.get(er.expense_code_id, Decimal('0')) + (er.amount or 0)
+    rows = []
+    for code_row in codes:
+        bl = lines.get(code_row.id)
+        budget = float(bl.budget_amount) if bl else 0.0
+        actual = float(actuals.get(code_row.id, 0))
+        rows.append({
+            'code': code_row.code, 'category': code_row.category, 'description': code_row.description,
+            'budget': budget, 'actual': actual, 'variance': budget - actual,
+            'narration': (bl.variance_narration if bl else '') or '',
+        })
+    brand = report_branding()
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=0.7*inch, rightMargin=0.7*inch, topMargin=0.65*inch, bottomMargin=0.7*inch,
+    )
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle('IFRSTitle', parent=styles['Heading1'], fontSize=14, textColor=colors.HexColor('#0d2137'), spaceAfter=4)
+    h2 = ParagraphStyle('IFRSH2', parent=styles['Heading2'], fontSize=11, textColor=colors.HexColor('#0d6e6e'), spaceBefore=12, spaceAfter=6)
+    body = ParagraphStyle('IFRSBody', parent=styles['Normal'], fontSize=9, leading=12)
+    small = ParagraphStyle('IFRSSmall', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#555555'))
+    story = []
+    story.append(Paragraph(brand.get('programme_title', 'CONTRAconnect / Benin City Programme'), title))
+    story.append(Paragraph('Statement of Budget Performance', h2))
+    story.append(Paragraph(
+        f"Reporting entity: {brand.get('app_name', 'Project Financial Management Workflow')} · "
+        f"Fiscal year {fy} · Period: {period}<br/>"
+        "Presentation aligned with IAS 1 principles for programme financial reporting "
+        "(comparative budget vs actuals, classification by nature, narrative on material variances).",
+        body))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph('1. Basis of preparation', h2))
+    story.append(Paragraph(
+        "These figures are prepared on an accrual basis for programme management reporting. "
+        "Budget amounts are authorised allocations by expense nature. Actuals reflect paid expense requests "
+        "in the system. Commodity inventory movements are reported separately in operational cost reports. "
+        "Amounts are presented in the reporting currency configured for the entity.",
+        body))
+    story.append(Paragraph('2. Classification of expenses by nature', h2))
+    data = [['Code', 'Category', 'Description', 'Budget', 'Actual', 'Variance']]
+    tb = ta = 0.0
+    for r in rows:
+        tb += r['budget']; ta += r['actual']
+        data.append([
+            r['code'][:12], r['category'][:14], Paragraph(r['description'][:48], small),
+            f"{r['budget']:,.2f}", f"{r['actual']:,.2f}", f"{r['variance']:,.2f}",
+        ])
+    data.append(['', '', Paragraph('<b>Total</b>', small), f"{tb:,.2f}", f"{ta:,.2f}", f"{tb-ta:,.2f}"])
+    t = Table(data, colWidths=[0.85*inch, 0.95*inch, 2.1*inch, 0.9*inch, 0.9*inch, 0.9*inch])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d2137')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#cccccc')),
+        ('ALIGN', (3, 0), (-1, -1), 'RIGHT'),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#eef5f5')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8fafb')]),
+    ]))
+    story.append(t)
+    story.append(Paragraph('3. Material variance notes', h2))
+    notes = [r for r in rows if r['narration'] or abs(r['variance']) > max(1000, 0.1 * (r['budget'] or 1))]
+    if notes:
+        ndata = [['Code', 'Variance', 'Narration / management commentary']]
+        for r in notes[:15]:
+            ndata.append([r['code'][:12], f"{r['variance']:,.2f}", Paragraph((r['narration'] or 'Material variance — commentary to be completed')[:120], small)])
+        nt = Table(ndata, colWidths=[0.9*inch, 0.9*inch, 4.5*inch])
+        nt.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6e6e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        story.append(nt)
+    else:
+        story.append(Paragraph('No material variance narrations recorded for this period.', body))
+    story.append(Spacer(1, 16))
+    story.append(Paragraph(
+        f"Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC · "
+        "This report supports internal governance and donor oversight; it is not a full set of IFRS financial statements.",
+        small))
+    def _footer(canvas, doc_):
+        canvas.saveState()
+        canvas.setFont('Helvetica', 8)
+        canvas.setFillColor(colors.HexColor('#666666'))
+        canvas.drawString(0.7*inch, 0.4*inch, brand.get('app_name', 'PFMW')[:40])
+        canvas.drawRightString(A4[0] - 0.7*inch, 0.4*inch, f"Page {doc_.page}")
+        canvas.restoreState()
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True,
+                     download_name=f'Statement_Budget_Performance_{fy}_{period}.pdf',
+                     mimetype='application/pdf')
+
+
 
 
 

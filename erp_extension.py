@@ -50,9 +50,15 @@ def admin_required(f):
         if not current_user.is_authenticated:
             return redirect(url_for('login'))
         role = getattr(current_user, 'role', '')
-        if role not in ('general_admin', 'admin', 'project_manager', 'finance_analyst', 'finance_admin', 'program_admin'):
+        if role not in (
+            'general_admin', 'admin', 'project_manager', 'finance_analyst', 'finance_admin',
+            'program_admin', 'logistics_consultant', 'sdoc_consultant', 'rh_consultant', 'mel_consultant',
+        ):
             flash('Access restricted to programme / finance staff.', 'warning')
-            return redirect(url_for('admin_dashboard') if hasattr(current_user, 'role') else url_for('login'))
+            try:
+                return redirect(url_for('admin_dashboard'))
+            except Exception:
+                return redirect(url_for('login'))
         return f(*args, **kwargs)
     return wrapped
 
@@ -507,14 +513,45 @@ def delete_erp_demo():
 # Routes
 # ---------------------------------------------------------------------------
 
+def _ensure_models():
+    """Ensure ERP models are bound; return False if unavailable."""
+    global db
+    if ProcurementRFQ is not None and hasattr(ProcurementRFQ, 'query'):
+        return True
+    try:
+        from flask import current_app
+        from flask_sqlalchemy import SQLAlchemy
+        # try re-bind from app
+        database = current_app.extensions.get('sqlalchemy')
+        if database is not None:
+            # Flask-SQLAlchemy 3: database is SQLAlchemy object with .session
+            sa = database
+            # Prefer app's db from server
+            import sys
+            srv = sys.modules.get('server')
+            if srv and getattr(srv, 'db', None) is not None:
+                bind_and_create(current_app._get_current_object(), srv.db)
+                return ProcurementRFQ is not None
+    except Exception as e:
+        print('ERP _ensure_models:', e)
+    return False
+
+
 @erp_bp.route('/')
 @login_required
 @admin_required
 def erp_home():
-    rfqs = ProcurementRFQ.query.order_by(ProcurementRFQ.id.desc()).limit(20).all()
-    pos = PurchaseOrder.query.order_by(PurchaseOrder.id.desc()).limit(10).all()
-    invoices = ProcurementInvoice.query.order_by(ProcurementInvoice.id.desc()).limit(10).all()
-    vendors = Vendor.query.order_by(Vendor.name).all()
+    if not _ensure_models():
+        flash('ERP module is initialising. Please refresh in a moment or contact admin.', 'warning')
+        return redirect(url_for('admin_dashboard'))
+    try:
+        rfqs = ProcurementRFQ.query.order_by(ProcurementRFQ.id.desc()).limit(20).all()
+        pos = PurchaseOrder.query.order_by(PurchaseOrder.id.desc()).limit(10).all()
+        invoices = ProcurementInvoice.query.order_by(ProcurementInvoice.id.desc()).limit(10).all()
+        vendors = Vendor.query.order_by(Vendor.name).all()
+    except Exception as e:
+        flash(f'ERP data error: {e}. Try Seed demo data after tables are created.', 'danger')
+        rfqs, pos, invoices, vendors = [], [], [], []
     return render_template(
         'erp_dashboard.html',
         rfqs=rfqs, pos=pos, invoices=invoices, vendors=vendors,
@@ -743,7 +780,13 @@ def invoices_list():
 def invoice_to_finance(iid):
     """Create a CONTRAconnect ExpenseRequest from procurement invoice (finance flow)."""
     inv = ProcurementInvoice.query.get_or_404(iid)
-    from server import ExpenseRequest, ExpenseCode  # late import
+    import sys
+    srv = sys.modules.get('server')
+    if not srv:
+        flash('Finance module unavailable.', 'danger')
+        return redirect(url_for('erp.invoices_list'))
+    ExpenseRequest = srv.ExpenseRequest
+    ExpenseCode = srv.ExpenseCode
     code = ExpenseCode.query.filter(ExpenseCode.code.like('EXP-LOG%')).first() or ExpenseCode.query.first()
     if not code:
         flash('No expense code configured. Create one under Budget first.', 'danger')

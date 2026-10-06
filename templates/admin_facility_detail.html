@@ -13,6 +13,7 @@
         {% endif %}
     </div>
     <div class="d-flex gap-2">
+        <a href="{{ url_for('admin_facility_edit', fid=facility.id) }}" class="btn btn-outline-primary btn-sm">Edit details</a>
         {% if facility.is_active %}
         <form method="post" action="{{ url_for('deactivate_facility', fid=facility.id) }}"
               onsubmit="return confirm('Deactivate this facility?');">
