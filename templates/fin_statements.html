@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Financial statements{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Financial statements</h3>
+  <p class="text-muted">Built from the trial balance at {{ today }}.</p>
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">Statement of financial position</div>
+        <table class="table mb-0">
+          <tr><th colspan="2">Assets</th></tr>
+          {% for r in pack.assets %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th>Total assets</th><th class="text-end">{{ '{:,.2f}'.format(pack.asset_total) }}</th></tr>
+          <tr><th colspan="2">Liabilities</th></tr>
+          {% for r in pack.liabilities %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th>Total liabilities</th><th class="text-end">{{ '{:,.2f}'.format(pack.liability_total) }}</th></tr>
+          <tr><th colspan="2">Equity</th></tr>
+          {% for r in pack.equity %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><td>Surplus for the period</td><td class="text-end">{{ '{:,.2f}'.format(pack.surplus) }}</td></tr>
+          <tr><th>Total equity</th><th class="text-end">{{ '{:,.2f}'.format(pack.equity_total) }}</th></tr>
+        </table>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">Statement of financial performance</div>
+        <table class="table mb-0">
+          {% for r in pack.income %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th>Income</th><th class="text-end">{{ '{:,.2f}'.format(pack.income_total) }}</th></tr>
+          {% for r in pack.expense %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th>Expenses</th><th class="text-end">{{ '{:,.2f}'.format(pack.expense_total) }}</th></tr>
+          <tr><th>Surplus / (deficit)</th><th class="text-end">{{ '{:,.2f}'.format(pack.surplus) }}</th></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

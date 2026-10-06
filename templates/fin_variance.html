@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Variance{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Variance by project</h3>
+  <p class="text-muted">Budget amount minus expense posted to that budget code. Positive means budget remaining.</p>
+  <div class="mb-3">
+    {% for p in projects %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('fin.project_report', pid=p.id) }}">{{ p.code }}</a>{% endfor %}
+  </div>
+  <div class="card"><table class="table mb-0">
+    <thead><tr><th>Project</th><th>Budget</th><th>Expense code</th><th class="text-end">Budget</th><th class="text-end">Actual</th><th class="text-end">Variance</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.budget.project.code if r.budget.project else '' }}</td>
+        <td>{{ r.budget.code }}</td>
+        <td>{{ r.budget.expense_code.code if r.budget.expense_code else '' }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.amount) }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.spent) }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.variance) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

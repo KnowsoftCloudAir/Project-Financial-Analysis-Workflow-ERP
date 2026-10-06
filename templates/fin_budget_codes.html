@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Budget codes{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Budget codes</h3>
+  <p class="text-muted">Each budget code is tied to one project code and one expense code.</p>
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card"><table class="table mb-0">
+        <thead><tr><th>Code</th><th>Project</th><th>Expense</th><th class="text-end">Amount</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r.code }}</td>
+            <td>{{ r.project.code if r.project else '' }}</td>
+            <td>{{ r.expense_code.code if r.expense_code else '' }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(r.amount or 0) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+    {% if can_edit %}
+    <div class="col-lg-4">
+      <form method="post" class="card card-body">
+        <h5>Add budget code</h5>
+        <input name="code" class="form-control mb-2" placeholder="BUD-NEW" required>
+        <input name="description" class="form-control mb-2" placeholder="Description">
+        <select name="expense_code_id" class="form-select mb-2" required>
+          <option value="">Expense code</option>
+          {% for e in expenses %}<option value="{{ e.id }}">{{ e.code }} — {{ e.project.code if e.project else '' }}</option>{% endfor %}
+        </select>
+        <input name="amount" type="number" step="0.01" class="form-control mb-2" placeholder="Budget amount" required>
+        <input name="fiscal_year" class="form-control mb-2" value="2026">
+        <button class="btn btn-primary">Save</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
