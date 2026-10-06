@@ -842,48 +842,39 @@ def create_invoice(poid):
 @admin_required
 def invoices_list():
     rows = ProcurementInvoice.query.order_by(ProcurementInvoice.id.desc()).all()
-    return render_template('erp_invoices.html', invoices=rows)
+    budgets = []
+    try:
+        from finance_core import FinBudgetCode
+        budgets = FinBudgetCode.query.filter_by(is_active=True).all()
+    except Exception:
+        budgets = []
+    return render_template('erp_invoices.html', invoices=rows, budgets=budgets)
 
 
 @erp_bp.route('/invoices/<int:iid>/to-finance', methods=['POST'])
 @login_required
 @admin_required
 def invoice_to_finance(iid):
-    """Create a CONTRAconnect ExpenseRequest from procurement invoice (finance flow)."""
+    """Hand a procurement invoice to the finance approval chain. It posts only after finance approval."""
     inv = ProcurementInvoice.query.get_or_404(iid)
-    import sys
-    srv = sys.modules.get('server')
-    if not srv:
-        flash('Finance module unavailable.', 'danger')
-        return redirect(url_for('erp.invoices_list'))
-    ExpenseRequest = srv.ExpenseRequest
-    ExpenseCode = srv.ExpenseCode
-    code = ExpenseCode.query.filter(ExpenseCode.code.like('EXP-LOG%')).first() or ExpenseCode.query.first()
-    if not code:
-        flash('No expense code configured. Create one under Budget first.', 'danger')
-        return redirect(url_for('erp.invoices_list'))
-    n = ExpenseRequest.query.count() + 1
-    er = ExpenseRequest(
-        request_number=f'ER-PROC-{n:04d}',
-        description=f'Payment for procurement invoice {inv.invoice_no}',
-        amount=inv.total_amount,
-        category=getattr(code, 'category', None) or 'Logistics',
-        status='submitted',
-        requester_id=current_user.id,
-        expense_code_id=code.id,
-        payee_name='Vendor (procurement)',
-        currency='NGN',
-    )
-    db.session.add(er)
-    db.session.flush()
-    inv.expense_request_id = er.id
-    inv.status = 'approved_for_payment'
     po = PurchaseOrder.query.get(inv.po_id)
+    try:
+        from finance_core import create_from_procurement
+        doc = create_from_procurement(
+            inv, po=po, user_id=current_user.id,
+            project_id=request.form.get('project_id', type=int),
+            expense_code_id=request.form.get('expense_code_id', type=int),
+            budget_code_id=request.form.get('budget_code_id', type=int),
+        )
+    except Exception as exc:
+        flash(f'Could not send to finance: {exc}', 'danger')
+        return redirect(url_for('erp.invoices_list'))
+    inv.status = 'approved_for_payment'
     if po:
         po.status = 'submitted_payment'
     db.session.commit()
-    flash(f'Invoice sent to Finance as {er.request_number}.', 'success')
-    return redirect(url_for('erp.invoices_list'))
+    flash(f'Invoice sent to Finance as {doc.doc_no}. Program approval, then finance posts it.', 'success')
+    return redirect(url_for('fin.payment_detail', did=doc.id))
 
 
 @erp_bp.route('/coa')
@@ -1091,3 +1082,32 @@ def demo_delete():
     delete_erp_demo()
     flash('ERP demo data deleted.', 'success')
     return redirect(url_for('erp.erp_home'))
+
+
+@erp_bp.route('/rfqs/<int:rid>/quotes', methods=['POST'])
+@login_required
+@admin_required
+def add_quote(rid):
+    """Simple bid on an RFQ so the evaluation template can be used without demo seed."""
+    rfq = ProcurementRFQ.query.get_or_404(rid)
+    vendor = (request.form.get('vendor_name') or '').strip()
+    amount = request.form.get('total_amount', type=float) or 0
+    if not vendor or amount <= 0:
+        flash('Vendor and a positive bid amount are required.', 'danger')
+        return redirect(url_for('erp.rfq_detail', rid=rid))
+    q = ProcurementQuote(
+        rfq_id=rfq.id,
+        vendor_name=vendor,
+        amount=amount,
+        total_amount=amount,
+        shelf_life_commitment=True,
+        manufacturer_auth=True,
+        mandatory_docs_complete=True,
+        status='submitted',
+    )
+    db.session.add(q)
+    if rfq.status in (None, '', 'draft'):
+        rfq.status = 'bids_received'
+    db.session.commit()
+    flash(f'Bid from {vendor} added. Mark technical pass, then rank and award.', 'success')
+    return redirect(url_for('erp.rfq_detail', rid=rid))

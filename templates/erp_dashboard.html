@@ -69,13 +69,13 @@
           <a class="list-group-item list-group-item-action" href="{{ url_for('erp.vendors_list') }}">Vendors</a>
           <a class="list-group-item list-group-item-action" href="{{ url_for('erp.inventory_dashboard') }}">Inventory dashboard</a>
           <a class="list-group-item list-group-item-action" href="{{ url_for('erp.invoices_list') }}">Invoices → Finance</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('expense_list') }}">Expense approvals</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('admin_budget') }}">Budget</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('fin.home') }}">Finance books, approval and reports</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('fin.payments') }}">Payment approval</a>
           <a class="list-group-item list-group-item-action" href="{{ url_for('admin_backup_page') }}">Backup &amp; restore</a>
         </div>
       </div>
       <div class="card"><div class="card-body small text-muted">
-        <p class="mb-1"><strong>Accounting flow:</strong> GRN Dr Inventory (asset) / Cr AP. Dispatch moves to outlet. Use Dr Cost of use / Cr stock. Other expenses use the existing approval workflow.</p>
+        <p class="mb-1"><strong>Flow:</strong> RFQ → bid → technical pass → award → goods receipt → invoice → finance approval → payable ledger → payment → cash book → trial balance and project reports.</p>
       </div></div>
     </div>
   </div>

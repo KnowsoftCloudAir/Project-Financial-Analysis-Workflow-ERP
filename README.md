@@ -60,6 +60,16 @@ contraconnect/
 5. Unit cost per facility = facility operating cost ÷ facility clients.
 6. Commodity cost by method derived from stock `issue` transactions × unit cost.
 
+## Finance books (simple FMSS-style chain)
+
+Open **Finance books** after login, or go to `/finance/`.
+
+Setup order: chart of accounts → project code → expense code (tied to a project and an account) → budget code (tied to a project and an expense code).
+
+Approval is submitted → program approved → finance approved → paid. Finance approval posts the expense and accounts payable. Payment posts cash. Those lines feed the account ledger, general ledger, trial balance, financial statements, project report and variance. Journals post immediately if they balance. Bank reconciliation ticks the cash book.
+
+Procurement invoices use the same chain: ERP invoice → **Send to finance** → the approval screens above. See `FINANCE_SETUP.md`.
+
 ## ERP / Procurement (single organisation)
 
 Integrated LTA procurement (Lot 1 FP commodities, Lot 2 medical consumables), vendors, chart of accounts, fixed assets, goods receipt condition gates, and invoice hand-off to existing **Expense requests**.

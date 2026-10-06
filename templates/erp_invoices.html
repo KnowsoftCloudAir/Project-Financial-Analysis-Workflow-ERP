@@ -2,25 +2,32 @@
 {% block title %}Procurement Invoices{% endblock %}
 {% block content %}
 <div class="container-fluid py-3">
-  <h3>Procurement Invoices → Finance</h3>
+  <h3>Procurement invoices → finance</h3>
+  <p class="text-muted">Send an accepted invoice into the finance approval chain. It uses the budget code’s project and expense code, then posts to the payable ledger only after finance approval.</p>
   <div class="card"><table class="table mb-0">
-    <thead><tr><th>Invoice</th><th>PO</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Invoice</th><th>PO</th><th>Amount</th><th>Status</th><th>Send to finance</th></tr></thead>
     <tbody>
     {% for i in invoices %}
       <tr>
         <td>{{ i.invoice_no }}</td>
         <td>{{ i.po_id }}</td>
-        <td>{{ '{:,.0f}'.format(i.total_amount or 0) }}</td>
+        <td>{{ '{:,.2f}'.format(i.total_amount or 0) }}</td>
         <td>{{ i.status }}</td>
         <td>
           {% if i.status != 'approved_for_payment' %}
-          <form method="post" action="{{ url_for('erp.invoice_to_finance', iid=i.id) }}">
-            <button class="btn btn-sm btn-primary">Send to Finance</button>
+          <form method="post" action="{{ url_for('erp.invoice_to_finance', iid=i.id) }}" class="d-flex gap-2">
+            <select name="budget_code_id" class="form-select form-select-sm">
+              <option value="">Default commodity budget</option>
+              {% for b in budgets %}
+              <option value="{{ b.id }}">{{ b.code }} — {{ b.project.code if b.project else '' }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-primary">Send</button>
           </form>
-          {% else %}Linked to expense #{{ i.expense_request_id }}{% endif %}
+          {% else %}In finance{% endif %}
         </td>
       </tr>
-    {% else %}<tr><td colspan="5" class="text-muted">None</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="5" class="text-muted">Create an invoice from an accepted goods receipt first.</td></tr>{% endfor %}
     </tbody>
   </table></div>
 </div>

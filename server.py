@@ -3034,6 +3034,11 @@ def expense_mark_paid(eid):
         is_platform_cost=(er.expense_code.code.startswith('EXP-PLT')),
         created_by=current_user.id,
     ))
+    try:
+        from finance_core import post_legacy_expense
+        post_legacy_expense(er)
+    except Exception as fin_exc:
+        print('finance post:', fin_exc)
     db.session.commit()
     log_activity('expense_paid', er.request_number)
     flash('Marked paid and posted to budget actuals. Download the payment voucher.', 'success')
@@ -4300,6 +4305,12 @@ try:
         bind_and_create(app, db)
 except Exception as _erp_boot:
     print('ERP boot:', _erp_boot)
+
+try:
+    from finance_core import init_finance
+    init_finance(app, db)
+except Exception as _fin_boot:
+    print('Finance boot:', _fin_boot)
 
 application = app  # WSGI alias for gunicorn / Render
 
