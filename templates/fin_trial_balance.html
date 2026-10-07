@@ -3,6 +3,7 @@
 {% block content %}
 <div class="container-fluid py-3">
   <h3>Trial balance</h3>
+  <p><a href="{{ url_for('ops.fx_translate') }}">Translated trial balance</a></p>
   <div class="card"><table class="table mb-0">
     <thead><tr><th>Account</th><th>Type</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr></thead>
     <tbody>

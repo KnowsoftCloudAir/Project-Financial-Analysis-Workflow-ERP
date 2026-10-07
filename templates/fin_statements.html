@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container-fluid py-3">
   <h3>Financial statements</h3>
-  <p class="text-muted">Built from the trial balance at {{ today }}.</p>
+  <p class="text-muted">Built from the trial balance at {{ today }}. <a href="{{ url_for('ops.fx_translate') }}">Translate and treat the difference as exchange gain or loss</a>.</p>
   <div class="row g-3">
     <div class="col-lg-6">
       <div class="card">

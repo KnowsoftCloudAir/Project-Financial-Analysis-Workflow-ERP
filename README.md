@@ -78,7 +78,17 @@ Integrated LTA procurement (Lot 1 FP commodities, Lot 2 medical consumables), ve
 - Auth: existing email/password only (no multi-company)
 - See `MERGE_NOTES.md`
 
-## Extending
+## Upgrade: inventory, vendor REF, budget and bank statement
+
+* Inventory is its own section at `/ops/inventory` (receipt from procurement, dispatch to facilities, issue to finance). It is no longer inside ERP / Procurement.
+* ERP / Procurement keeps vendors, RFQs and purchase orders. Backup / restore and finance books stay in their own sections.
+* Vendor quotation links: `/ops/procurement`. Each vendor gets a REF link, must answer every requirement, and attaches a PDF. After the deadline, committee links open for scoring. Highest score wins. The winner accepts or rejects on the same link; other vendors move from in progress to not selected. A service tracker raises a payment invoice.
+* Account settings order: chart of accounts, project codes, expense codes, then editable budget lines.
+* Bank reconciliation at `/ops/bank` follows the FMSS statement (add / less, outstanding items, PDF and Excel).
+* Variance and the budget template are project-based. Excel download uses Budget ID, Project, Expense Code, Description, Start, End, Budget, Actual, Variance, Status.
+* Reporting currencies and exchange translation: `/ops/fx`. Translation difference is exchange gain or loss.
+* Staff privilege matrix: `/ops/privileges`.
+
 
 - Split `app.py` into blueprints (`auth`, `admin`, `provider`, `api`).
 - Replace SQLite with PostgreSQL for production.

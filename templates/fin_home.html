@@ -13,17 +13,20 @@
   <div class="row g-3">
     <div class="col-lg-4">
       <div class="list-group">
+        <div class="list-group-item active">Account settings</div>
         <a class="list-group-item" href="{{ url_for('fin.coa') }}">1. Chart of accounts</a>
         <a class="list-group-item" href="{{ url_for('fin.projects') }}">2. Project codes</a>
         <a class="list-group-item" href="{{ url_for('fin.expense_codes') }}">3. Expense codes</a>
-        <a class="list-group-item" href="{{ url_for('fin.budget_codes') }}">4. Budget codes</a>
-        <a class="list-group-item" href="{{ url_for('fin.payments') }}">5. Payments and approval</a>
+        <a class="list-group-item" href="{{ url_for('fin.budget_codes') }}">4. Budget codes (editable)</a>
+        <a class="list-group-item" href="{{ url_for('ops.budget_template') }}">Project budget template</a>
+        <a class="list-group-item" href="{{ url_for('fin.payments') }}">Payments and approval</a>
         <a class="list-group-item" href="{{ url_for('fin.journals') }}">Journal entries</a>
         <a class="list-group-item" href="{{ url_for('fin.ledger') }}">Account ledger</a>
         <a class="list-group-item" href="{{ url_for('fin.trial') }}">Trial balance</a>
         <a class="list-group-item" href="{{ url_for('fin.financial_statements') }}">Financial statements</a>
         <a class="list-group-item" href="{{ url_for('fin.variance') }}">Variance by project</a>
-        <a class="list-group-item" href="{{ url_for('fin.bank') }}">Bank reconciliation</a>
+        <a class="list-group-item" href="{{ url_for('ops.bank_recon') }}">Bank reconciliation</a>
+        <a class="list-group-item" href="{{ url_for('ops.fx_setup') }}">Currencies and exchange translation</a>
       </div>
     </div>
     <div class="col-lg-8">

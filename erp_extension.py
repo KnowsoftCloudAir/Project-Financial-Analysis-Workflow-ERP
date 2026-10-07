@@ -881,6 +881,7 @@ def invoice_to_finance(iid):
 @login_required
 @admin_required
 def coa_list():
+    return redirect(url_for('fin.coa'))
     rows = ChartOfAccount.query.order_by(ChartOfAccount.code).all()
     return render_template('erp_coa.html', accounts=rows)
 
@@ -899,6 +900,7 @@ def assets_list():
 @login_required
 @admin_required
 def inventory_dashboard():
+    return redirect(url_for('ops.inventory_home'))
     if not _ensure_models() and not (InventoryBatch and hasattr(InventoryBatch, 'query')):
         flash('Inventory module initialising.', 'warning')
         return redirect(url_for('erp.erp_home'))

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Procurement REF{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Procurement — vendor REF links</h3>
+  <p class="text-muted">Each vendor receives a private link. After the deadline, committee links open for scoring. Inventory and finance stay in their own sections.</p>
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <table class="table card">
+        <thead><tr><th>REF</th><th>Title</th><th>Deadline</th><th>Status</th></tr></thead>
+        <tbody>
+        {% for e in events %}
+          <tr>
+            <td><a href="{{ url_for('ops.procurement_detail', eid=e.id) }}">{{ e.ref_no }}</a></td>
+            <td>{{ e.title }}</td>
+            <td>{{ e.deadline }}</td>
+            <td>{{ e.status }}</td>
+          </tr>
+        {% else %}<tr><td colspan="4" class="text-muted">No events yet.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="col-lg-5">
+      <form method="post" action="{{ url_for('ops.procurement_new') }}" class="card card-body">
+        <h5>New quotation event</h5>
+        <input name="title" class="form-control mb-2" placeholder="Service / commodity title" required>
+        <input name="project_code" class="form-control mb-2" placeholder="Project code">
+        <textarea name="service_desc" class="form-control mb-2" rows="2" placeholder="Service description"></textarea>
+        <textarea name="requirements" class="form-control mb-2" rows="4" placeholder="One requirement per line" required></textarea>
+        <textarea name="vendors" class="form-control mb-2" rows="3" placeholder="Vendor name|email — one per line" required></textarea>
+        <textarea name="members" class="form-control mb-2" rows="3" placeholder="Committee member names, one per line"></textarea>
+        <input name="deadline" type="datetime-local" class="form-control mb-2" required>
+        <button class="btn btn-primary">Create REF links</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

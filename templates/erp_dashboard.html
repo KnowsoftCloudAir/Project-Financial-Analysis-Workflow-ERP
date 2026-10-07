@@ -65,17 +65,14 @@
       <div class="card mb-3">
         <div class="card-header"><strong>Modules</strong></div>
         <div class="list-group list-group-flush">
-          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.rfqs_list') }}">RFQs &amp; evaluation</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('ops.procurement_home') }}">Vendor REF links and committee evaluation</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.rfqs_list') }}">RFQs and purchase orders</a>
           <a class="list-group-item list-group-item-action" href="{{ url_for('erp.vendors_list') }}">Vendors</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.inventory_dashboard') }}">Inventory dashboard</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.invoices_list') }}">Invoices → Finance</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('fin.home') }}">Finance books, approval and reports</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('fin.payments') }}">Payment approval</a>
-          <a class="list-group-item list-group-item-action" href="{{ url_for('admin_backup_page') }}">Backup &amp; restore</a>
+          <a class="list-group-item list-group-item-action" href="{{ url_for('erp.pos_list') }}">Purchase orders</a>
         </div>
       </div>
       <div class="card"><div class="card-body small text-muted">
-        <p class="mb-1"><strong>Flow:</strong> RFQ → bid → technical pass → award → goods receipt → invoice → finance approval → payable ledger → payment → cash book → trial balance and project reports.</p>
+        <p class="mb-1"><strong>Flow:</strong> REF link, vendor quotation, committee score, winner accept or reject, service tracker, then invoice. Inventory, backup and finance books are in their own sections.</p>
       </div></div>
     </div>
   </div>

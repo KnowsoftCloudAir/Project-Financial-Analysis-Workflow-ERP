@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Bank reconciliation{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center">
+    <h3>Bank reconciliation statement</h3>
+    <div>
+      <a class="btn btn-outline-primary" href="{{ url_for('ops.bank_pdf') }}">Print PDF</a>
+      <a class="btn btn-outline-success" href="{{ url_for('ops.bank_excel') }}">Export to Excel</a>
+    </div>
+  </div>
+  <p class="mb-1"><strong>{{ company.name }}</strong><br><span class="text-muted">{{ company.address }}</span></p>
+  <form method="post">
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Cash account</label>
+        <select name="account_code" class="form-select">
+          {% for a in accounts %}<option value="{{ a.code }}" {% if ws.account_code == a.code %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2"><label class="form-label">Start date</label><input type="date" name="start_date" value="{{ ws.start_date }}" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label">End date</label><input type="date" name="end_date" value="{{ ws.end_date }}" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label">Bank statement balance</label><input name="bank_balance" value="{{ ws.bank_balance }}" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label">Cash book balance</label><input class="form-control" value="{{ '{:,.2f}'.format(book) }}" readonly></div>
+    </div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card"><div class="card-header bg-success-subtle">ADD</div><div class="card-body">
+          <label class="form-label">Cheques issued but not yet presented</label><input name="unpresented" value="{{ ws.unpresented }}" class="form-control mb-2">
+          <label class="form-label">Direct deposits not recorded in cash book</label><input name="direct_deposits" value="{{ ws.direct_deposits }}" class="form-control mb-2">
+          <label class="form-label">Interest credited by bank</label><input name="interest_credited" value="{{ ws.interest_credited }}" class="form-control mb-2">
+          <label class="form-label">Errors in cash book</label><input name="cashbook_errors_add" value="{{ ws.cashbook_errors_add }}" class="form-control mb-2">
+          <label class="form-label">Other additions</label><input name="other_additions" value="{{ ws.other_additions }}" class="form-control mb-2">
+          <strong>Total additions {{ '{:,.2f}'.format(additions) }}</strong>
+        </div></div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card"><div class="card-header bg-danger-subtle">LESS</div><div class="card-body">
+          <label class="form-label">Cheques deposited but not yet credited</label><input name="uncleared_deposits" value="{{ ws.uncleared_deposits }}" class="form-control mb-2">
+          <label class="form-label">Bank charges and fees</label><input name="bank_charges" value="{{ ws.bank_charges }}" class="form-control mb-2">
+          <label class="form-label">Standing orders not recorded</label><input name="standing_orders" value="{{ ws.standing_orders }}" class="form-control mb-2">
+          <label class="form-label">Dishonoured cheques</label><input name="dishonoured" value="{{ ws.dishonoured }}" class="form-control mb-2">
+          <label class="form-label">Errors in cash book</label><input name="cashbook_errors_less" value="{{ ws.cashbook_errors_less }}" class="form-control mb-2">
+          <label class="form-label">Other deductions</label><input name="other_deductions" value="{{ ws.other_deductions }}" class="form-control mb-2">
+          <strong>Total deductions {{ '{:,.2f}'.format(deductions) }}</strong>
+        </div></div>
+      </div>
+    </div>
+    <div class="alert alert-info mt-3">Adjusted balance as per cash book: <strong>{{ '{:,.2f}'.format(adjusted) }}</strong> · Book balance {{ '{:,.2f}'.format(book) }}</div>
+    <div class="row g-2 mb-3">
+      <div class="col-md-4"><input name="prepared_by" value="{{ ws.prepared_by }}" class="form-control" placeholder="Prepared by"></div>
+      <div class="col-md-4"><input name="reviewed_by" value="{{ ws.reviewed_by }}" class="form-control" placeholder="Reviewed by"></div>
+    </div>
+    <div class="card mb-3"><div class="card-header">Cash book — double-click style tick (tick = reconciled)</div>
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Tick</th><th>Date</th><th>Voucher</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr></thead>
+        <tbody>
+        {% for row in view %}
+          <tr>
+            <td><input type="checkbox" name="ticked" value="{{ row.line.id }}" {% if row.tick and row.tick.ticked %}checked{% endif %}></td>
+            <td>{{ row.line.entry_date }}</td>
+            <td>{{ row.line.entry_no }}</td>
+            <td>{{ row.line.description }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(row.debit) }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(row.credit) }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(row.running) }}</td>
+          </tr>
+        {% else %}<tr><td colspan="7" class="text-muted">No cash-book lines in this period.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button class="btn btn-success">Save reconciliation</button>
+  </form>
+  <h5 class="mt-4">Outstanding reconciling items</h5>
+  <table class="table table-sm">
+    <thead><tr><th>Date</th><th>Voucher</th><th>Description</th><th>Debit</th><th>Credit</th></tr></thead>
+    <tbody>
+    {% for row in outstanding %}
+      <tr><td>{{ row.line.entry_date }}</td><td>{{ row.line.entry_no }}</td><td>{{ row.line.description }}</td><td>{{ '{:,.2f}'.format(row.debit) }}</td><td>{{ '{:,.2f}'.format(row.credit) }}</td></tr>
+    {% else %}<tr><td colspan="5">No outstanding transactions</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

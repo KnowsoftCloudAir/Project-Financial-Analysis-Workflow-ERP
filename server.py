@@ -4312,6 +4312,13 @@ try:
 except Exception as _fin_boot:
     print('Finance boot:', _fin_boot)
 
+try:
+    from ops_upgrade import init_ops_upgrade
+    init_ops_upgrade(app, db)
+    print('Ops upgrade registered (/ops/inventory, /ops/procurement, /ops/bank, /ops/privileges)')
+except Exception as _ops_boot:
+    print('Ops upgrade boot:', _ops_boot)
+
 application = app  # WSGI alias for gunicorn / Render
 
 

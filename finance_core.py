@@ -133,6 +133,8 @@ def init_finance(app, database):
         expense_code_id = database.Column(database.Integer, database.ForeignKey('fin_expense_codes.id'), nullable=False)
         amount = database.Column(database.Numeric(14, 2), default=0)
         fiscal_year = database.Column(database.String(10), default='2026')
+        start_date = database.Column(database.Date)
+        end_date = database.Column(database.Date)
         is_active = database.Column(database.Boolean, default=True)
         project = database.relationship('FinProject')
         expense_code = database.relationship('FinExpenseCode')
@@ -602,26 +604,39 @@ def expense_codes():
 @_staff_required
 def budget_codes():
     if request.method == 'POST' and _can_finance():
-        code = (request.form.get('code') or '').strip().upper()
+        edit_id = request.form.get('edit_id', type=int)
         expense = FinExpenseCode.query.get(request.form.get('expense_code_id', type=int))
+        code = (request.form.get('code') or '').strip().upper()
         desc = (request.form.get('description') or '').strip()
         if not code or not expense:
-            flash('Budget code must be tied to an expense code (and that expense code’s project).', 'danger')
-        elif FinBudgetCode.query.filter_by(code=code).first():
-            flash('That budget code already exists.', 'warning')
+            flash('Project comes from the expense code. Code, expense code, description and amount are required.', 'danger')
         else:
-            db.session.add(FinBudgetCode(
-                code=code, description=desc, project_id=expense.project_id,
-                expense_code_id=expense.id, amount=_d(request.form.get('amount')),
-                fiscal_year=request.form.get('fiscal_year') or '2026',
-            ))
-            db.session.commit()
-            flash('Budget code saved.', 'success')
+            row = db.session.get(FinBudgetCode, edit_id) if edit_id else None
+            duplicate = FinBudgetCode.query.filter_by(code=code).first()
+            if duplicate and (not row or duplicate.id != row.id):
+                flash('That budget code already exists.', 'warning')
+            else:
+                if not row:
+                    row = FinBudgetCode(code=code)
+                    db.session.add(row)
+                row.code = code
+                row.description = desc
+                row.project_id = expense.project_id
+                row.expense_code_id = expense.id
+                row.amount = _d(request.form.get('amount'))
+                row.fiscal_year = request.form.get('fiscal_year') or '2026'
+                if request.form.get('start_date'):
+                    row.start_date = datetime.strptime(request.form.get('start_date'), '%Y-%m-%d').date()
+                if request.form.get('end_date'):
+                    row.end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d').date()
+                db.session.commit()
+                flash('Budget saved. Project code, expense code, description and amount can be edited again.', 'success')
         return redirect(url_for('fin.budget_codes'))
     return render_template(
         'fin_budget_codes.html',
         rows=FinBudgetCode.query.order_by(FinBudgetCode.code).all(),
         expenses=FinExpenseCode.query.filter_by(is_active=True).all(),
+        projects=FinProject.query.order_by(FinProject.code).all(),
         can_edit=_can_finance(),
     )
 
@@ -795,57 +810,28 @@ def project_report(pid):
 @login_required
 @_staff_required
 def variance():
+    project_id = request.args.get('project_id', type=int)
     actual = project_actuals()
     rows = []
-    for budget in FinBudgetCode.query.order_by(FinBudgetCode.code).all():
+    query = FinBudgetCode.query
+    if project_id:
+        query = query.filter_by(project_id=project_id)
+    for budget in query.order_by(FinBudgetCode.code).all():
         spent = actual.get((budget.project_id, budget.id, budget.expense_code_id), Decimal('0'))
         amount = _d(budget.amount)
         rows.append({
             'budget': budget, 'amount': amount, 'spent': spent, 'variance': amount - spent,
         })
-    return render_template('fin_variance.html', rows=rows, projects=FinProject.query.order_by(FinProject.code).all())
+    return render_template(
+        'fin_variance.html', rows=rows,
+        projects=FinProject.query.order_by(FinProject.code).all(),
+        project_id=project_id,
+    )
 
 
 @fin_bp.route('/bank', methods=['GET', 'POST'])
 @login_required
 @_staff_required
 def bank():
-    cash_ids = [a.id for a in FinAccount.query.filter_by(account_type='Cash').all()]
-    if request.method == 'POST' and _can_finance():
-        if request.form.get('statement_balance') is not None and request.form.get('save_statement'):
-            db.session.add(FinBankSession(
-                statement_date=date.today(),
-                statement_balance=_d(request.form.get('statement_balance')),
-                note=request.form.get('note', ''),
-            ))
-        for key, value in request.form.items():
-            if key.startswith('tick-'):
-                line_id = int(key.split('-', 1)[1])
-                tick = FinBankTick.query.filter_by(journal_line_id=line_id).first()
-                if not tick:
-                    tick = FinBankTick(journal_line_id=line_id)
-                    db.session.add(tick)
-                tick.ticked = value == '1'
-                tick.ticked_at = datetime.utcnow() if tick.ticked else None
-        db.session.commit()
-        flash('Bank reconciliation saved.', 'success')
-        return redirect(url_for('fin.bank'))
-    lines = FinJournalLine.query.filter(FinJournalLine.account_id.in_(cash_ids)).order_by(FinJournalLine.entry_date, FinJournalLine.id).all() if cash_ids else []
-    ticks = {t.journal_line_id: t for t in FinBankTick.query.all()}
-    book = Decimal('0')
-    ticked = Decimal('0')
-    view = []
-    for line in lines:
-        movement = _d(line.debit) - _d(line.credit)
-        book += movement
-        mark = ticks.get(line.id)
-        if mark and mark.ticked:
-            ticked += movement
-        view.append((line, mark))
-    session = FinBankSession.query.order_by(FinBankSession.id.desc()).first()
-    statement = _d(session.statement_balance) if session else Decimal('0')
-    return render_template(
-        'fin_bank.html', lines=view, book=book, ticked=ticked,
-        statement=statement, difference=statement - ticked, session=session,
-        can_edit=_can_finance(),
-    )
+    return redirect(url_for('ops.bank_recon'))
+

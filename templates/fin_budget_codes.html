@@ -2,40 +2,53 @@
 {% block title %}Budget codes{% endblock %}
 {% block content %}
 <div class="container-fluid py-3">
-  <h3>Budget codes</h3>
-  <p class="text-muted">Each budget code is tied to one project code and one expense code.</p>
-  <div class="row g-3">
-    <div class="col-lg-8">
-      <div class="card"><table class="table mb-0">
-        <thead><tr><th>Code</th><th>Project</th><th>Expense</th><th class="text-end">Amount</th></tr></thead>
-        <tbody>
-        {% for r in rows %}
-          <tr>
-            <td>{{ r.code }}</td>
-            <td>{{ r.project.code if r.project else '' }}</td>
-            <td>{{ r.expense_code.code if r.expense_code else '' }}</td>
-            <td class="text-end">{{ '{:,.2f}'.format(r.amount or 0) }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table></div>
-    </div>
-    {% if can_edit %}
-    <div class="col-lg-4">
-      <form method="post" class="card card-body">
-        <h5>Add budget code</h5>
-        <input name="code" class="form-control mb-2" placeholder="BUD-NEW" required>
-        <input name="description" class="form-control mb-2" placeholder="Description">
-        <select name="expense_code_id" class="form-select mb-2" required>
-          <option value="">Expense code</option>
-          {% for e in expenses %}<option value="{{ e.id }}">{{ e.code }} — {{ e.project.code if e.project else '' }}</option>{% endfor %}
-        </select>
-        <input name="amount" type="number" step="0.01" class="form-control mb-2" placeholder="Budget amount" required>
-        <input name="fiscal_year" class="form-control mb-2" value="2026">
-        <button class="btn btn-primary">Save</button>
-      </form>
-    </div>
-    {% endif %}
+  <div class="d-flex justify-content-between">
+    <h3>Budget codes</h3>
+    <a class="btn btn-outline-success" href="{{ url_for('ops.budget_template') }}">Project budget template</a>
   </div>
+  <p class="text-muted">Every saved line stays editable: project follows the expense code, and expense code, description and amount can be changed. Expense and project codes come from account settings.</p>
+  <table class="table table-sm">
+    <thead><tr><th>Code</th><th>Project</th><th>Expense</th><th>Description</th><th>Start</th><th>End</th><th>Amount</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <form method="post">
+          <input type="hidden" name="edit_id" value="{{ r.id }}">
+          <td><input name="code" value="{{ r.code }}" class="form-control form-control-sm"></td>
+          <td>{{ r.project.code if r.project else '' }}</td>
+          <td>
+            <select name="expense_code_id" class="form-select form-select-sm">
+              {% for e in expenses %}<option value="{{ e.id }}" {% if r.expense_code_id == e.id %}selected{% endif %}>{{ e.code }} — {{ e.project.code if e.project else '' }}</option>{% endfor %}
+            </select>
+          </td>
+          <td><input name="description" value="{{ r.description }}" class="form-control form-control-sm"></td>
+          <td><input type="date" name="start_date" value="{{ r.start_date or '' }}" class="form-control form-control-sm"></td>
+          <td><input type="date" name="end_date" value="{{ r.end_date or '' }}" class="form-control form-control-sm"></td>
+          <td><input name="amount" value="{{ r.amount }}" class="form-control form-control-sm"></td>
+          <td><button class="btn btn-sm btn-primary">Save</button></td>
+        </form>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if can_edit %}
+  <form method="post" class="card card-body">
+    <h5>Add budget line</h5>
+    <div class="row g-2">
+      <div class="col-md-2"><input name="code" class="form-control" placeholder="Budget ID" required></div>
+      <div class="col-md-3">
+        <select name="expense_code_id" class="form-select" required>
+          <option value="">Expense code (project follows)</option>
+          {% for e in expenses %}<option value="{{ e.id }}">{{ e.project.code if e.project else '' }} / {{ e.code }} — {{ e.description }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3"><input name="description" class="form-control" placeholder="Description"></div>
+      <div class="col-md-1"><input name="amount" class="form-control" placeholder="Amount" required></div>
+      <div class="col-md-1"><input type="date" name="start_date" class="form-control"></div>
+      <div class="col-md-1"><input type="date" name="end_date" class="form-control"></div>
+      <div class="col-md-1"><button class="btn btn-success">Add</button></div>
+    </div>
+  </form>
+  {% endif %}
 </div>
 {% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Project budget template{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between">
+    <h3>Project budget template</h3>
+    <a class="btn btn-success" href="{{ url_for('ops.budget_template_xlsx', project_id=project_id) }}">Download Excel</a>
+  </div>
+  <form class="row g-2 mb-3">
+    <div class="col-md-4">
+      <select name="project_id" class="form-select" onchange="this.form.submit()">
+        <option value="">All projects</option>
+        {% for p in projects %}<option value="{{ p.id }}" {% if project_id == p.id %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+  </form>
+  <table class="table table-sm card">
+    <thead><tr><th>Budget ID</th><th>Project</th><th>Expense code</th><th>Description</th><th>Start</th><th>End</th><th class="text-end">Budget</th><th class="text-end">Actual</th><th class="text-end">Variance</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.budget.code }}</td>
+        <td>{{ r.budget.project.code if r.budget.project else '' }}</td>
+        <td>{{ r.budget.expense_code.code if r.budget.expense_code else '' }}</td>
+        <td>{{ r.budget.description }}</td>
+        <td>{{ r.budget.start_date or '' }}</td>
+        <td>{{ r.budget.end_date or '' }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.budget.amount or 0) }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.spent) }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.variance) }}</td>
+        <td>{{ 'Within budget' if r.variance >= 0 else 'Over budget' }}</td>
+      </tr>
+    {% else %}<tr><td colspan="10" class="text-muted">No budget lines for this project.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

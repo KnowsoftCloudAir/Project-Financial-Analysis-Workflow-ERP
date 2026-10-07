@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Inventory management</h3>
+  <p class="text-muted">Dedicated stock book. Receipts come from procurement, dispatch moves stock to facilities, and issues can raise a finance document.</p>
+  <div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Stock value</div><strong>{{ '{:,.2f}'.format(total_value) }}</strong></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Lines</div><strong>{{ balances|length }}</strong></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Below reorder</div><strong>{{ low|length }}</strong></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body"><a href="{{ url_for('fin.ledger') }}">Finance inventory ledger</a><br><a href="{{ url_for('admin_dispatch') }}">Facility dispatch desk</a></div></div></div>
+  </div>
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card mb-3"><div class="card-header">Balances</div>
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Facility</th><th>Product</th><th class="text-end">Qty</th><th class="text-end">Reorder</th><th class="text-end">Value</th></tr></thead>
+          <tbody>
+          {% for r in balances %}
+            <tr class="{% if r.quantity_on_hand < r.reorder_level %}table-warning{% endif %}">
+              <td>{{ r.facility }}</td><td>{{ r.product }}</td>
+              <td class="text-end">{{ r.quantity_on_hand }} {{ r.unit }}</td>
+              <td class="text-end">{{ r.reorder_level }}</td>
+              <td class="text-end">{{ '{:,.2f}'.format(r.value or 0) }}</td>
+            </tr>
+          {% else %}<tr><td colspan="5" class="text-muted">No stock yet. Receive from a procurement reference.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card"><div class="card-header">Latest movements</div>
+        <table class="table table-sm mb-0">
+          <thead><tr><th>When</th><th>Facility</th><th>Product</th><th>Type</th><th>Qty</th><th>Ref</th></tr></thead>
+          <tbody>
+          {% for m in moves %}
+            <tr><td>{{ m.created_at }}</td><td>{{ m.facility }}</td><td>{{ m.product }}</td><td>{{ m.transaction_type }}</td><td>{{ m.quantity }}</td><td>{{ m.reference }}</td></tr>
+          {% else %}<tr><td colspan="6" class="text-muted">No movements.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <form method="post" action="{{ url_for('ops.inventory_move') }}" class="card card-body mb-3">
+        <h5>Post movement</h5>
+        <select name="kind" class="form-select mb-2">
+          <option value="receipt">Receive from procurement</option>
+          <option value="dispatch">Dispatch to facility</option>
+          <option value="issue">Issue for use</option>
+        </select>
+        <select name="facility_id" class="form-select mb-2" required>
+          <option value="">Source / receiving facility</option>
+          {% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+        </select>
+        <select name="dest_facility_id" class="form-select mb-2">
+          <option value="">Destination (dispatch only)</option>
+          {% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+        </select>
+        <select name="product_id" class="form-select mb-2" required>
+          <option value="">Product</option>
+          {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+        </select>
+        <input name="quantity" type="number" min="1" class="form-control mb-2" placeholder="Quantity" required>
+        <input name="reference" class="form-control mb-2" placeholder="PO / GRN / dispatch reference">
+        <label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="raise_expense" value="1"> Raise finance document on issue</label>
+        <button class="btn btn-primary">Post to inventory</button>
+      </form>
+      <div class="card"><div class="card-header">Open procurement orders</div>
+        <ul class="list-group list-group-flush">
+          {% for p in pos %}<li class="list-group-item d-flex justify-content-between"><a href="{{ url_for('erp.po_detail', poid=p.id) }}">{{ p.po_no }}</a><span>{{ p.status }}</span></li>{% else %}<li class="list-group-item text-muted">No purchase orders yet.</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
