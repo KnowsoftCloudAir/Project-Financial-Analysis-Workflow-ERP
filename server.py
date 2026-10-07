@@ -716,11 +716,11 @@ def _can_submit_invoice(role):
 
 def _home_for_role(role):
     if role in ('finance_analyst', 'finance_admin'):
-        return 'admin_costs'
+        return 'main_dashboard'
     if role == 'provider':
         return 'provider_dashboard'
     if role in STAFF_ROLES or role in ADMIN_ROLES:
-        return 'staff_dashboard'
+        return 'main_dashboard'
     return 'index'
 
 
@@ -3363,6 +3363,452 @@ def staff_dashboard():
         my_lq_assignments=my_lq_assignments,
         learning_questions=LEARNING_QUESTIONS if LEARNING_QUESTIONS else {},
     )
+
+
+# ---------------------------------------------------------------------------
+# Executive Dashboard + Data Exchange (Program / Procurement / Inventory / Finance)
+# ---------------------------------------------------------------------------
+def _safe_count(model_or_query):
+    try:
+        if hasattr(model_or_query, 'count'):
+            return model_or_query.count()
+        return model_or_query.query.count()
+    except Exception:
+        return 0
+
+
+def _dashboard_kpis():
+    kpis = {
+        'facilities': 0, 'products': 0, 'encounters': 0, 'learning_subs': 0,
+        'vendors': 0, 'rfqs': 0, 'pos': 0, 'proc_invoices': 0,
+        'stock_lines': 0, 'open_requests': 0, 'dispatches': 0, 'low_stock': 0,
+        'pending_finance': 0, 'expense_reqs': 0, 'accounts': 0, 'journals': 0,
+    }
+    try:
+        kpis['facilities'] = Facility.query.count()
+        kpis['products'] = Product.query.filter_by(is_active=True).count() if hasattr(Product, 'is_active') else Product.query.count()
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        kpis['encounters'] = db.session.execute(text('SELECT COUNT(*) FROM encounters')).scalar() or 0
+    except Exception:
+        try:
+            kpis['encounters'] = db.session.execute(text('SELECT COUNT(*) FROM client_encounters')).scalar() or 0
+        except Exception:
+            pass
+    try:
+        LS = globals().get('LearningSubmission')
+        if LS is not None:
+            kpis['learning_subs'] = LS.query.count()
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        for key, sql in [
+            ('vendors', 'SELECT COUNT(*) FROM erp_vendors'),
+            ('rfqs', 'SELECT COUNT(*) FROM erp_rfqs'),
+            ('pos', 'SELECT COUNT(*) FROM erp_purchase_orders'),
+            ('proc_invoices', 'SELECT COUNT(*) FROM erp_invoices'),
+            ('stock_lines', 'SELECT COUNT(*) FROM stock_balances'),
+            ('open_requests', "SELECT COUNT(*) FROM stock_requests WHERE status IN ('pending','submitted','open')"),
+            ('dispatches', 'SELECT COUNT(*) FROM dispatch_notes'),
+            ('accounts', 'SELECT COUNT(*) FROM fin_accounts'),
+            ('journals', 'SELECT COUNT(*) FROM fin_journals'),
+            ('expense_reqs', 'SELECT COUNT(*) FROM expense_requests'),
+        ]:
+            try:
+                kpis[key] = db.session.execute(text(sql)).scalar() or 0
+            except Exception:
+                pass
+        try:
+            kpis['pending_finance'] = Invoice.query.filter_by(status='submitted').count()
+        except Exception:
+            pass
+        try:
+            kpis['low_stock'] = db.session.execute(text(
+                'SELECT COUNT(*) FROM stock_balances WHERE quantity > 0 AND quantity < 20'
+            )).scalar() or 0
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return kpis
+
+
+def _chart_data():
+    methods = {'labels': ['Implant', 'IUD', 'Injectables', 'Pills', 'Condoms'], 'data': [0, 0, 0, 0, 0]}
+    proc = {'labels': ['RFQ', 'Eval', 'Award', 'PO', 'Invoice'], 'data': [0, 0, 0, 0, 0]}
+    try:
+        from sqlalchemy import text
+        rows = db.session.execute(text(
+            "SELECT method, COUNT(*) FROM encounters GROUP BY method ORDER BY COUNT(*) DESC LIMIT 6"
+        )).fetchall()
+        if rows:
+            methods = {'labels': [r[0] or 'Other' for r in rows], 'data': [int(r[1]) for r in rows]}
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        proc['data'] = [
+            db.session.execute(text('SELECT COUNT(*) FROM erp_rfqs')).scalar() or 0,
+            db.session.execute(text("SELECT COUNT(*) FROM erp_rfqs WHERE status LIKE '%eval%'")).scalar() or 0,
+            db.session.execute(text("SELECT COUNT(*) FROM erp_rfqs WHERE status LIKE '%award%'")).scalar() or 0,
+            db.session.execute(text('SELECT COUNT(*) FROM erp_purchase_orders')).scalar() or 0,
+            db.session.execute(text('SELECT COUNT(*) FROM erp_invoices')).scalar() or 0,
+        ]
+    except Exception:
+        pass
+    return methods, proc
+
+
+@app.route('/dashboard')
+@login_required
+def main_dashboard():
+    """Illustrative 3D-style executive dashboard for Program, Procurement, Inventory, Finance."""
+    if current_user.role == 'provider':
+        return redirect(url_for('provider_dashboard'))
+    kpis = _dashboard_kpis()
+    chart_methods, chart_proc = _chart_data()
+    return render_template(
+        'main_dashboard.html',
+        kpis=kpis,
+        chart_methods=chart_methods,
+        chart_proc=chart_proc,
+    )
+
+
+@app.route('/dashboard/export/excel')
+@login_required
+def dashboard_export_excel():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from io import BytesIO
+    kpis = _dashboard_kpis()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Dashboard KPIs'
+    header_fill = PatternFill('solid', fgColor='0D6E6E')
+    header_font = Font(bold=True, color='FFFFFF')
+    thin = Border(
+        left=Side(style='thin', color='CCCCCC'),
+        right=Side(style='thin', color='CCCCCC'),
+        top=Side(style='thin', color='CCCCCC'),
+        bottom=Side(style='thin', color='CCCCCC'),
+    )
+    ws.append(['Domain', 'Metric', 'Value'])
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    rows = [
+        ('Program', 'Facilities', kpis['facilities']),
+        ('Program', 'Products', kpis['products']),
+        ('Program', 'Encounters', kpis['encounters']),
+        ('Program', 'Learning submissions', kpis['learning_subs']),
+        ('Procurement', 'Vendors', kpis['vendors']),
+        ('Procurement', 'RFQs', kpis['rfqs']),
+        ('Procurement', 'Purchase orders', kpis['pos']),
+        ('Procurement', 'Invoices', kpis['proc_invoices']),
+        ('Inventory', 'Stock lines', kpis['stock_lines']),
+        ('Inventory', 'Open requests', kpis['open_requests']),
+        ('Inventory', 'Dispatches', kpis['dispatches']),
+        ('Inventory', 'Low stock items', kpis['low_stock']),
+        ('Finance', 'Pending finance review', kpis['pending_finance']),
+        ('Finance', 'Expense requests', kpis['expense_reqs']),
+        ('Finance', 'Accounts', kpis['accounts']),
+        ('Finance', 'Journals', kpis['journals']),
+    ]
+    for r in rows:
+        ws.append(list(r))
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=3):
+        for c in row:
+            c.border = thin
+    ws.column_dimensions['A'].width = 16
+    ws.column_dimensions['B'].width = 28
+    ws.column_dimensions['C'].width = 12
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name='executive_dashboard.xlsx',
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@app.route('/dashboard/export/pdf')
+@login_required
+def dashboard_export_pdf():
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.colors import HexColor
+    from io import BytesIO
+    kpis = _dashboard_kpis()
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    teal = HexColor('#0d6e6e')
+    c.setFillColor(teal)
+    c.rect(0, h - 40 * mm, w, 40 * mm, fill=1, stroke=0)
+    c.setFillColor(HexColor('#ffffff'))
+    c.setFont('Helvetica-Bold', 18)
+    c.drawString(20 * mm, h - 18 * mm, 'Executive Dashboard')
+    c.setFont('Helvetica', 10)
+    c.drawString(20 * mm, h - 26 * mm, 'Program · Procurement · Inventory · Finance')
+    c.setFillColor(HexColor('#1b3a4b'))
+    y = h - 55 * mm
+    domains = [
+        ('Program', [('Facilities', kpis['facilities']), ('Products', kpis['products']),
+                     ('Encounters', kpis['encounters']), ('LQ entries', kpis['learning_subs'])]),
+        ('Procurement', [('Vendors', kpis['vendors']), ('RFQs', kpis['rfqs']),
+                         ('POs', kpis['pos']), ('Invoices', kpis['proc_invoices'])]),
+        ('Inventory', [('Stock lines', kpis['stock_lines']), ('Open reqs', kpis['open_requests']),
+                       ('Dispatches', kpis['dispatches']), ('Low stock', kpis['low_stock'])]),
+        ('Finance', [('Pending', kpis['pending_finance']), ('Expenses', kpis['expense_reqs']),
+                     ('Accounts', kpis['accounts']), ('Journals', kpis['journals'])]),
+    ]
+    for title, items in domains:
+        c.setFont('Helvetica-Bold', 13)
+        c.setFillColor(teal)
+        c.drawString(20 * mm, y, title)
+        y -= 7 * mm
+        c.setFont('Helvetica', 10)
+        c.setFillColor(HexColor('#334155'))
+        for label, val in items:
+            c.drawString(25 * mm, y, f'{label}:')
+            c.drawRightString(90 * mm, y, str(val))
+            y -= 5.5 * mm
+        y -= 4 * mm
+    c.setFont('Helvetica', 8)
+    c.setFillColor(HexColor('#94a3b8'))
+    c.drawString(20 * mm, 15 * mm, 'Generated by Project Financial Management Workflow')
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name='executive_dashboard.pdf',
+                     mimetype='application/pdf')
+
+
+@app.route('/dashboard/export/pptx')
+@login_required
+def dashboard_export_pptx():
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN
+    from io import BytesIO
+    kpis = _dashboard_kpis()
+    prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+    # Title slide
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    shape = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.333), Inches(7.5))
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor(0x0d, 0x6e, 0x6e)
+    shape.line.fill.background()
+    tb = slide.shapes.add_textbox(Inches(0.8), Inches(2.5), Inches(11.5), Inches(1.5))
+    p = tb.text_frame.paragraphs[0]
+    p.text = 'Executive Dashboard'
+    p.font.size = Pt(40)
+    p.font.bold = True
+    p.font.color.rgb = RGBColor(0xff, 0xff, 0xff)
+    p.alignment = PP_ALIGN.CENTER
+    tb2 = slide.shapes.add_textbox(Inches(0.8), Inches(4.0), Inches(11.5), Inches(0.6))
+    p2 = tb2.text_frame.paragraphs[0]
+    p2.text = 'Program · Procurement · Inventory · Finance'
+    p2.font.size = Pt(18)
+    p2.font.color.rgb = RGBColor(0xe0, 0xf2, 0xf1)
+    p2.alignment = PP_ALIGN.CENTER
+    # KPI slide
+    slide2 = prs.slides.add_slide(prs.slide_layouts[6])
+    title_box = slide2.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(12), Inches(0.6))
+    tp = title_box.text_frame.paragraphs[0]
+    tp.text = 'Key Performance Indicators'
+    tp.font.size = Pt(24)
+    tp.font.bold = True
+    tp.font.color.rgb = RGBColor(0x0d, 0x6e, 0x6e)
+    domains = [
+        ('Program', [('Facilities', kpis['facilities']), ('Products', kpis['products']),
+                     ('Encounters', kpis['encounters']), ('LQ entries', kpis['learning_subs'])]),
+        ('Procurement', [('Vendors', kpis['vendors']), ('RFQs', kpis['rfqs']),
+                         ('POs', kpis['pos']), ('Invoices', kpis['proc_invoices'])]),
+        ('Inventory', [('Stock lines', kpis['stock_lines']), ('Open reqs', kpis['open_requests']),
+                       ('Dispatches', kpis['dispatches']), ('Low stock', kpis['low_stock'])]),
+        ('Finance', [('Pending', kpis['pending_finance']), ('Expenses', kpis['expense_reqs']),
+                     ('Accounts', kpis['accounts']), ('Journals', kpis['journals'])]),
+    ]
+    colors = [RGBColor(0x0d, 0x94, 0x88), RGBColor(0x3b, 0x82, 0xf6),
+              RGBColor(0xf5, 0x9e, 0x0b), RGBColor(0x8b, 0x5c, 0xf6)]
+    for i, (title, items) in enumerate(domains):
+        left = Inches(0.4 + i * 3.2)
+        box = slide2.shapes.add_shape(1, left, Inches(1.2), Inches(3.0), Inches(5.5))
+        box.fill.solid()
+        box.fill.fore_color.rgb = RGBColor(0xf8, 0xfa, 0xfc)
+        box.line.color.rgb = RGBColor(0xe2, 0xe8, 0xf0)
+        ht = slide2.shapes.add_textbox(left + Inches(0.15), Inches(1.4), Inches(2.7), Inches(0.5))
+        hp = ht.text_frame.paragraphs[0]
+        hp.text = title
+        hp.font.size = Pt(16)
+        hp.font.bold = True
+        hp.font.color.rgb = colors[i]
+        for j, (lab, val) in enumerate(items):
+            yt = Inches(2.1 + j * 1.0)
+            lb = slide2.shapes.add_textbox(left + Inches(0.2), yt, Inches(2.6), Inches(0.35))
+            lp = lb.text_frame.paragraphs[0]
+            lp.text = lab
+            lp.font.size = Pt(11)
+            lp.font.color.rgb = RGBColor(0x64, 0x74, 0x8b)
+            vb = slide2.shapes.add_textbox(left + Inches(0.2), yt + Inches(0.3), Inches(2.6), Inches(0.4))
+            vp = vb.text_frame.paragraphs[0]
+            vp.text = str(val)
+            vp.font.size = Pt(22)
+            vp.font.bold = True
+            vp.font.color.rgb = RGBColor(0x1b, 0x3a, 0x4b)
+    buf = BytesIO()
+    prs.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name='executive_dashboard.pptx',
+                     mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
+
+
+# --- Data download / upload (CSV) ---
+_DATASETS = [
+    {'key': 'facilities', 'label': 'Facilities', 'desc': 'Facility registry and status',
+     'icon': 'bi-building', 'color': '#0d9488', 'table': 'facilities'},
+    {'key': 'products', 'label': 'Products', 'desc': 'Product catalogue and unit costs',
+     'icon': 'bi-box-seam', 'color': '#3b82f6', 'table': 'products'},
+    {'key': 'encounters', 'label': 'Encounters', 'desc': 'Client encounters / method uptake',
+     'icon': 'bi-person-hearts', 'color': '#f59e0b', 'table': 'encounters'},
+    {'key': 'expenses', 'label': 'Expense requests', 'desc': 'Payment / expense request log',
+     'icon': 'bi-cash-stack', 'color': '#8b5cf6', 'table': 'expense_requests'},
+    {'key': 'stock', 'label': 'Stock balances', 'desc': 'Current inventory positions',
+     'icon': 'bi-boxes', 'color': '#ef4444', 'table': 'stock_balances'},
+    {'key': 'vendors', 'label': 'Vendors', 'desc': 'Procurement vendor registry',
+     'icon': 'bi-people', 'color': '#10b981', 'table': 'erp_vendors'},
+]
+
+
+@app.route('/data-exchange')
+@login_required
+def data_exchange():
+    if current_user.role == 'provider':
+        flash('Data exchange is for programme staff.', 'warning')
+        return redirect(url_for('provider_dashboard'))
+    return render_template('data_exchange.html', datasets=_DATASETS, upload_result=None)
+
+
+@app.route('/data/download/<dataset>')
+@login_required
+def data_download_csv(dataset):
+    import csv
+    from io import StringIO
+    meta = next((d for d in _DATASETS if d['key'] == dataset), None)
+    if not meta:
+        flash('Unknown dataset.', 'danger')
+        return redirect(url_for('data_exchange'))
+    table = meta['table']
+    try:
+        from sqlalchemy import text, inspect
+        insp = inspect(db.engine)
+        if table not in insp.get_table_names():
+            # try alternate names
+            alts = {
+                'encounters': ['client_encounters', 'encounters'],
+                'expense_requests': ['expense_requests', 'invoices'],
+                'stock_balances': ['stock_balances', 'inventory_balances'],
+                'erp_vendors': ['erp_vendors', 'vendors'],
+            }
+            found = None
+            for t in alts.get(table, [table]):
+                if t in insp.get_table_names():
+                    found = t
+                    break
+            if not found:
+                flash(f'Table for {meta["label"]} is not available yet.', 'warning')
+                return redirect(url_for('data_exchange'))
+            table = found
+        cols = [c['name'] for c in insp.get_columns(table)]
+        rows = db.session.execute(text(f'SELECT * FROM {table} LIMIT 50000')).fetchall()
+        si = StringIO()
+        writer = csv.writer(si)
+        writer.writerow(cols)
+        for r in rows:
+            writer.writerow([getattr(r, c, r[i] if hasattr(r, '__getitem__') else '') for i, c in enumerate(cols)])
+        output = si.getvalue()
+        from flask import Response
+        return Response(
+            output,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename={dataset}.csv'}
+        )
+    except Exception as e:
+        flash(f'Could not export {meta["label"]}: {e}', 'danger')
+        return redirect(url_for('data_exchange'))
+
+
+@app.route('/data/upload', methods=['POST'])
+@login_required
+def data_upload_csv():
+    import csv
+    from io import StringIO, TextIOWrapper
+    if current_user.role == 'provider':
+        flash('Not authorised.', 'danger')
+        return redirect(url_for('provider_dashboard'))
+    dataset = request.form.get('dataset', '')
+    f = request.files.get('file')
+    meta = next((d for d in _DATASETS if d['key'] == dataset), None)
+    if not meta or not f or not f.filename:
+        flash('Please choose a dataset and a CSV file.', 'warning')
+        return redirect(url_for('data_exchange'))
+    table = meta['table']
+    try:
+        from sqlalchemy import text, inspect
+        insp = inspect(db.engine)
+        if table not in insp.get_table_names():
+            flash(f'Table for {meta["label"]} is not available.', 'warning')
+            return redirect(url_for('data_exchange'))
+        cols = [c['name'] for c in insp.get_columns(table)]
+        pk_cols = [c['name'] for c in insp.get_columns(table) if c.get('primary_key')]
+        stream = TextIOWrapper(f.stream, encoding='utf-8-sig')
+        reader = csv.DictReader(stream)
+        if not reader.fieldnames:
+            flash('CSV has no header row.', 'danger')
+            return redirect(url_for('data_exchange'))
+        updated = inserted = 0
+        for row in reader:
+            data = {k: row.get(k) for k in cols if k in (reader.fieldnames or [])}
+            if not data:
+                continue
+            # Prefer update by primary key if present and non-empty
+            if pk_cols and all(data.get(pk) not in (None, '') for pk in pk_cols):
+                sets = ', '.join(f'{k}=:{k}' for k in data if k not in pk_cols)
+                where = ' AND '.join(f'{pk}=:{pk}' for pk in pk_cols)
+                if sets:
+                    res = db.session.execute(text(f'UPDATE {table} SET {sets} WHERE {where}'), data)
+                    if res.rowcount:
+                        updated += res.rowcount
+                        continue
+            # Insert
+            keys = list(data.keys())
+            placeholders = ', '.join(f':{k}' for k in keys)
+            col_list = ', '.join(keys)
+            try:
+                db.session.execute(
+                    text(f'INSERT INTO {table} ({col_list}) VALUES ({placeholders})'),
+                    data
+                )
+                inserted += 1
+            except Exception:
+                pass
+        db.session.commit()
+        msg = f'{meta["label"]}: {updated} updated, {inserted} inserted.'
+        flash(msg, 'success')
+        return render_template('data_exchange.html', datasets=_DATASETS,
+                               upload_result={'ok': True, 'message': msg})
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Upload failed: {e}', 'danger')
+        return redirect(url_for('data_exchange'))
 
 
 @app.route('/invoices')
