@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Client Feedback Dashboard{% endblock %}
+{% block extra_css %}
+<style>
+  .stat-pill {
+    border-radius: 12px; padding: 0.85rem 1rem; background: #fff;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; text-align: center;
+  }
+  .stat-pill .n { font-size: 1.5rem; font-weight: 800; }
+  .stat-pill .l { font-size: 0.7rem; text-transform: uppercase; color: #64748b; }
+  .badge-diamond { background: linear-gradient(135deg,#a5b4fc,#6366f1); color: #fff; }
+  .badge-gold { background: linear-gradient(135deg,#fcd34d,#d97706); color: #fff; }
+  .badge-silver { background: linear-gradient(135deg,#e2e8f0,#94a3b8); color: #1e293b; }
+  .badge-bronze { background: linear-gradient(135deg,#fdba74,#c2410c); color: #fff; }
+  .badge-progress { background: #0d9488; color: #fff; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-fluid py-2">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h3 class="fw-bold mb-0">Client Feedback Dashboard</h3>
+      <p class="text-muted small mb-0">Responses by facility · unique codes · Health Ambassador badges</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('client_feedback_hub') }}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-link-45deg"></i> Feedback link
+      </a>
+      <button class="btn btn-success btn-sm" onclick="copyLink()">
+        <i class="bi bi-clipboard"></i> Copy public link
+      </button>
+      <input type="hidden" id="pubLink" value="{{ feedback_link }}">
+    </div>
+  </div>
+
+  <div class="row g-2 mb-4">
+    <div class="col"><div class="stat-pill"><div class="n">{{ rows|length }}</div><div class="l">Responses</div></div></div>
+    <div class="col"><div class="stat-pill"><div class="n text-primary">{{ ambassadors|length }}</div><div class="l">Ambassadors</div></div></div>
+    <div class="col"><div class="stat-pill"><div class="n" style="color:#c2410c">{{ badge_stats.bronze or 0 }}</div><div class="l">Bronze</div></div></div>
+    <div class="col"><div class="stat-pill"><div class="n" style="color:#94a3b8">{{ badge_stats.silver or 0 }}</div><div class="l">Silver</div></div></div>
+    <div class="col"><div class="stat-pill"><div class="n" style="color:#d97706">{{ badge_stats.gold or 0 }}</div><div class="l">Gold</div></div></div>
+    <div class="col"><div class="stat-pill"><div class="n" style="color:#6366f1">{{ badge_stats.diamond or 0 }}</div><div class="l">Diamond</div></div></div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm" style="border-radius:14px">
+        <div class="card-header bg-white fw-semibold">Client list by kiosk / PHC</div>
+        <div class="card-body p-0">
+          {% for fac, clients in by_facility.items() %}
+          <div class="px-3 pt-3">
+            <h6 class="text-teal fw-bold" style="color:#0d9488"><i class="bi bi-building me-1"></i>{{ fac }}
+              <span class="badge bg-light text-dark">{{ clients|length }}</span>
+            </h6>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead><tr>
+                <th>Code</th><th>Name</th><th>Provider</th><th>Commodity</th><th>Qty</th><th>Date</th><th>When</th>
+              </tr></thead>
+              <tbody>
+              {% for c in clients %}
+              <tr>
+                <td>
+                  <code class="small">{{ c.client_code or '—' }}</code>
+                  {% if c.client_code %}
+                  <a href="{{ url_for('client_feedback', my=c.client_code, _external=True) }}"
+                     class="btn btn-link btn-sm p-0 ms-1" title="Personal link" target="_blank">
+                    <i class="bi bi-person-badge"></i>
+                  </a>
+                  {% endif %}
+                </td>
+                <td>{{ c.client_name or '—' }}</td>
+                <td class="small">{{ c.provider_name or '—' }}</td>
+                <td class="small">{{ c.commodity or '—' }}</td>
+                <td>{{ c.quantity or '—' }}</td>
+                <td class="small">{{ c.service_date or '—' }}</td>
+                <td class="small text-muted">{{ c.submitted_at.strftime('%Y-%m-%d %H:%M') if c.submitted_at else '' }}</td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="text-muted p-3 mb-0">No feedback submissions yet. Share the public link to start collecting.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm" style="border-radius:14px">
+        <div class="card-header bg-white fw-semibold">Health Ambassador leaderboard</div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>Code</th><th>Name</th><th>Facility</th><th class="text-end">Referrals</th><th>Badge</th></tr></thead>
+            <tbody>
+            {% for a in ambassadors %}
+            <tr>
+              <td><code class="small">{{ a.client_code }}</code></td>
+              <td>{{ a.client_name or '—' }}</td>
+              <td class="small">{{ a.facility_name or '—' }}</td>
+              <td class="text-end fw-bold">{{ a.referral_count or 0 }}</td>
+              <td>
+                {% set b = a.badge or 'none' %}
+                {% if b == 'diamond' %}<span class="badge badge-diamond">Diamond</span>
+                {% elif b == 'gold' %}<span class="badge badge-gold">Gold</span>
+                {% elif b == 'silver' %}<span class="badge badge-silver">Silver</span>
+                {% elif b == 'bronze' %}<span class="badge badge-bronze">Bronze</span>
+                {% elif b == 'in_progress' %}<span class="badge badge-progress">In progress</span>
+                {% else %}<span class="badge bg-secondary">—</span>{% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-muted">No ambassadors yet</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card border-0 shadow-sm mt-3" style="border-radius:14px">
+        <div class="card-body small text-muted">
+          <strong>Badge thresholds</strong><br>
+          In progress · from 1 referral<br>
+          Bronze · 100 · Silver · 500<br>
+          Gold · 1,000 · Diamond · 5,000
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function copyLink() {
+  const v = document.getElementById('pubLink').value;
+  navigator.clipboard?.writeText(v);
+  alert('Public feedback link copied');
+}
+</script>
+{% endblock %}
