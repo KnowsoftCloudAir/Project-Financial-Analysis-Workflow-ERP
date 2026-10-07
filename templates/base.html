@@ -107,6 +107,7 @@
             <nav class="col-md-2 d-none d-md-block sidebar sidebar-cc py-3">
                 <ul class="nav flex-column">
                     {% if current_user.role != 'provider' %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('main_dashboard') }}"><i class="bi bi-speedometer2"></i> Executive Dashboard</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('staff_dashboard') }}"><i class="bi bi-house"></i> My workspace</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Program items</span></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_program_items') }}"><i class="bi bi-boxes"></i> Facilities, products, dispatch</a></li>
@@ -118,6 +119,8 @@
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_procurement') }}"><i class="bi bi-briefcase"></i> Vendors, bids, committee</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Finance</span></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_finance') }}"><i class="bi bi-bank"></i> Budget, books, cost analysis</a></li>
+                    <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Data</span></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('data_exchange') }}"><i class="bi bi-arrow-left-right"></i> Download / Upload CSV</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Staff</span></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_staff') }}"><i class="bi bi-shield-lock"></i> Rights, approvals, privileges</a></li>
                     {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
