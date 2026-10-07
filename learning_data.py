@@ -1944,22 +1944,43 @@ def register_learning_routes(
 
 
     # ------------------------------------------------------------------
-    # Client feedback (public – no login)
+    # Client feedback + Health Ambassador programme (public – no login)
     # ------------------------------------------------------------------
     class ClientFeedback(db.Model):
         __tablename__ = 'client_feedback'
         id = db.Column(db.Integer, primary_key=True)
+        client_code = db.Column(db.String(20), unique=True, index=True)  # unique client code
         client_name = db.Column(db.String(120))
         contact = db.Column(db.String(120))
         facility_id = db.Column(db.Integer, nullable=True)
         facility_name = db.Column(db.String(120))
-        ratings_json = db.Column(db.Text)  # {service: score 1-5}
+        provider_name = db.Column(db.String(120))  # service provider name
+        commodity = db.Column(db.String(160))  # product / method received
+        quantity = db.Column(db.String(40))
+        service_date = db.Column(db.String(20))
+        ratings_json = db.Column(db.Text)
         comments = db.Column(db.Text)
         request_type = db.Column(db.String(40), default='feedback_only')
         preferred_date = db.Column(db.String(20))
         preferred_time = db.Column(db.String(20))
         requested_service = db.Column(db.String(120))
+        referred_someone = db.Column(db.Boolean, default=False)
+        referred_count = db.Column(db.Integer, default=0)
+        referrer_code = db.Column(db.String(20), index=True)  # code of person who referred this client
         submitted_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    class HealthAmbassador(db.Model):
+        """Tracks referral counts and badge tier per unique client code."""
+        __tablename__ = 'health_ambassadors'
+        id = db.Column(db.Integer, primary_key=True)
+        client_code = db.Column(db.String(20), unique=True, nullable=False, index=True)
+        client_name = db.Column(db.String(120))
+        contact = db.Column(db.String(120))
+        facility_name = db.Column(db.String(120))
+        referral_count = db.Column(db.Integer, default=0)
+        badge = db.Column(db.String(40), default='none')  # none / in_progress / bronze / silver / gold / diamond
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     CLIENT_SERVICES = [
         'Counseling / information',
@@ -1970,29 +1991,109 @@ def register_learning_routes(
         'Follow-up / appointment',
     ]
 
+    BADGE_THRESHOLDS = [
+        (5000, 'diamond', 'Diamond Health Ambassador'),
+        (1000, 'gold', 'Gold Health Ambassador'),
+        (500, 'silver', 'Silver Health Ambassador'),
+        (100, 'bronze', 'Bronze Health Ambassador'),
+        (1, 'in_progress', 'Health Ambassador in progress'),
+    ]
+
+    def _badge_for(count):
+        for thresh, key, label in BADGE_THRESHOLDS:
+            if count >= thresh:
+                return key, label
+        return 'none', 'No badge yet'
+
+    def _gen_client_code():
+        import random, string
+        for _ in range(20):
+            code = 'HC-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            if not ClientFeedback.query.filter_by(client_code=code).first():
+                if not HealthAmbassador.query.filter_by(client_code=code).first():
+                    return code
+        return 'HC-' + str(int(datetime.utcnow().timestamp()))[-8:]
+
     def _list_facilities_simple():
         try:
             fac_rows = db.session.execute(
                 db.text("SELECT id, name, facility_type FROM facilities WHERE is_active = true OR is_active = 1 ORDER BY name")
             ).fetchall()
-            return [{'id': r[0], 'name': r[1], 'type': r[2]} for r in fac_rows]
+            return [{'id': r[0], 'name': r[1], 'type': r[2] or ''} for r in fac_rows]
         except Exception:
             try:
                 for m in db.Model.registry.mappers:
                     if getattr(m.class_, '__tablename__', None) == 'facilities':
                         return [
-                            {'id': f.id, 'name': f.name, 'type': getattr(f, 'facility_type', '')}
+                            {'id': f.id, 'name': f.name, 'type': getattr(f, 'facility_type', '') or ''}
                             for f in m.class_.query.filter_by(is_active=True).order_by(m.class_.name).all()
                         ]
             except Exception:
                 pass
             return []
 
+    def _list_products_simple():
+        try:
+            rows = db.session.execute(
+                db.text("SELECT id, name FROM products WHERE is_active = true OR is_active = 1 ORDER BY name")
+            ).fetchall()
+            return [{'id': r[0], 'name': r[1]} for r in rows]
+        except Exception:
+            return [
+                {'id': 0, 'name': 'Implant'},
+                {'id': 0, 'name': 'IUD'},
+                {'id': 0, 'name': 'Injectable'},
+                {'id': 0, 'name': 'Oral pills'},
+                {'id': 0, 'name': 'Condoms'},
+                {'id': 0, 'name': 'Emergency contraception'},
+                {'id': 0, 'name': 'Other / counseling only'},
+            ]
+
+    def _credit_referrer(referrer_code, new_client_name=''):
+        if not referrer_code:
+            return
+        amb = HealthAmbassador.query.filter_by(client_code=referrer_code.strip().upper()).first()
+        if not amb:
+            # create from an existing feedback row if any
+            prev = ClientFeedback.query.filter_by(client_code=referrer_code.strip().upper()).first()
+            amb = HealthAmbassador(
+                client_code=referrer_code.strip().upper(),
+                client_name=(prev.client_name if prev else '') or '',
+                contact=(prev.contact if prev else '') or '',
+                facility_name=(prev.facility_name if prev else '') or '',
+                referral_count=0,
+            )
+            db.session.add(amb)
+        amb.referral_count = (amb.referral_count or 0) + 1
+        key, _ = _badge_for(amb.referral_count)
+        amb.badge = key
+        amb.updated_at = datetime.utcnow()
+
     @app.route('/feedback', methods=['GET', 'POST'])
     @app.route('/client-feedback', methods=['GET', 'POST'])
     def client_feedback():
-        """Public form: rate services 1–5 stars, comments, request service/appointment."""
+        """Public form — no back button; generates unique client code; supports referrer codes."""
         facilities = _list_facilities_simple()
+        products = _list_products_simple()
+        ref_code = (request.args.get('ref') or request.args.get('code') or '').strip().upper()
+        my_code = (request.args.get('my') or '').strip().upper()  # returning ambassador view
+        ambassador = None
+        if my_code:
+            ambassador = HealthAmbassador.query.filter_by(client_code=my_code).first()
+            if not ambassador:
+                prev = ClientFeedback.query.filter_by(client_code=my_code).first()
+                if prev:
+                    ambassador = HealthAmbassador(
+                        client_code=my_code,
+                        client_name=prev.client_name or '',
+                        contact=prev.contact or '',
+                        facility_name=prev.facility_name or '',
+                        referral_count=0,
+                        badge='none',
+                    )
+                    db.session.add(ambassador)
+                    db.session.commit()
+
         if request.method == 'POST':
             n = _safe_int(request.form.get('service_count')) or len(CLIENT_SERVICES)
             ratings = {}
@@ -2006,62 +2107,114 @@ def register_learning_routes(
             if fac_id:
                 for f in facilities:
                     if f['id'] == fac_id:
-                        fac_name = f"{f['name']} ({f['type']})"
+                        fac_name = f"{f['name']} ({f['type']})" if f.get('type') else f['name']
                         break
+            new_code = _gen_client_code()
+            referrer = (request.form.get('referrer_code') or ref_code or '').strip().upper() or None
+            referred = request.form.get('referred_someone') == 'yes'
+            ref_count = _safe_int(request.form.get('referred_count')) or 0
             row = ClientFeedback(
+                client_code=new_code,
                 client_name=(request.form.get('client_name') or '').strip() or None,
                 contact=(request.form.get('contact') or '').strip() or None,
                 facility_id=fac_id,
                 facility_name=fac_name or None,
+                provider_name=(request.form.get('provider_name') or '').strip() or None,
+                commodity=(request.form.get('commodity') or '').strip() or None,
+                quantity=(request.form.get('quantity') or '').strip() or None,
+                service_date=request.form.get('service_date') or None,
                 ratings_json=json.dumps(ratings),
                 comments=(request.form.get('comments') or '').strip() or None,
                 request_type=request.form.get('request_type') or 'feedback_only',
                 preferred_date=request.form.get('preferred_date') or None,
                 preferred_time=request.form.get('preferred_time') or None,
                 requested_service=request.form.get('requested_service') or None,
+                referred_someone=referred,
+                referred_count=ref_count if referred else 0,
+                referrer_code=referrer,
                 submitted_at=datetime.utcnow(),
             )
             db.session.add(row)
+            # Ensure ambassador record for this new client
+            amb = HealthAmbassador(
+                client_code=new_code,
+                client_name=row.client_name or '',
+                contact=row.contact or '',
+                facility_name=row.facility_name or '',
+                referral_count=0,
+                badge='none',
+            )
+            db.session.add(amb)
+            if referrer:
+                _credit_referrer(referrer, row.client_name or '')
             db.session.commit()
             try:
-                log_activity('client_feedback', f'id={row.id} type={row.request_type}')
+                log_activity('client_feedback', f'id={row.id} code={new_code} type={row.request_type}')
             except Exception:
                 pass
+            share_url = url_for('client_feedback', ref=new_code, _external=True)
+            my_url = url_for('client_feedback', my=new_code, _external=True)
             return render_template(
                 'client_feedback.html',
                 submitted=True,
                 facilities=facilities,
+                products=products,
                 services=CLIENT_SERVICES,
+                client_code=new_code,
+                share_url=share_url,
+                my_url=my_url,
+                ambassador=None,
+                is_public=True,
             )
         return render_template(
             'client_feedback.html',
             submitted=False,
             facilities=facilities,
+            products=products,
             services=CLIENT_SERVICES,
+            ref_code=ref_code,
+            ambassador=ambassador,
+            is_public=True,
+        )
+
+    @app.route('/client-feedback/hub')
+    @login_required
+    @staff_required
+    def client_feedback_hub():
+        """Staff Client Feedback section — link generator + dashboard entry."""
+        base = url_for('client_feedback', _external=True)
+        return render_template('client_feedback_hub.html', feedback_link=base)
+
+    @app.route('/client-feedback/dashboard')
+    @login_required
+    @staff_required
+    def client_feedback_dashboard():
+        """Feedback dashboard: client list by facility + ambassador leaderboard."""
+        rows = ClientFeedback.query.order_by(ClientFeedback.submitted_at.desc()).limit(500).all()
+        ambassadors = HealthAmbassador.query.order_by(HealthAmbassador.referral_count.desc()).limit(200).all()
+        by_facility = {}
+        for r in rows:
+            key = r.facility_name or 'Unspecified'
+            by_facility.setdefault(key, []).append(r)
+        badge_stats = {'diamond': 0, 'gold': 0, 'silver': 0, 'bronze': 0, 'in_progress': 0, 'none': 0}
+        for a in ambassadors:
+            badge_stats[a.badge or 'none'] = badge_stats.get(a.badge or 'none', 0) + 1
+        return render_template(
+            'client_feedback_dashboard.html',
+            rows=rows,
+            by_facility=by_facility,
+            ambassadors=ambassadors,
+            badge_stats=badge_stats,
+            badge_labels={k: v for _, k, v in BADGE_THRESHOLDS},
+            feedback_link=url_for('client_feedback', _external=True),
         )
 
     @app.route('/learning/feedback-list')
     @login_required
     @staff_required
     def learning_feedback_list():
-        """Staff view of client feedback submissions."""
-        rows = ClientFeedback.query.order_by(ClientFeedback.submitted_at.desc()).limit(200).all()
-        parsed = []
-        for r in rows:
-            parsed.append({
-                'id': r.id,
-                'name': r.client_name or '—',
-                'contact': r.contact or '—',
-                'facility': r.facility_name or '—',
-                'ratings': json.loads(r.ratings_json or '{}'),
-                'comments': r.comments or '',
-                'request_type': r.request_type,
-                'preferred_date': r.preferred_date,
-                'preferred_time': r.preferred_time,
-                'requested_service': r.requested_service,
-                'when': r.submitted_at,
-            })
-        return render_template('client_feedback_list.html', rows=parsed)
+        """Staff view of client feedback submissions (legacy list)."""
+        return redirect(url_for('client_feedback_dashboard'))
 
 
     # Ensure tables exist when routes are registered
@@ -2072,4 +2225,6 @@ def register_learning_routes(
         'LearningAssignment': LearningAssignment,
         'LearningSubmission': LearningSubmission,
         'LEARNING_QUESTIONS': LEARNING_QUESTIONS,
+        'ClientFeedback': ClientFeedback,
+        'HealthAmbassador': HealthAmbassador,
     }
