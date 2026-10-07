@@ -39,6 +39,13 @@ PRIVILEGES = (
     ('reports.export', 'Export financial and budget reports'),
     ('dispatch.manage', 'Dispatch stock to facilities'),
     ('users.manage', 'Assign staff privileges'),
+    ('approvals.act', 'Approve dispatch, transfers and requests'),
+    ('dispatch.create', 'Create warehouse dispatch notes'),
+    ('facility.confirm', 'Confirm facility receipts'),
+    ('uptake.record', 'Record client uptake (inventory outflow)'),
+    ('stories.publish', 'Publish facility stories and pictures'),
+    ('transfer.request', 'Request inter-facility transfer'),
+    ('program.report', 'Program reports and public homepage'),
 )
 
 CURRENCIES = [
@@ -71,13 +78,14 @@ ROLE_PRIVS = {
     'admin': [p[0] for p in PRIVILEGES],
     'finance_admin': ['finance.view', 'finance.post', 'finance.approve', 'budget.edit', 'bank.reconcile', 'reports.export', 'inventory.view'],
     'finance_analyst': ['finance.view', 'finance.post', 'budget.edit', 'bank.reconcile', 'reports.export', 'inventory.view'],
-    'project_manager': ['inventory.view', 'inventory.post', 'procurement.manage', 'procurement.committee', 'budget.edit', 'dispatch.manage', 'reports.export', 'finance.view'],
-    'program_admin': ['inventory.view', 'procurement.manage', 'budget.edit', 'dispatch.manage', 'finance.view'],
-    'logistics_consultant': ['inventory.view', 'inventory.post', 'dispatch.manage', 'procurement.manage'],
-    'sdoc_consultant': ['inventory.view', 'procurement.committee'],
-    'rh_consultant': ['procurement.committee', 'inventory.view'],
-    'mel_consultant': ['reports.export', 'inventory.view'],
-    'demand_consultant': ['procurement.committee'],
+    'project_manager': [p[0] for p in PRIVILEGES if p[0] != 'users.manage'] + ['users.manage', 'approvals.act'],
+    'program_admin': ['inventory.view', 'procurement.manage', 'budget.edit', 'dispatch.manage', 'dispatch.create', 'approvals.act', 'finance.view', 'program.report', 'facility.confirm'],
+    'logistics_consultant': ['inventory.view', 'inventory.post', 'dispatch.manage', 'dispatch.create', 'procurement.manage'],
+    'sdoc_consultant': ['inventory.view', 'procurement.committee', 'stories.publish'],
+    'rh_consultant': ['procurement.committee', 'inventory.view', 'uptake.record', 'stories.publish'],
+    'mel_consultant': ['reports.export', 'inventory.view', 'program.report'],
+    'demand_consultant': ['procurement.committee', 'stories.publish'],
+    'provider': ['facility.confirm', 'uptake.record', 'stories.publish', 'transfer.request', 'inventory.view'],
 }
 
 
@@ -140,6 +148,7 @@ def _company():
 def init_ops_upgrade(app, database):
     global db, StaffPrivilege, FxSetup, ProcEvent, VendorInvite, QuoteFile, CommitteeSeat
     global CommitteeScore, ServiceAward, ServiceActivity, BankWorkspace
+    global DispatchNote, DispatchLine, FacilityTransfer, FacilityStory
     db = database
 
     class StaffPrivilege(database.Model):
@@ -259,6 +268,60 @@ def init_ops_upgrade(app, database):
         prepared_by = database.Column(database.String(120), default='')
         reviewed_by = database.Column(database.String(120), default='')
 
+    class DispatchNote(database.Model):
+        __tablename__ = 'dispatch_notes'
+        id = database.Column(database.Integer, primary_key=True)
+        note_no = database.Column(database.String(30), unique=True, nullable=False)
+        dispatch_date = database.Column(database.Date, default=date.today)
+        facility_id = database.Column(database.Integer, nullable=False)
+        status = database.Column(database.String(30), default='in_transit')
+        dispatch_officer = database.Column(database.String(120), default='')
+        dispatch_phone = database.Column(database.String(40), default='')
+        dispatch_role = database.Column(database.String(80), default='')
+        facility_officer = database.Column(database.String(120), default='')
+        facility_phone = database.Column(database.String(40), default='')
+        facility_role = database.Column(database.String(80), default='')
+        approving_officer = database.Column(database.String(120), default='')
+        approving_role = database.Column(database.String(80), default='Program Manager')
+        signed_pdf = database.Column(database.String(300), default='')
+        confirmed_at = database.Column(database.DateTime)
+        created_at = database.Column(database.DateTime, default=datetime.utcnow)
+
+    class DispatchLine(database.Model):
+        __tablename__ = 'dispatch_lines'
+        id = database.Column(database.Integer, primary_key=True)
+        note_id = database.Column(database.Integer, database.ForeignKey('dispatch_notes.id'), nullable=False)
+        product_id = database.Column(database.Integer, nullable=False)
+        product_name = database.Column(database.String(160), default='')
+        quantity = database.Column(database.Numeric(14, 2), default=0)
+        confirmed_qty = database.Column(database.Numeric(14, 2), default=0)
+        confirmed = database.Column(database.Boolean, default=False)
+        note = database.relationship('DispatchNote')
+
+    class FacilityTransfer(database.Model):
+        __tablename__ = 'facility_transfers'
+        id = database.Column(database.Integer, primary_key=True)
+        from_facility_id = database.Column(database.Integer, nullable=False)
+        to_facility_id = database.Column(database.Integer, nullable=False)
+        product_id = database.Column(database.Integer, nullable=False)
+        quantity = database.Column(database.Numeric(14, 2), default=0)
+        reason = database.Column(database.Text, default='')
+        status = database.Column(database.String(20), default='pending')
+        requested_by = database.Column(database.Integer)
+        approved_by = database.Column(database.Integer)
+        created_at = database.Column(database.DateTime, default=datetime.utcnow)
+
+    class FacilityStory(database.Model):
+        __tablename__ = 'facility_stories'
+        id = database.Column(database.Integer, primary_key=True)
+        facility_id = database.Column(database.Integer, nullable=False)
+        title = database.Column(database.String(200), nullable=False)
+        body = database.Column(database.Text, default='')
+        image_path = database.Column(database.String(300), default='')
+        created_at = database.Column(database.DateTime, default=datetime.utcnow)
+
+    import facility_flow
+    facility_flow.bind(database, DispatchNote, DispatchLine, FacilityTransfer, FacilityStory)
     app.register_blueprint(ops_bp)
     with app.app_context():
         database.create_all()
