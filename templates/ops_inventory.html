@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container-fluid py-3">
   <h3>Inventory management</h3>
-  <p class="text-muted">Dedicated stock book. Receipts come from procurement, dispatch moves stock to facilities, and issues can raise a finance document.</p>
+  <p class="text-muted">Position, not a sales ledger. Dispatch moves quantity from the central warehouse to a facility and does not reduce total stock. Inventory falls only when a facility records an uptake.</p>
   <div class="row g-3 mb-3">
     <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Stock value</div><strong>{{ '{:,.2f}'.format(total_value) }}</strong></div></div></div>
     <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Lines</div><strong>{{ balances|length }}</strong></div></div></div>
