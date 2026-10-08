@@ -1,23 +1,41 @@
 {% extends "public_base.html" %}
 {% block content %}
 <div id="cc-splash" aria-hidden="true">
-  <img src="{{ url_for('static', filename='icons/splash-welcome.jpg') }}" alt="Welcome to CONTRAconnect">
+  <video autoplay muted playsinline>
+    <source src="{{ url_for('static', filename='icons/splash-welcome.mp4') }}" type="video/mp4">
+  </video>
 </div>
 <style>
-  #cc-splash{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:linear-gradient(#7ec8e3,#ffffff);transition:opacity .45s ease}
-  #cc-splash img{width:min(760px,90vw);height:auto}
-  #cc-splash.hide{opacity:0;pointer-events:none}
+  #cc-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(#7ec8e3, #ffffff);
+  }
+  #cc-splash video {
+    width: min(900px, 92vw);
+    height: auto;
+    background: transparent;
+  }
+  #cc-splash.hide { opacity: 0; pointer-events: none; transition: opacity .4s ease; }
 </style>
 <script>
   window.addEventListener("load", function () {
-    setTimeout(function () {
-      var s = document.getElementById("cc-splash");
+    var s = document.getElementById("cc-splash");
+    var v = s ? s.querySelector("video") : null;
+    function closeSplash() {
       if (!s) return;
       s.classList.add("hide");
-      setTimeout(function () { s.remove(); }, 450);
-    }, 1600);
+      setTimeout(function () { s.remove(); }, 400);
+    }
+    if (v) v.addEventListener("ended", closeSplash);
+    setTimeout(closeSplash, 4500);
   });
 </script>
+
 <!-- HERO -->
 <section class="hero-public">
   <div class="container position-relative" style="z-index:1">
@@ -35,18 +53,17 @@
         </div>
       </div>
       <div class="col-lg-5 text-center">
-        <img src="{{ url_for('static', filename='icons/splash-welcome.jpg') }}" alt="Welcome to CONTRAconnect" class="img-fluid rounded-4 shadow">
+        <img src="{{ url_for('static', filename='icons/icon-512.png') }}" alt="Contractconnect" class="img-fluid rounded-4 shadow">
       </div>
     </div>
   </div>
 </section>
 
-<!-- CHALLENGE STORY -->
 <section class="py-5" id="challenge">
   <div class="container">
     <div class="row mb-4">
       <div class="col-lg-8">
-        <h2 class="section-title">Origin, partners &amp; purpose</h2>
+        <h2 class="section-title">Origin, partners & purpose</h2>
         <p class="text-muted">A city-led pathway to expand contraceptive choice with digital accountability.</p>
       </div>
     </div>
@@ -61,7 +78,7 @@
       <div class="col-md-6 col-lg-3">
         <div class="card h-100 p-3">
           <div class="text-success mb-2"><i class="bi bi-globe2 fs-3"></i></div>
-          <h5>Funder &amp; partners</h5>
+          <h5>Funder & partners</h5>
           <p class="small text-muted mb-0">{{ content.funder }}</p>
         </div>
       </div>
@@ -75,7 +92,7 @@
       <div class="col-md-6 col-lg-3">
         <div class="card h-100 p-3">
           <div class="text-success mb-2"><i class="bi bi-heart fs-3"></i></div>
-          <h5>Benefits for Edo &amp; Nigeria</h5>
+          <h5>Benefits for Edo & Nigeria</h5>
           <p class="small text-muted mb-0">{{ content.benefits }}</p>
         </div>
       </div>
@@ -83,7 +100,6 @@
   </div>
 </section>
 
-<!-- MAP SECTION ANCHOR -->
 <section class="py-4 bg-white" id="map">
   <div class="container">
     <div class="row align-items-center g-4">
@@ -93,13 +109,13 @@
         <ul class="list-unstyled">
           <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Mobile kiosks linked to parent PHCs</li>
           <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Predictive supply to reduce stock-outs</li>
-          <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Learning on method mix, costs &amp; quality</li>
+          <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Learning on method mix, costs & quality</li>
         </ul>
       </div>
       <div class="col-lg-6">
         {% set pic = content.picture_url or content.video_url %}
         {% if pic %}
-          {% if 'youtube.com/embed' in pic or 'youtube.com' in pic or 'youtu.be' in pic %}
+          {% if 'youtube.com' in pic or 'youtu.be' in pic %}
           <div class="video-frame">
             <iframe src="{{ pic }}" title="Programme pictures" allowfullscreen loading="lazy"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
@@ -107,15 +123,16 @@
           {% else %}
           <img src="{{ pic }}" alt="Programme picture" class="img-fluid rounded-4 shadow">
           {% endif %}
-          <p class="mt-3 mb-2">{{ content.service_note or 'Watch the programme, then send a referral, feedback, or a request for service.' }}</p>
-          <a class="btn btn-success" href="{{ content.service_link or '/client-feedback' }}">{{ content.service_label or 'Referral, feedback or request for service' }}</a>
+        {% else %}
+          <img src="{{ url_for('static', filename=content.slide1_img) }}" alt="Programme picture" class="img-fluid rounded-4 shadow">
         {% endif %}
+        <p class="mt-3 mb-2">{{ content.service_note or 'Watch the programme, then send a referral, feedback, or a request for service.' }}</p>
+        <a class="btn btn-success" href="{{ content.service_link or '/client-feedback' }}">{{ content.service_label or 'Referral, feedback or request for service' }}</a>
       </div>
     </div>
   </div>
 </section>
 
-<!-- CAROUSEL -->
 <section class="py-5" id="progress">
   <div class="container">
     <h2 class="section-title mb-4">Programme progress in pictures</h2>
@@ -151,7 +168,6 @@
   </div>
 </section>
 
-<!-- TESTIMONIES -->
 <section class="py-5 bg-white" id="voices">
   <div class="container">
     <h2 class="section-title mb-4">Voices from the field</h2>
