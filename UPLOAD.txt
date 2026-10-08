@@ -1,0 +1,15 @@
+Upload these folders into the GitHub repo root so paths match.
+
+static/manifest.json          replace static/manifest.json
+static/icons/*                replace files in static/icons/
+templates/public_home.html    replace templates/public_home.html
+templates/admin_homepage.html replace templates/admin_homepage.html
+
+Then, on your computer in the repo folder:
+  python apply_homepage_fields.py
+  git add static templates server.py
+  git commit -m "CONTRAconnect splash, icons, homepage picture link"
+  git push
+
+Admin → Homepage editor now has "Picture or YouTube link".
+That link is what visitors see instead of the map.
