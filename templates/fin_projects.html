@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Project codes{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Project codes</h3>
+  <div class="row g-3">
+    <div class="col-lg-8">
+      <div class="card"><table class="table mb-0">
+        <thead><tr><th>Code</th><th>Name</th><th></th></tr></thead>
+        <tbody>
+        {% for p in projects %}
+          <tr>
+            <td>{{ p.code }}</td><td>{{ p.name }}</td>
+            <td><a href="{{ url_for('fin.project_report', pid=p.id) }}">Project report</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+    {% if can_edit %}
+    <div class="col-lg-4">
+      <form method="post" class="card card-body">
+        <h5>Add project</h5>
+        <input name="code" class="form-control mb-2" placeholder="PRJ-NEW" required>
+        <input name="name" class="form-control mb-2" placeholder="Name" required>
+        <textarea name="description" class="form-control mb-2" rows="2" placeholder="Description"></textarea>
+        <button class="btn btn-primary">Save</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

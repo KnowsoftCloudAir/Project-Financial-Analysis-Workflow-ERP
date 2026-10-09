@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Trial balance{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page">
+  <h3>Trial balance</h3>
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-3"><input class="form-control" type="date" name="start" value="{{ start }}"></div>
+    <div class="col-md-3"><input class="form-control" type="date" name="end" value="{{ end }}"></div>
+    <div class="col-md-2"><button class="btn btn-primary">Filter</button></div>
+  </form>
+  <p class="text-muted">Net ledger balances. Any difference is reserve.</p>
+  <div class="card"><div class="table-responsive"><table class="table mb-0">
+    <thead><tr><th>Account</th><th>Type</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.account.code }} {{ r.account.name }}</td>
+        <td>{{ r.account.account_type }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.debit) }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.credit) }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td>
+      </tr>
+    {% else %}<tr><td colspan="5" class="text-muted">Post a journal or approve a payment first.</td></tr>{% endfor %}
+    {% if reserve %}
+      <tr><td>Reserve</td><td>Reserve</td><td class="text-end">{% if reserve < 0 %}{{ '{:,.2f}'.format(-reserve) }}{% endif %}</td><td class="text-end">{% if reserve > 0 %}{{ '{:,.2f}'.format(reserve) }}{% endif %}</td><td class="text-end">{{ '{:,.2f}'.format(reserve) }}</td></tr>
+    {% endif %}
+    </tbody>
+    <tfoot><tr><th colspan="2">Total</th><th class="text-end">{{ '{:,.2f}'.format(total_dr) }}</th><th class="text-end">{{ '{:,.2f}'.format(total_cr) }}</th><th></th></tr></tfoot>
+  </table></div></div>
+</div>
+{% endblock %}
