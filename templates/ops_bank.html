@@ -136,7 +136,7 @@
                        {% if row.tick and row.tick.ticked %}checked{% endif %}
                        onchange="onTick(this)">
               </td>
-              <td>{{ row.line.entry_date }}</td>
+              <td>{{ row.line.entry_date if row.line else '' }}</td>
               <td>
                 <a href="{{ url_for('fin.ledger') }}?q={{ row.line.entry_no or row.line.id }}" target="_blank" class="text-decoration-none"
                    title="Trace voucher">{{ row.line.entry_no or row.line.id }}</a>
@@ -155,7 +155,7 @@
               <td colspan="8">
                 <div class="trace-panel open">
                   <strong>Trace:</strong> Voucher {{ row.line.entry_no or row.line.id }} ·
-                  Date {{ row.line.entry_date }} · {{ row.line.description or 'No description' }} ·
+                  Date {{ row.line.entry_date if row.line else '' }} · {{ row.line.description or 'No description' }} ·
                   Debit {{ '{:,.2f}'.format(row.debit) }} / Credit {{ '{:,.2f}'.format(row.credit) }}
                   {% if row.line.journal_id is defined %}
                   · Journal #{{ row.line.journal_id }}
@@ -243,9 +243,9 @@
       <tbody>
       {% for row in outstanding %}
         <tr>
-          <td>{{ row.line.entry_date }}</td>
+          <td>{{ row.line.entry_date if row.line else '' }}</td>
           <td>{{ row.line.entry_no or row.line.id }}</td>
-          <td>{{ row.line.description }}</td>
+          <td>{{ row.line.description if row.line else '' }}</td>
           <td class="text-end">{{ '{:,.2f}'.format(row.debit) }}</td>
           <td class="text-end">{{ '{:,.2f}'.format(row.credit) }}</td>
         </tr>
