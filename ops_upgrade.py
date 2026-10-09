@@ -395,10 +395,21 @@ def inventory_home():
     tx = _rows(
         'SELECT facility_id, product_id, transaction_type, quantity, notes, reference FROM stock_transactions'
     )
-    ordered = sorted(facilities, key=lambda f: (0 if 'warehouse' in (f['name'] or '').lower() else 1, f['name']))
+    def _kind(fac):
+        name = (fac.get('name') or '').lower()
+        ftype = (fac.get('facility_type') or '').lower()
+        if 'warehouse' in name:
+            return 'warehouse'
+        if ftype == 'phc' or 'phc' in name:
+            return 'phc'
+        if ftype == 'kiosk' or 'kiosk' in name:
+            return 'kiosk'
+        return 'other'
+    ordered = sorted(facilities, key=lambda f: ({'warehouse': 0, 'kiosk': 1, 'phc': 2, 'other': 3}[_kind(f)], f['name']))
     sheets = []
     for fac in ordered:
-        warehouse = 'warehouse' in (fac['name'] or '').lower()
+        kind = _kind(fac)
+        warehouse = kind == 'warehouse'
         lines = {}
         for prod in products:
             lines[prod['id']] = {
@@ -425,10 +436,17 @@ def inventory_home():
         for slot in lines.values():
             slot['balance'] = slot['received'] - slot['dispatched'] - slot['administered'] - slot['transferred']
             slot['destinations'] = ', '.join(dict.fromkeys(slot['destinations']))
-        sheets.append({'id': fac['id'], 'name': fac['name'], 'warehouse': warehouse, 'lines': list(lines.values())})
+        sheets.append({'id': fac['id'], 'name': fac['name'], 'warehouse': warehouse, 'kind': kind, 'kind_label': {'warehouse':'Main warehouse','kiosk':'Kiosk outlet','phc':'PHC outlet','other':'Other outlet'}[kind], 'lines': list(lines.values())})
     role = getattr(current_user, 'role', '')
     can_update = role in ('general_admin', 'admin', 'program_admin', 'project_manager', 'logistics_consultant', 'finance_admin') or user_has(current_user, 'inventory.post') or user_has(current_user, 'facility.confirm')
-    return render_template('ops_inventory.html', sheets=sheets, products=products, facilities=facilities, can_update=can_update)
+    groups = [
+        {'title': 'Main warehouse', 'sheets': [s for s in sheets if s['kind']=='warehouse']},
+        {'title': 'Kiosk outlets', 'sheets': [s for s in sheets if s['kind']=='kiosk']},
+        {'title': 'PHC outlets', 'sheets': [s for s in sheets if s['kind']=='phc']},
+        {'title': 'Other outlets', 'sheets': [s for s in sheets if s['kind']=='other']},
+    ]
+    groups = [g for g in groups if g['sheets']]
+    return render_template('ops_inventory.html', groups=groups, sheets=sheets, products=products, facilities=facilities, can_update=can_update)
 
 
 @ops_bp.route('/inventory/usage', methods=['POST'])
