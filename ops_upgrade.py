@@ -390,35 +390,87 @@ def _progress(award):
 @login_required
 @_staff_required
 def inventory_home():
-    balances = _rows('''
-        SELECT f.name AS facility, p.name AS product, p.unit, p.unit_cost,
-               s.quantity_on_hand, s.reorder_level, s.facility_id, s.product_id,
-               (s.quantity_on_hand * p.unit_cost) AS value
-        FROM stock_items s
-        JOIN facilities f ON f.id = s.facility_id
-        JOIN products p ON p.id = s.product_id
-        ORDER BY f.name, p.name
-    ''')
-    moves = _rows('''
-        SELECT t.created_at, f.name AS facility, p.name AS product, t.transaction_type,
-               t.quantity, t.reference, t.notes
-        FROM stock_transactions t
-        JOIN facilities f ON f.id = t.facility_id
-        JOIN products p ON p.id = t.product_id
-        ORDER BY t.id DESC LIMIT 25
-    ''')
-    facilities = _rows('SELECT id, name FROM facilities ORDER BY name')
-    products = _rows('SELECT id, name, unit, unit_cost FROM products WHERE is_active = 1 ORDER BY name')
-    pos = _rows('''
-        SELECT id, po_no, status, amount FROM erp_purchase_orders
-        ORDER BY id DESC LIMIT 8
-    ''') if _table('erp_purchase_orders') else []
-    total_value = sum(float(r['value'] or 0) for r in balances)
-    low = [r for r in balances if (r['quantity_on_hand'] or 0) < (r['reorder_level'] or 0)]
-    return render_template(
-        'ops_inventory.html', balances=balances, moves=moves, facilities=facilities,
-        products=products, pos=pos, total_value=total_value, low=low,
+    facilities = _rows('SELECT id, name, facility_type FROM facilities ORDER BY name')
+    products = _rows('SELECT id, name, unit FROM products WHERE is_active = 1 ORDER BY name')
+    tx = _rows(
+        'SELECT facility_id, product_id, transaction_type, quantity, notes, reference FROM stock_transactions'
     )
+    ordered = sorted(facilities, key=lambda f: (0 if 'warehouse' in (f['name'] or '').lower() else 1, f['name']))
+    sheets = []
+    for fac in ordered:
+        warehouse = 'warehouse' in (fac['name'] or '').lower()
+        lines = {}
+        for prod in products:
+            lines[prod['id']] = {
+                'product': prod['name'], 'opening': 0, 'received': 0, 'dispatched': 0,
+                'administered': 0, 'transferred': 0, 'destinations': [], 'balance': 0,
+            }
+        for row in tx:
+            if row['facility_id'] != fac['id'] or row['product_id'] not in lines:
+                continue
+            slot = lines[row['product_id']]
+            qty = abs(float(row['quantity'] or 0))
+            kind = (row['transaction_type'] or '').lower()
+            note = row['notes'] or ''
+            if kind in ('receipt', 'opening'):
+                slot['received'] += qty
+            elif kind == 'dispatch':
+                slot['dispatched'] += qty
+            elif kind in ('issue', 'administer'):
+                slot['administered'] += qty
+            elif kind == 'transfer':
+                slot['transferred'] += qty
+            if 'to ' in note.lower():
+                slot['destinations'].append(note)
+        for slot in lines.values():
+            slot['balance'] = slot['received'] - slot['dispatched'] - slot['administered'] - slot['transferred']
+            slot['destinations'] = ', '.join(dict.fromkeys(slot['destinations']))
+        sheets.append({'id': fac['id'], 'name': fac['name'], 'warehouse': warehouse, 'lines': list(lines.values())})
+    role = getattr(current_user, 'role', '')
+    can_update = role in ('general_admin', 'admin', 'program_admin', 'project_manager', 'logistics_consultant', 'finance_admin') or user_has(current_user, 'inventory.post') or user_has(current_user, 'facility.confirm')
+    return render_template('ops_inventory.html', sheets=sheets, products=products, facilities=facilities, can_update=can_update)
+
+
+@ops_bp.route('/inventory/usage', methods=['POST'])
+@login_required
+@_staff_required
+def inventory_usage():
+    facility_id = request.form.get('facility_id', type=int)
+    product_id = request.form.get('product_id', type=int)
+    qty = float(request.form.get('quantity') or 0)
+    kind = request.form.get('kind') or 'administer'
+    dest = request.form.get('dest_facility_id', type=int)
+    role = getattr(current_user, 'role', '')
+    allowed = role in ('general_admin', 'admin', 'program_admin', 'project_manager', 'logistics_consultant') or user_has(current_user, 'inventory.post') or user_has(current_user, 'facility.confirm') or user_has(current_user, 'approvals.act')
+    if not allowed:
+        flash('Only a facility officer or an approving officer can update inventory.', 'danger')
+        return redirect(url_for('ops.inventory_home'))
+    if qty <= 0 or not facility_id or not product_id:
+        flash('Quantity, facility and commodity are required.', 'danger')
+        return redirect(url_for('ops.inventory_home'))
+    dest_name = ''
+    if dest:
+        dest_name = db.session.execute(text('SELECT name FROM facilities WHERE id=:id'), {'id': dest}).scalar() or ''
+    if kind == 'receipt':
+        _apply_stock(facility_id, product_id, qty, 'receipt', 'USAGE', 'Received')
+    elif kind == 'dispatch':
+        if not dest:
+            flash('Choose the facility dispatched to.', 'danger')
+            return redirect(url_for('ops.inventory_home'))
+        _apply_stock(facility_id, product_id, -qty, 'dispatch', 'DISPATCH', f'Dispatched to {dest_name}')
+        _apply_stock(dest, product_id, qty, 'receipt', 'DISPATCH', 'Received from warehouse')
+    elif kind == 'transfer':
+        if not dest:
+            flash('Choose the facility transferred to.', 'danger')
+            return redirect(url_for('ops.inventory_home'))
+        _apply_stock(facility_id, product_id, -qty, 'transfer', 'TRANSFER', f'Transferred to {dest_name}')
+        _apply_stock(dest, product_id, qty, 'receipt', 'TRANSFER', 'Received by transfer')
+    else:
+        _apply_stock(facility_id, product_id, -qty, 'administer', 'ADMIN', 'Administered')
+    db.session.commit()
+    flash('Inventory sheet updated.', 'success')
+    return redirect(url_for('ops.inventory_home'))
+
 
 
 def _table(name):

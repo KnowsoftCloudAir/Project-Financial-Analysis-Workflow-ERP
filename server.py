@@ -621,6 +621,8 @@ def report_branding():
         'org_line': get_setting('org_line', 'United Nations Development Programme (UNDP)'),
         'app_name': get_setting('app_name', 'Project Financial Management Workflow'),
         'app_logo': get_setting('app_logo_path', 'branding/app_logo_default.png'),
+        'official_address': get_setting('official_address', ''),
+        'youtube_url': get_setting('youtube_url', ''),
     }
 
 
@@ -2954,7 +2956,8 @@ def expense_detail(eid):
         _can_review_expense(current_user) or _can_approve_expense_pm(current_user)
     ):
         abort(403)
-    return render_template('expense_detail.html', er=er)
+    from fmss_align import codebook, get_coding
+    return render_template('expense_detail.html', er=er, codebook=codebook(), coding=get_coding('expense_request', er.id))
 
 
 @app.route('/expenses/<int:eid>/submit', methods=['POST'])
@@ -4393,6 +4396,8 @@ def admin_branding():
         set_setting('report_subtitle', request.form.get('report_subtitle', '').strip())
         set_setting('org_line', request.form.get('org_line', '').strip())
         set_setting('app_name', request.form.get('app_name', '').strip() or 'CONTRAconnect')
+        set_setting('official_address', request.form.get('official_address', '').strip())
+        set_setting('youtube_url', request.form.get('youtube_url', '').strip())
         f = request.files.get('logo')
         if f and f.filename:
             ext = f.filename.rsplit('.', 1)[-1].lower()

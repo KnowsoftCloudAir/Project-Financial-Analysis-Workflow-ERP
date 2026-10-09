@@ -66,16 +66,9 @@ def _logo_path(brand):
 @login_required
 @_staff_required
 def section_finance():
-    return render_template('ops_section.html', title='Finance', intro='Budget, variance, reports, account codes, cost analysis, expense requests and finance books.', links=[
-        ('Chart of accounts', 'fin.coa'),
-        ('Project codes', 'fin.projects'),
-        ('Expense codes', 'fin.expense_codes'),
-        ('Budget codes', 'fin.budget_codes'),
-        ('Project budget template', 'ops.budget_template'),
-        ('Variance by project', 'fin.variance'),
-        ('Financial statements', 'fin.financial_statements'),
-        ('Trial balance', 'fin.trial'),
-        ('Account ledger', 'fin.ledger'),
+    return render_template('ops_section.html', title='Finance', intro='Setup, reports, payments, journals and cash reconciliation.', links=[
+        ('Finance setup', 'ops.section_finance_setup'),
+        ('Financial reports', 'ops.section_finance_reports'),
         ('Journals', 'fin.journals'),
         ('Payments and expense requests', 'fin.payments'),
         ('Expense requests', 'expense_list'),
@@ -83,6 +76,32 @@ def section_finance():
         ('Finance books', 'fin.home'),
         ('Cash reconciliation', 'wf.cash_recon'),
         ('Currencies and exchange', 'ops.fx_setup'),
+    ])
+
+
+@ops_bp.route('/sections/finance-setup')
+@login_required
+@_staff_required
+def section_finance_setup():
+    return render_template('ops_section.html', title='Finance setup', intro='Chart of accounts, project codes, expense codes and budget codes.', links=[
+        ('Chart of accounts', 'fin.coa'),
+        ('Project codes', 'fin.projects'),
+        ('Expense codes', 'fin.expense_codes'),
+        ('Budget codes', 'fin.budget_codes'),
+        ('Project budget template', 'ops.budget_template'),
+    ])
+
+
+@ops_bp.route('/sections/financial-reports')
+@login_required
+@_staff_required
+def section_finance_reports():
+    return render_template('ops_section.html', title='Financial reports', intro='Trial balance, income statement, statement of financial position, cash flow and project reports.', links=[
+        ('Trial balance', 'fin.trial'),
+        ('Financial statements', 'fin.financial_statements'),
+        ('Account ledger', 'fin.ledger'),
+        ('Variance by project', 'fin.variance'),
+        ('Project reports', 'fin.projects'),
     ])
 
 
