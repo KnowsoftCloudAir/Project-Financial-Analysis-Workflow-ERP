@@ -4801,6 +4801,20 @@ try:
 except Exception as _ops_boot:
     print('Ops upgrade boot:', _ops_boot)
 
+
+@app.route('/upgrade-status')
+def upgrade_status():
+    return (
+        'UPGRADE-2026-10-09\n'
+        'finance-setup=/ops/sections/finance-setup\n'
+        'financial-reports=/ops/sections/financial-reports\n'
+        'rfq=/ops/rfq\n'
+        'inventory-sheet=/ops/inventory\n'
+        'cash-recon=/ops/cash-recon\n',
+        200,
+        {'Content-Type': 'text/plain; charset=utf-8'},
+    )
+
 try:
     from workflow_upgrade import init_workflow_upgrade
     init_workflow_upgrade(app, db)
