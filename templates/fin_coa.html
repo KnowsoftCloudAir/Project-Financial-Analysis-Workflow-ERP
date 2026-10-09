@@ -26,7 +26,7 @@
             <td>{{ a.code }}</td>
             <td>{{ a.name }}</td>
             <td>{{ a.account_type }}</td>
-            <td class="text-end">{{ '{:,.2f}'.format(account_balances.get(a.id, 0)) }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(balances.get(a.id, 0)) }}</td>
           </tr>
         {% endfor %}
         </tbody>

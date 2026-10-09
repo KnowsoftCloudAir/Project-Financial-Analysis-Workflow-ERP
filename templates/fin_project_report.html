@@ -1,28 +1,32 @@
 {% extends "base.html" %}
 {% block title %}{{ project.code }}{% endblock %}
 {% block content %}
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 wrap-page">
   <a href="{{ url_for('fin.variance') }}" class="btn btn-sm btn-outline-secondary mb-2">← Variance</a>
-  <h3>{{ project.code }} — {{ project.name }}</h3>
-  <p>{{ project.description }}</p>
-  <div class="row g-3 mb-3">
-    <div class="col-md-4"><div class="card card-body">Income {{ '{:,.2f}'.format(pack.income_total) }}</div></div>
-    <div class="col-md-4"><div class="card card-body">Expense {{ '{:,.2f}'.format(pack.expense_total) }}</div></div>
-    <div class="col-md-4"><div class="card card-body">Surplus {{ '{:,.2f}'.format(pack.surplus) }}</div></div>
+  <div class="p-3 mb-3 text-white" style="background:#1a6b9a;border-radius:10px">
+    <h3 class="mb-0">Project report — {{ project.code }}</h3>
+    <div>{{ project.name }}</div>
   </div>
-  <div class="card"><table class="table mb-0">
-    <thead><tr><th>Date</th><th>Entry</th><th>Account</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
+  <p>{{ project.description }}</p>
+  <div class="card mb-3"><table class="table mb-0">
+    <tr class="table-light"><th colspan="2">Statement of project performance</th></tr>
+    <tr><td>Income</td><td class="text-end">{{ '{:,.2f}'.format(pack.income_total) }}</td></tr>
+    <tr><td>Less: expenses</td><td class="text-end">{{ '{:,.2f}'.format(pack.expense_total) }}</td></tr>
+    <tr><th>Surplus / (deficit)</th><th class="text-end">{{ '{:,.2f}'.format(pack.surplus) }}</th></tr>
+  </table></div>
+  <div class="card"><div class="table-responsive"><table class="table mb-0">
+    <thead><tr><th>Date</th><th>Voucher</th><th>Account</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
     <tbody>
     {% for line in lines %}
       <tr>
         <td>{{ line.entry_date }}</td><td>{{ line.entry_no }}</td>
-        <td>{{ line.account.code if line.account else '' }}</td>
+        <td>{{ line.account.code if line.account else '' }} {{ line.account.name if line.account else '' }}</td>
         <td>{{ line.description }}</td>
         <td class="text-end">{{ '{:,.2f}'.format(line.debit or 0) }}</td>
         <td class="text-end">{{ '{:,.2f}'.format(line.credit or 0) }}</td>
       </tr>
     {% else %}<tr><td colspan="6" class="text-muted">No postings for this project yet.</td></tr>{% endfor %}
     </tbody>
-  </table></div>
+  </table></div></div>
 </div>
 {% endblock %}
