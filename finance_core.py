@@ -624,7 +624,8 @@ def coa():
             flash('Account added.', 'success')
         return redirect(url_for('fin.coa'))
     rows = FinAccount.query.order_by(FinAccount.code).all()
-    return render_template('fin_coa.html', accounts=rows, types=ACCOUNT_TYPES, can_edit=_can_finance())
+    from fmss_align import account_balances
+    return render_template('fin_coa.html', accounts=rows, types=ACCOUNT_TYPES, can_edit=_can_finance(), balances=account_balances())
 
 
 @fin_bp.route('/projects', methods=['GET', 'POST'])
@@ -899,19 +900,15 @@ def trial():
 def financial_statements():
     start = request.args.get('start') or ''
     end = request.args.get('end') or str(date.today())
-    q = FinJournalLine.query
-    if start:
-        q = q.filter(FinJournalLine.entry_date >= date.fromisoformat(start))
-    if end:
-        q = q.filter(FinJournalLine.entry_date <= date.fromisoformat(end))
     adjusted = {}
     try:
         from workflow_upgrade import adjusted_cash_map
         adjusted = adjusted_cash_map(date.fromisoformat(end) if end else None)
     except Exception:
         adjusted = {}
-    pack = statements(q.all(), adjusted_cash=adjusted)
-    return render_template('fin_statements.html', pack=pack, today=date.today(), start=start, end=end)
+    from ifrs_reports import build_pack
+    built = build_pack(date.fromisoformat(start) if start else None, date.fromisoformat(end) if end else None, adjusted)
+    return render_template('fin_statements.html', pack=built['pack'], sfp=built['sfp'], cashflow=built['cashflow'], rows=built['rows'], total_dr=built['total_dr'], total_cr=built['total_cr'], reserve=built['reserve'], today=date.today(), start=start, end=end)
 
 
 @fin_bp.route('/projects/<int:pid>/report')

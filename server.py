@@ -2906,6 +2906,9 @@ def expense_new():
         if amount <= 0:
             flash('Amount must be positive.', 'danger')
             return redirect(url_for('expense_new'))
+        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id') or not request.form.get('project_id') or not request.form.get('expense_code_id'):
+            flash('Debit account, credit account, project code and expense code are required.', 'danger')
+            return redirect(url_for('expense_new'))
         action = request.form.get('action', 'draft')
         num = f"EXP-{datetime.utcnow().strftime('%Y%m%d')}-{current_user.id}-{int(datetime.utcnow().timestamp()) % 10000}"
         er = ExpenseRequest(
@@ -2931,6 +2934,9 @@ def expense_new():
             f.save(os.path.join(d, safe))
             er.evidence_filename = safe
         db.session.add(er)
+        db.session.flush()
+        from fmss_align import save_coding, read_coding
+        save_coding('expense_request', er.id, read_coding())
         db.session.commit()
         log_activity('expense_submitted', er.request_number)
         flash(f'Expense {er.request_number} saved ({er.status}).', 'success')
@@ -3892,7 +3898,13 @@ def invoice_new():
         if not inv.deliverable_title or amount <= 0:
             flash('Deliverable title and a positive amount are required.', 'danger')
             return redirect(url_for('invoice_new'))
+        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id') or not request.form.get('project_id') or not request.form.get('expense_code_id'):
+            flash('Debit account, credit account, project code and expense code are required.', 'danger')
+            return redirect(url_for('invoice_new'))
         db.session.add(inv)
+        db.session.flush()
+        from fmss_align import save_coding, read_coding
+        save_coding('invoice', inv.id, read_coding())
         db.session.commit()
         flash(f'Invoice {inv.invoice_number} saved as {status}.', 'success')
         return redirect(url_for('invoice_detail', iid=inv.id))
