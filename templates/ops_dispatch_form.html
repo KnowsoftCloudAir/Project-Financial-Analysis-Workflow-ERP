@@ -1,36 +1,89 @@
 {% extends "base.html" %}
-{% block title %}New dispatch{% endblock %}
+{% block title %}New dispatch note{% endblock %}
+{% block extra_css %}
+<style>
+  .disp-hero {
+    background: linear-gradient(135deg, #0f4c6e 0%, #0f766e 100%);
+    color: #fff;
+    border-radius: 1rem;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .disp-hero h3 { margin: 0; font-weight: 700; }
+  .disp-hero p { margin: .35rem 0 0; opacity: .9; font-size: .92rem; }
+  .section-label {
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #64748b;
+    margin: 1.25rem 0 .5rem;
+  }
+</style>
+{% endblock %}
 {% block content %}
 <div class="container-fluid py-3">
-  <h3>Dispatch note</h3>
-  <p class="text-muted">Up to 15 commodities. Date, dispatch officer, facility officer and approving officer are printed on the letterhead PDF. Stock leaves the central warehouse and stays in transit until the facility confirms.</p>
-  <form method="post" class="card card-body">
-    <div class="row g-2">
-      <div class="col-md-4"><label class="form-label">Date</label><input type="date" name="dispatch_date" value="{{ today }}" class="form-control" required></div>
-      <div class="col-md-4"><label class="form-label">Receiving facility</label>
-        <select name="facility_id" class="form-select" required><option value="">Select</option>{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select>
+  <div class="disp-hero">
+    <h3>Dispatch note</h3>
+    <p>Up to 15 commodities. Date, dispatch officer, facility officer and approving officer are printed on the letterhead PDF. Stock leaves the central warehouse and stays in transit until the facility confirms.</p>
+  </div>
+  <form method="post" class="card shadow-sm border-0">
+    <div class="card-body">
+      <div class="section-label">Shipment</div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Date</label>
+          <input type="date" name="dispatch_date" value="{{ today }}" class="form-control" required>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Receiving facility</label>
+          <select name="facility_id" class="form-select" required>
+            <option value="">Select facility</option>
+            {% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+          </select>
+        </div>
       </div>
-    </div>
-    <div class="row g-2 mt-2">
-      <div class="col-md-4"><input name="dispatch_officer" class="form-control" placeholder="Dispatch officer name" required></div>
-      <div class="col-md-4"><input name="dispatch_role" class="form-control" placeholder="Designation" value="Dispatch officer"></div>
-      <div class="col-md-4"><input name="dispatch_phone" class="form-control" placeholder="Phone"></div>
-      <div class="col-md-4"><input name="facility_officer" class="form-control" placeholder="Facility officer name" required></div>
-      <div class="col-md-4"><input name="facility_role" class="form-control" placeholder="Facility designation" value="Facility officer"></div>
-      <div class="col-md-4"><input name="facility_phone" class="form-control" placeholder="Facility phone"></div>
-      <div class="col-md-6"><input name="approving_officer" class="form-control" placeholder="Approving officer name" required></div>
-      <div class="col-md-6"><input name="approving_role" class="form-control" value="Program Manager"></div>
-    </div>
-    <h5 class="mt-3">Commodities</h5>
-    {% for i in range(15) %}
+
+      <div class="section-label">Dispatch officer</div>
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">Name</label><input name="dispatch_officer" class="form-control" required></div>
+        <div class="col-md-4"><label class="form-label">Designation</label><input name="dispatch_role" class="form-control" value="Dispatch officer"></div>
+        <div class="col-md-4"><label class="form-label">Phone</label><input name="dispatch_phone" class="form-control"></div>
+      </div>
+
+      <div class="section-label">Facility officer (receiving)</div>
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">Name</label><input name="facility_officer" class="form-control" required></div>
+        <div class="col-md-4"><label class="form-label">Designation</label><input name="facility_role" class="form-control" value="Facility officer"></div>
+        <div class="col-md-4"><label class="form-label">Phone</label><input name="facility_phone" class="form-control"></div>
+      </div>
+
+      <div class="section-label">Approving officer</div>
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Name</label><input name="approving_officer" class="form-control" required></div>
+        <div class="col-md-6"><label class="form-label">Designation</label><input name="approving_role" class="form-control" value="Program Manager"></div>
+      </div>
+
+      <div class="section-label">Commodities (up to 15 lines)</div>
+      {% for i in range(15) %}
       <div class="row g-2 mb-1">
         <div class="col-md-8">
-          <select name="product_{{ i }}" class="form-select"><option value="">Commodity {{ i + 1 }}</option>{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select>
+          <select name="product_{{ i }}" class="form-select form-select-sm">
+            <option value="">Commodity {{ i + 1 }}</option>
+            {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+          </select>
         </div>
-        <div class="col-md-4"><input name="qty_{{ i }}" class="form-control" placeholder="Quantity"></div>
+        <div class="col-md-4">
+          <input name="qty_{{ i }}" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="Quantity">
+        </div>
       </div>
-    {% endfor %}
-    <button class="btn btn-primary mt-2">Save and print PDF</button>
+      {% endfor %}
+
+      <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary">Save and print PDF</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('ops.dispatch_list') }}">Cancel</a>
+      </div>
+    </div>
   </form>
 </div>
 {% endblock %}
