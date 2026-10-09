@@ -1,40 +1,28 @@
 {% extends "base.html" %}
+{% from "_coding.html" import coding_fields %}
 {% block title %}Payments{% endblock %}
 {% block content %}
-<div class="container-fluid py-3">
-  <h3>Payments</h3>
-  <p class="text-muted">Submitted → program approval → finance approval (posts expense and payable) → paid (posts cash). Procurement invoices arrive here already submitted.</p>
-  <div class="row g-3">
-    <div class="col-lg-8">
-      <div class="card"><table class="table mb-0">
-        <thead><tr><th>No.</th><th>Type</th><th>Payee</th><th>Budget</th><th>Status</th><th class="text-end">Amount</th></tr></thead>
-        <tbody>
-        {% for d in docs %}
-          <tr>
-            <td><a href="{{ url_for('fin.payment_detail', did=d.id) }}">{{ d.doc_no }}</a></td>
-            <td>{{ d.doc_type }}</td>
-            <td>{{ d.payee }}</td>
-            <td>{{ d.budget_code.code if d.budget_code else '' }}</td>
-            <td>{{ d.status }}</td>
-            <td class="text-end">{{ '{:,.2f}'.format(d.amount or 0) }}</td>
-          </tr>
-        {% else %}<tr><td colspan="6" class="text-muted">None yet.</td></tr>{% endfor %}
-        </tbody>
-      </table></div>
+<div class="container-fluid py-3 wrap-page">
+  <h3>Payment requests</h3>
+  <p class="text-muted">Every voucher selects project, expense, budget, debit and credit. Finance can change them before posting.</p>
+  <form method="post" class="card card-body mb-3">
+    <div class="row g-2 mb-2">
+      <div class="col-md-4"><label class="form-label">Payee</label><input class="form-control" name="payee" required></div>
+      <div class="col-md-4"><label class="form-label">Amount</label><input class="form-control" name="amount" type="number" step="0.01" min="0.01" required></div>
+      <div class="col-md-4"><label class="form-label">Budget code</label>
+        <select class="form-select" name="budget_code_id">{% for b in budgets %}<option value="{{ b.id }}">{{ b.code }}</option>{% endfor %}</select></div>
+      <div class="col-12"><label class="form-label">Description</label><input class="form-control" name="description" required></div>
     </div>
-    <div class="col-lg-4">
-      <form method="post" class="card card-body">
-        <h5>New payment request</h5>
-        <input name="payee" class="form-control mb-2" placeholder="Payee" required>
-        <textarea name="description" class="form-control mb-2" rows="2" placeholder="Description" required></textarea>
-        <select name="budget_code_id" class="form-select mb-2" required>
-          <option value="">Budget code</option>
-          {% for b in budgets %}<option value="{{ b.id }}">{{ b.code }} — {{ b.project.code if b.project else '' }} / {{ b.expense_code.code if b.expense_code else '' }}</option>{% endfor %}
-        </select>
-        <input name="amount" type="number" step="0.01" class="form-control mb-2" placeholder="Amount" required>
-        <button class="btn btn-primary">Submit</button>
-      </form>
-    </div>
-  </div>
+    {{ coding_fields(none) }}
+    <button class="btn btn-primary mt-3">Submit for approval</button>
+  </form>
+  <div class="card"><div class="table-responsive"><table class="table mb-0">
+    <thead><tr><th>No</th><th>Payee</th><th>Amount</th><th>Status</th><th>Debit</th><th>Credit</th><th></th></tr></thead>
+    <tbody>{% for d in docs %}<tr>
+      <td>{{ d.doc_no }}</td><td>{{ d.payee }}</td><td>{{ '{:,.2f}'.format(d.amount or 0) }}</td><td>{{ d.status }}</td>
+      <td>{{ d.debit_account_id or '—' }}</td><td>{{ d.credit_account_id or '—' }}</td>
+      <td><a href="{{ url_for('fin.payment_detail', did=d.id) }}">Open</a></td>
+    </tr>{% else %}<tr><td colspan="7">No payments yet.</td></tr>{% endfor %}</tbody>
+  </table></div></div>
 </div>
 {% endblock %}

@@ -52,7 +52,9 @@
     {% if er.status == 'submitted' and current_user.role in ['finance_analyst','finance_admin','general_admin','admin'] %}
     <div class="card border-warning mb-3"><div class="card-header">Finance review</div><div class="card-body">
       <form method="post" action="{{ url_for('expense_finance_review', eid=er.id) }}">
-        <textarea name="finance_notes" class="form-control mb-2" rows="2"></textarea>
+        {% from "_coding.html" import coding_fields %}
+        {{ coding_fields(none) }}
+        <textarea name="finance_notes" class="form-control mb-2 mt-2" rows="2" placeholder="Finance note"></textarea>
         <button name="decision" value="approve" class="btn btn-success btn-sm">Clear for PM</button>
         <button name="decision" value="reject" class="btn btn-outline-danger btn-sm">Reject</button>
       </form>

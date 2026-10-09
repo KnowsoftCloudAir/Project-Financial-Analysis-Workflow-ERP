@@ -1,19 +1,13 @@
 {% extends "base.html" %}
+{% from "_coding.html" import coding_fields %}
 {% block title %}{{ doc.doc_no }}{% endblock %}
 {% block content %}
-<div class="container py-3" style="max-width:860px">
+<div class="container-fluid py-3 wrap-page">
   <a href="{{ url_for('fin.payments') }}" class="btn btn-sm btn-outline-secondary mb-2">← Payments</a>
   <h3>{{ doc.doc_no }} <span class="badge bg-secondary">{{ doc.status }}</span></h3>
   <p>{{ doc.description }}</p>
-  <table class="table">
-    <tr><th>Payee</th><td>{{ doc.payee }}</td></tr>
-    <tr><th>Amount</th><td>{{ '{:,.2f}'.format(doc.amount or 0) }} {{ doc.currency }}</td></tr>
-    <tr><th>Project</th><td>{{ doc.project.code if doc.project else '—' }} {{ doc.project.name if doc.project else '' }}</td></tr>
-    <tr><th>Expense code</th><td>{{ doc.expense_code.code if doc.expense_code else '—' }}</td></tr>
-    <tr><th>Budget code</th><td>{{ doc.budget_code.code if doc.budget_code else '—' }}</td></tr>
-    <tr><th>Accrual journal</th><td>{{ doc.journal_no or '—' }}</td></tr>
-    <tr><th>Payment journal</th><td>{{ doc.payment_journal_no or '—' }}</td></tr>
-  </table>
+  <p>Payee {{ doc.payee }} · {{ '{:,.2f}'.format(doc.amount or 0) }} {{ doc.currency }}</p>
+  <p>Accrual {{ doc.journal_no or '—' }} · Payment {{ doc.payment_journal_no or '—' }}</p>
   {% if doc.status == 'submitted' and can_program %}
   <form method="post" action="{{ url_for('fin.payment_act', did=doc.id) }}" class="d-flex gap-2 mb-3">
     <input type="hidden" name="step" value="program">
@@ -22,10 +16,12 @@
   </form>
   {% endif %}
   {% if doc.status == 'program_approved' and can_finance %}
-  <form method="post" action="{{ url_for('fin.payment_act', did=doc.id) }}" class="d-flex gap-2 mb-3">
+  <form method="post" action="{{ url_for('fin.payment_act', did=doc.id) }}" class="card card-body mb-3">
+    <h5>Finance approval — change coding before posting</h5>
     <input type="hidden" name="step" value="finance">
-    <input name="note" class="form-control" placeholder="Finance note">
-    <button class="btn btn-primary">Finance approve and post</button>
+    {{ coding_fields(doc) }}
+    <input name="note" class="form-control mt-2" placeholder="Finance note">
+    <button class="btn btn-primary mt-2">Finance approve and post debit / credit</button>
   </form>
   {% endif %}
   {% if doc.status == 'finance_approved' and can_finance %}

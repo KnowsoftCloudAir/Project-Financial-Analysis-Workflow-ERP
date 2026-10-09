@@ -1,36 +1,48 @@
 {% extends "base.html" %}
 {% block title %}Financial statements{% endblock %}
 {% block content %}
-<div class="container-fluid py-3">
+<div class="container-fluid py-3 wrap-page">
   <h3>Financial statements</h3>
-  <p class="text-muted">Built from the trial balance at {{ today }}. <a href="{{ url_for('ops.fx_translate') }}">Translate and treat the difference as exchange gain or loss</a>.</p>
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-3"><label class="form-label">Start date</label><input class="form-control" type="date" name="start" value="{{ start }}"></div>
+    <div class="col-md-3"><label class="form-label">End date</label><input class="form-control" type="date" name="end" value="{{ end }}"></div>
+    <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary">Filter</button></div>
+  </form>
+  <p class="text-muted">Income and expenses use the selected dates. Cash in current assets is the adjusted cash-reconciliation balance.</p>
   <div class="row g-3">
     <div class="col-lg-6">
       <div class="card">
-        <div class="card-header">Statement of financial position</div>
+        <div class="card-header">Statement of profit or loss (IFRS)</div>
         <table class="table mb-0">
-          <tr><th colspan="2">Assets</th></tr>
-          {% for r in pack.assets %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
-          <tr><th>Total assets</th><th class="text-end">{{ '{:,.2f}'.format(pack.asset_total) }}</th></tr>
-          <tr><th colspan="2">Liabilities</th></tr>
-          {% for r in pack.liabilities %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
-          <tr><th>Total liabilities</th><th class="text-end">{{ '{:,.2f}'.format(pack.liability_total) }}</th></tr>
-          <tr><th colspan="2">Equity</th></tr>
-          {% for r in pack.equity %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
-          <tr><td>Surplus for the period</td><td class="text-end">{{ '{:,.2f}'.format(pack.surplus) }}</td></tr>
-          <tr><th>Total equity</th><th class="text-end">{{ '{:,.2f}'.format(pack.equity_total) }}</th></tr>
+          <tr><th colspan="2">Income</th></tr>
+          {% for r in pack.income %}<tr><td>{{ r.account.code }} {{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th>Total income</th><th class="text-end">{{ '{:,.2f}'.format(pack.income_total) }}</th></tr>
+          <tr><th colspan="2">Less: expenses</th></tr>
+          {% for r in pack.expense %}<tr><td>{{ r.account.code }} {{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th>Total expenses</th><th class="text-end">{{ '{:,.2f}'.format(pack.expense_total) }}</th></tr>
+          <tr><th>{{ pack.result_label }}</th><th class="text-end">{{ '{:,.2f}'.format(pack.surplus) }}</th></tr>
         </table>
       </div>
     </div>
     <div class="col-lg-6">
       <div class="card">
-        <div class="card-header">Statement of financial performance</div>
+        <div class="card-header">Statement of financial position (IFRS)</div>
         <table class="table mb-0">
-          {% for r in pack.income %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
-          <tr><th>Income</th><th class="text-end">{{ '{:,.2f}'.format(pack.income_total) }}</th></tr>
-          {% for r in pack.expense %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
-          <tr><th>Expenses</th><th class="text-end">{{ '{:,.2f}'.format(pack.expense_total) }}</th></tr>
-          <tr><th>Surplus / (deficit)</th><th class="text-end">{{ '{:,.2f}'.format(pack.surplus) }}</th></tr>
+          <tr><th colspan="2">Non-current assets</th></tr>
+          {% for r in pack.noncurrent %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th colspan="2">Current assets</th></tr>
+          {% for r in pack.current %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          {% for r in pack.cash %}<tr><td>{{ r.account.name }}{% if r.from_reconciliation %} (adjusted reconciliation){% endif %}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th>Total assets</th><th class="text-end">{{ '{:,.2f}'.format(pack.asset_total) }}</th></tr>
+          <tr><th colspan="2">Equity</th></tr>
+          {% for r in pack.capital %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          {% for r in pack.equity %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><td>Reserve (trial balance reserve plus {{ pack.result_label|lower }})</td><td class="text-end">{{ '{:,.2f}'.format(pack.reserve_total) }}</td></tr>
+          <tr><th colspan="2">Liabilities</th></tr>
+          {% for r in pack.liabilities %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th colspan="2">Current liabilities</th></tr>
+          {% for r in pack.current_liab %}<tr><td>{{ r.account.name }}</td><td class="text-end">{{ '{:,.2f}'.format(r.balance) }}</td></tr>{% endfor %}
+          <tr><th>Total equity and liabilities</th><th class="text-end">{{ '{:,.2f}'.format(pack.financing_total) }}</th></tr>
         </table>
       </div>
     </div>

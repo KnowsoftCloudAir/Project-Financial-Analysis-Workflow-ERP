@@ -47,6 +47,22 @@
         .stat-card.success { border-left-color: #198754; }
         .table th { font-size: 0.85rem; text-transform: uppercase; color: #6c757d; }
         footer { font-size: 0.85rem; color: #6c757d; }
+    
+        .wrap-page, body, td, th, label, .nav-link, .card, .alert, p, h1, h2, h3, h4, .domain-sub, .card-desc {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            white-space: normal;
+        }
+        .table-responsive { overflow-x: auto; }
+        @media (max-width: 768px) and (orientation: portrait) {
+            html { font-size: 14px; }
+            .navbar-brand { font-size: 0.95rem; }
+        }
+        @media (max-width: 900px) and (orientation: landscape) {
+            html { font-size: 13px; }
+            h1, h2, h3 { font-size: 1.15rem; }
+        }
+
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -115,6 +131,7 @@
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.inventory_home') }}"><i class="bi bi-box-seam"></i> Inventory position</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Program Core</span></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_program_core') }}"><i class="bi bi-clipboard-data"></i> Learning, reports, homepage</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('client_feedback_hub') }}"><i class="bi bi-chat-heart"></i> Client feedback</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Procurement</span></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_procurement') }}"><i class="bi bi-briefcase"></i> Vendors, bids, committee</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Finance</span></li>
@@ -152,6 +169,14 @@
                 {% endfor %}
                 {% endif %}
                 {% endwith %}
+
+                {% if current_user.is_authenticated and not hide_back_button %}
+                <div class="mb-2">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="if(history.length>1){history.back()}else{window.location='{{ url_for('main_dashboard') if current_user.role != 'provider' else url_for('provider_dashboard') }}'}">
+                    <i class="bi bi-arrow-left"></i> Back
+                  </button>
+                </div>
+                {% endif %}
 
                 {% block content %}{% endblock %}
             </main>

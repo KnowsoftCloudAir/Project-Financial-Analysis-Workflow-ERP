@@ -18,9 +18,17 @@
           <option value="">Credit account</option>
           {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} {{ a.name }}</option>{% endfor %}
         </select>
-        <select name="project_id" class="form-select mb-2">
-          <option value="">Project (optional)</option>
-          {% for p in projects %}<option value="{{ p.id }}">{{ p.code }}</option>{% endfor %}
+        <select name="project_id" class="form-select mb-2" required>
+          <option value="">Project code</option>
+          {% for p in codebook.projects %}<option value="{{ p.id }}">{{ p.code }} — {{ p.name }}</option>{% endfor %}
+        </select>
+        <select name="expense_code_id" class="form-select mb-2" required>
+          <option value="">Expense code</option>
+          {% for e in codebook.expenses %}<option value="{{ e.id }}">{{ e.code }} — {{ e.description }}</option>{% endfor %}
+        </select>
+        <select name="budget_code_id" class="form-select mb-2" required>
+          <option value="">Budget code</option>
+          {% for b in codebook.budgets %}<option value="{{ b.id }}">{{ b.code }} — {{ b.description }}</option>{% endfor %}
         </select>
         <input name="amount" type="number" step="0.01" class="form-control mb-2" placeholder="Amount" required>
         <button class="btn btn-primary">Post</button>

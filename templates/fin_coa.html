@@ -1,33 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Chart of accounts{% endblock %}
 {% block content %}
-<div class="container-fluid py-3">
-  <h3>Chart of accounts</h3>
-  <p class="text-muted">Types used by the books: cash, expense, asset, liability, equity, receivable, payable. Income is included so the performance statement has a place for grants.</p>
+<div class="container-fluid py-3 wrap-page">
   <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header">New account</div>
+        <form method="post" class="card-body">
+          <label class="form-label">Account code</label>
+          <input class="form-control mb-2" name="code" required>
+          <label class="form-label">Account name</label>
+          <input class="form-control mb-2" name="name" required>
+          <label class="form-label">Account type</label>
+          <select class="form-select mb-3" name="account_type">{% for t in types %}<option>{{ t }}</option>{% endfor %}</select>
+          {% if can_edit %}<button class="btn btn-primary">Save account</button>{% endif %}
+        </form>
+      </div>
+    </div>
     <div class="col-lg-8">
-      <div class="card"><table class="table mb-0">
-        <thead><tr><th>Code</th><th>Name</th><th>Type</th></tr></thead>
+      <div class="card"><div class="table-responsive"><table class="table mb-0">
+        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th class="text-end">Balance</th></tr></thead>
         <tbody>
         {% for a in accounts %}
-          <tr><td>{{ a.code }}</td><td>{{ a.name }}</td><td>{{ a.account_type }}</td></tr>
+          <tr>
+            <td>{{ a.code }}</td>
+            <td>{{ a.name }}</td>
+            <td>{{ a.account_type }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(account_balances.get(a.id, 0)) }}</td>
+          </tr>
         {% endfor %}
         </tbody>
-      </table></div>
+      </table></div></div>
     </div>
-    {% if can_edit %}
-    <div class="col-lg-4">
-      <form method="post" class="card card-body">
-        <h5>Add account</h5>
-        <input name="code" class="form-control mb-2" placeholder="Code" required>
-        <input name="name" class="form-control mb-2" placeholder="Name" required>
-        <select name="account_type" class="form-select mb-2">
-          {% for t in types %}<option>{{ t }}</option>{% endfor %}
-        </select>
-        <button class="btn btn-primary">Save</button>
-      </form>
-    </div>
-    {% endif %}
   </div>
 </div>
 {% endblock %}
