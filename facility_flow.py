@@ -81,7 +81,7 @@ def section_finance():
         ('Expense requests', 'expense_list'),
         ('Cost analytics', 'admin_costs'),
         ('Finance books', 'fin.home'),
-        ('Bank reconciliation', 'ops.bank_recon'),
+        ('Cash reconciliation', 'wf.cash_recon'),
         ('Currencies and exchange', 'ops.fx_setup'),
     ])
 
@@ -90,7 +90,8 @@ def section_finance():
 @login_required
 @_staff_required
 def section_procurement():
-    return render_template('ops_section.html', title='Procurement', intro='Vendor REF links, committee evaluation, bids, purchase orders and procurement reports.', links=[
+    return render_template('ops_section.html', title='Procurement', intro='RFQ first. Review, one vendor link, committee scores, award, contract and invoice.', links=[
+        ('RFQs', 'wf.rfq_home'),
         ('Vendor REF links', 'ops.procurement_home'),
         ('RFQs and evaluation', 'erp.rfqs_list'),
         ('Vendors', 'erp.vendors_list'),
@@ -117,9 +118,10 @@ def section_staff():
 @login_required
 @_staff_required
 def section_program_core():
-    return render_template('ops_section.html', title='Program Core', intro='Learning data, learning report, program report, PowerPoint and the public homepage.', links=[
+    return render_template('ops_section.html', title='Program Core', intro='Learning data, learning report, client feedback, program report, PowerPoint and the public homepage.', links=[
         ('Learning data', 'learning_hub'),
         ('Learning report', 'learning_report_dashboard'),
+        ('Client feedback', 'client_feedback_hub'),
         ('Public homepage editor', 'admin_homepage_editor'),
         ('Report sample data', 'admin_sample_data'),
         ('Branding and logo', 'admin_branding'),

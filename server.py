@@ -2978,6 +2978,11 @@ def expense_finance_review(eid):
     er.finance_reviewer_id = current_user.id
     er.finance_reviewed_at = datetime.utcnow()
     if request.form.get('decision') == 'approve':
+        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id'):
+            flash('Select debit and credit accounts, plus project, expense and budget codes.', 'danger')
+            return redirect(url_for('expense_detail', eid=eid))
+        from fmss_align import save_coding, read_coding
+        save_coding('expense_request', er.id, read_coding())
         er.status = 'finance_review'
         flash('Cleared for Project Manager approval.', 'success')
     else:
@@ -3035,8 +3040,22 @@ def expense_mark_paid(eid):
         created_by=current_user.id,
     ))
     try:
-        from finance_core import post_legacy_expense
-        post_legacy_expense(er)
+        from fmss_align import get_coding
+        from finance_core import post_journal
+        coding = get_coding('expense_request', er.id)
+        if coding and coding.debit_account_id and coding.credit_account_id:
+            full = er.amount
+            paid = full if (coding.pay_mode or 'full') == 'full' else coding.pay_amount
+            lines = [
+                {'account_id': coding.debit_account_id, 'debit': full, 'credit': 0, 'project_id': coding.project_id, 'expense_code_id': coding.expense_code_id, 'budget_code_id': coding.budget_code_id, 'description': er.description},
+                {'account_id': coding.credit_account_id, 'debit': 0, 'credit': paid, 'project_id': coding.project_id, 'expense_code_id': coding.expense_code_id, 'budget_code_id': coding.budget_code_id, 'description': er.description},
+            ]
+            if (coding.pay_mode or 'full') == 'part' and coding.payable_account_id:
+                lines.append({'account_id': coding.payable_account_id, 'debit': 0, 'credit': full - paid, 'description': 'Unpaid balance'})
+            post_journal(lines, er.description, 'expense_request', er.id)
+        else:
+            from finance_core import post_legacy_expense
+            post_legacy_expense(er)
     except Exception as fin_exc:
         print('finance post:', fin_exc)
     db.session.commit()
@@ -4764,6 +4783,13 @@ try:
     print('Ops upgrade registered (/ops/inventory, /ops/procurement, /ops/bank, /ops/privileges)')
 except Exception as _ops_boot:
     print('Ops upgrade boot:', _ops_boot)
+
+try:
+    from workflow_upgrade import init_workflow_upgrade
+    init_workflow_upgrade(app, db)
+    print('Workflow upgrade registered (/ops/rfq, /ops/cash-recon)')
+except Exception as _wf_boot:
+    print('Workflow upgrade boot:', _wf_boot)
 
 application = app  # WSGI alias for gunicorn / Render
 
