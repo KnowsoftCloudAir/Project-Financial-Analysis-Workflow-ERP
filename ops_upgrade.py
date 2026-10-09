@@ -1107,11 +1107,32 @@ def bank_recon():
             accounts = finance_core.FinAccount.query.order_by(finance_core.FinAccount.code).all()
     except Exception:
         accounts = []
-    ws = BankWorkspace.query.order_by(BankWorkspace.id.desc()).first()
+    try:
+        ws = BankWorkspace.query.order_by(BankWorkspace.id.desc()).first()
+    except Exception:
+        try:
+            db.create_all()
+        except Exception:
+            pass
+        ws = None
     if not ws:
-        ws = BankWorkspace(start_date=date.today().replace(day=1), end_date=date.today())
-        db.session.add(ws)
-        db.session.commit()
+        try:
+            ws = BankWorkspace(start_date=date.today().replace(day=1), end_date=date.today())
+            db.session.add(ws)
+            db.session.commit()
+        except Exception:
+            # Fallback plain object so template still renders
+            class _WS:
+                account_code = ''
+                start_date = date.today().replace(day=1)
+                end_date = date.today()
+                bank_balance = 0
+                unpresented = direct_deposits = interest_credited = 0
+                cashbook_errors_add = other_additions = 0
+                uncleared_deposits = bank_charges = standing_orders = 0
+                dishonoured = cashbook_errors_less = other_deductions = 0
+                prepared_by = reviewed_by = ''
+            ws = _WS()
     if request.method == 'POST' and user_has(current_user, 'bank.reconcile'):
         ws.account_code = request.form.get('account_code') or ws.account_code
         if request.form.get('start_date'):
@@ -1165,12 +1186,25 @@ def bank_recon():
         company = _company()
     except Exception:
         company = {'name': 'CONTRAconnect', 'address': ''}
-    return render_template(
-        'ops_bank.html', accounts=accounts or [], ws=ws, chosen=chosen, view=view or [],
-        book=book, additions=additions, deductions=deductions, adjusted=adjusted,
-        outstanding=outstanding, uncleared_net=uncleared_net, difference=difference,
-        company=company,
-    )
+    try:
+        return render_template(
+            'ops_bank.html', accounts=accounts or [], ws=ws, chosen=chosen, view=view or [],
+            book=book, additions=additions, deductions=deductions, adjusted=adjusted,
+            outstanding=outstanding, uncleared_net=uncleared_net, difference=difference,
+            company=company,
+        )
+    except Exception as e:
+        try:
+            current_app.logger.exception('bank template: %s', e)
+        except Exception:
+            pass
+        flash('Bank reconciliation opened with limited data. Check chart of accounts includes a Cash account.', 'warning')
+        return render_template(
+            'ops_bank.html', accounts=accounts or [], ws=ws, chosen=None, view=[],
+            book=0, additions=0, deductions=0, adjusted=0,
+            outstanding=[], uncleared_net=0, difference=0,
+            company=company if 'company' in dir() else {'name': 'CONTRAconnect', 'address': ''},
+        )
 
 
 def _bank_pdf_bytes():

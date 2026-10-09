@@ -10,7 +10,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, redirect, url_for, flash, request,
-    jsonify, abort, session, send_file
+    jsonify, abort, session, send_file, current_app
 )
 from io import BytesIO
 from openpyxl import Workbook
@@ -2880,10 +2880,18 @@ def expense_list():
     if current_user.role == 'provider':
         flash('Expense claims are for programme staff.', 'warning')
         return redirect(url_for('provider_dashboard'))
-    q = ExpenseRequest.query.order_by(ExpenseRequest.created_at.desc())
-    if not (_can_review_expense(current_user) or _can_approve_expense_pm(current_user)):
-        q = q.filter_by(requester_id=current_user.id)
-    items = q.limit(200).all()
+    try:
+        q = ExpenseRequest.query.order_by(ExpenseRequest.created_at.desc())
+        if not (_can_review_expense(current_user) or _can_approve_expense_pm(current_user)):
+            q = q.filter_by(requester_id=current_user.id)
+        items = q.limit(200).all()
+    except Exception as e:
+        try:
+            current_app.logger.exception('expense_list: %s', e)
+        except Exception:
+            pass
+        items = []
+        flash('Expense register could not load fully. If this continues, ask an administrator to check the database.', 'warning')
     return render_template('expense_list.html', items=items)
 
 
