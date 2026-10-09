@@ -35,6 +35,14 @@
                         <input type="text" name="org_line" class="form-control" value="{{ brand.org_line }}">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">Official address (report cover)</label>
+                        <textarea name="official_address" class="form-control" rows="2">{{ brand.official_address }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">YouTube link (report cover)</label>
+                        <input type="url" name="youtube_url" class="form-control" value="{{ brand.youtube_url }}" placeholder="https://www.youtube.com/...">
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Report logo (UNDP or partner logo)</label>
                         <input type="file" name="logo" class="form-control" accept="image/*">
                         {% if brand.logo_path %}
