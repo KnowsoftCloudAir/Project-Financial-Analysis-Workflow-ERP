@@ -117,10 +117,9 @@ def section_staff():
 @login_required
 @_staff_required
 def section_program_core():
-    return render_template('ops_section.html', title='Program Core', intro='Learning data, learning report, client feedback, program report, PowerPoint and the public homepage.', links=[
+    return render_template('ops_section.html', title='Program Core', intro='Learning data, learning report, program report, PowerPoint and the public homepage.', links=[
         ('Learning data', 'learning_hub'),
         ('Learning report', 'learning_report_dashboard'),
-        ('Client feedback', 'client_feedback_hub'),
         ('Public homepage editor', 'admin_homepage_editor'),
         ('Report sample data', 'admin_sample_data'),
         ('Branding and logo', 'admin_branding'),

@@ -903,21 +903,14 @@ def bank_recon():
     deductions = _d(ws.uncleared_deposits) + _d(ws.bank_charges) + _d(ws.standing_orders) + _d(ws.dishonoured) + _d(ws.cashbook_errors_less) + _d(ws.other_deductions)
     adjusted = _d(ws.bank_balance) + additions - deductions
     outstanding = [r for r in view if not (r['tick'] and r['tick'].ticked)]
-    # Net of unticked lines (debit - credit) — used for live difference
-    uncleared_net = sum((_d(r['debit']) - _d(r['credit']) for r in outstanding), Decimal('0'))
-    # Difference: bank statement vs cashbook after removing unticked items
-    difference = _d(ws.bank_balance) - (book - uncleared_net)
     return render_template(
         'ops_bank.html', accounts=accounts, ws=ws, chosen=chosen, view=view, book=book,
         additions=additions, deductions=deductions, adjusted=adjusted, outstanding=outstanding,
-        uncleared_net=uncleared_net, difference=difference,
         company=_company(),
     )
 
 
 def _bank_pdf_bytes():
-    from reportlab.platypus import Image as RLImage
-    import os
     ws = BankWorkspace.query.order_by(BankWorkspace.id.desc()).first()
     chosen, view = _bank_lines(ws.account_code if ws else '', ws.start_date if ws else None, ws.end_date if ws else None)
     company = _company()
@@ -925,27 +918,8 @@ def _bank_pdf_bytes():
     doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=28, bottomMargin=20)
     styles = getSampleStyleSheet()
     story = []
-    # Letterhead logo if available
-    logo_path = _logo_path() if '_logo_path' in dir() else None
-    try:
-        from facility_flow import _logo_file
-        logo_path = _logo_file()
-    except Exception:
-        logo_path = None
-    if not logo_path:
-        for rel in ('static/branding/knowsoft_logo.png', 'static/branding/app_logo_default.png'):
-            p = os.path.join(current_app.root_path, rel)
-            if os.path.exists(p):
-                logo_path = p
-                break
-    if logo_path and os.path.exists(logo_path):
-        try:
-            story.append(RLImage(logo_path, width=90, height=40))
-            story.append(Spacer(1, 6))
-        except Exception:
-            pass
     story.append(Paragraph(f"<b>{company['name']}</b>", styles['Title']))
-    story.append(Paragraph(company.get('address') or '', styles['Normal']))
+    story.append(Paragraph(company['address'], styles['Normal']))
     story.append(Spacer(1, 8))
     story.append(Paragraph('<b>BANK RECONCILIATION STATEMENT</b>', styles['Heading2']))
     story.append(Spacer(1, 8))
