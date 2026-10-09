@@ -10,22 +10,8 @@
     body { background: #f0fdfa; min-height: 100vh; }
     .star-rating { font-size: 1.75rem; cursor: pointer; color: #cbd5e1; }
     .star-rating .bi-star-fill { color: #f59e0b; }
-    .service-card { background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; }
+    .service-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; }
     .header-bar { background: linear-gradient(135deg,#0d9488,#0f766e); color: #fff; }
-    .badge-pill {
-      display: inline-flex; align-items: center; gap: 0.4rem;
-      padding: 0.4rem 0.9rem; border-radius: 999px; font-weight: 700; font-size: 0.9rem;
-    }
-    .badge-diamond { background: linear-gradient(135deg,#a5b4fc,#6366f1); color: #fff; }
-    .badge-gold { background: linear-gradient(135deg,#fcd34d,#d97706); color: #fff; }
-    .badge-silver { background: linear-gradient(135deg,#e2e8f0,#94a3b8); color: #1e293b; }
-    .badge-bronze { background: linear-gradient(135deg,#fdba74,#c2410c); color: #fff; }
-    .badge-progress { background: linear-gradient(135deg,#6ee7b7,#0d9488); color: #fff; }
-    .code-box {
-      font-family: ui-monospace, monospace; font-size: 1.4rem; font-weight: 800;
-      letter-spacing: 0.08em; color: #0d9488; background: #f0fdfa;
-      border: 2px dashed #0d9488; border-radius: 12px; padding: 0.6rem 1rem;
-    }
   </style>
 </head>
 <body>
@@ -46,89 +32,16 @@
       {% endif %}
     {% endwith %}
 
-    {% if ambassador %}
-    <!-- Returning Health Ambassador portal -->
-    <div class="service-card p-4 shadow-sm mb-4 text-center">
-      <div class="mb-2">
-        {% set b = ambassador.badge or 'none' %}
-        {% if b == 'diamond' %}<span class="badge-pill badge-diamond"><i class="bi bi-gem"></i> Diamond Health Ambassador</span>
-        {% elif b == 'gold' %}<span class="badge-pill badge-gold"><i class="bi bi-trophy"></i> Gold Health Ambassador</span>
-        {% elif b == 'silver' %}<span class="badge-pill badge-silver"><i class="bi bi-award"></i> Silver Health Ambassador</span>
-        {% elif b == 'bronze' %}<span class="badge-pill badge-bronze"><i class="bi bi-award"></i> Bronze Health Ambassador</span>
-        {% elif b == 'in_progress' %}<span class="badge-pill badge-progress"><i class="bi bi-lightning"></i> Health Ambassador in progress</span>
-        {% else %}<span class="badge-pill badge-progress">Start referring to earn badges</span>{% endif %}
-      </div>
-      <p class="mb-1 text-muted small">Your unique code</p>
-      <div class="code-box mb-2">{{ ambassador.client_code }}</div>
-      <p class="mb-3">You have referred <strong>{{ ambassador.referral_count or 0 }}</strong> client{{ 's' if (ambassador.referral_count or 0) != 1 else '' }}.</p>
-      <div class="progress mb-3" style="height:10px">
-        {% set cnt = ambassador.referral_count or 0 %}
-        {% set pct = 10 if cnt < 100 else (100 if cnt >= 5000 else (cnt / 50 if cnt < 500 else (cnt / 10 if cnt < 1000 else min(100, cnt / 50)))) %}
-        <div class="progress-bar bg-success" style="width: {{ [cnt, 100]|min if cnt < 100 else 100 }}%"></div>
-      </div>
-      <p class="small text-muted mb-3">
-        Bronze at 100 · Silver at 500 · Gold at 1,000 · Diamond at 5,000 referrals
-      </p>
-      {% set share = url_for('client_feedback', ref=ambassador.client_code, _external=True) %}
-      <div class="input-group mb-2">
-        <input type="text" class="form-control" id="shareLinkAmb" value="{{ share }}" readonly>
-        <button class="btn btn-success" type="button" onclick="copyText('shareLinkAmb')">
-          <i class="bi bi-clipboard"></i> Copy &amp; share
-        </button>
-      </div>
-      <a href="{{ url_for('client_feedback') }}" class="btn btn-outline-secondary btn-sm mt-2">Submit new feedback</a>
-    </div>
-    {% endif %}
-
     {% if submitted %}
-    <div class="card border-0 shadow text-center p-4">
+    <div class="card border-0 shadow text-center p-5">
       <div style="font-size:3rem;color:#0d9488">✓</div>
-      <h2 class="h4 mt-2">Thank you!</h2>
-      <p class="text-muted mb-3">Your feedback has been received.</p>
-      <p class="small text-muted mb-1">Your unique client code</p>
-      <div class="code-box mb-3">{{ client_code }}</div>
-      <p class="small mb-3">Share this link so others can give feedback — and you earn Health Ambassador progress when they register with your code:</p>
-      <div class="input-group mb-2">
-        <input type="text" class="form-control" id="shareLinkNew" value="{{ share_url }}" readonly>
-        <button class="btn btn-success" type="button" onclick="copyText('shareLinkNew')">
-          <i class="bi bi-clipboard"></i> Copy link
-        </button>
-      </div>
-      <p class="small text-muted mt-2">Your personal status page:</p>
-      <div class="input-group mb-3">
-        <input type="text" class="form-control form-control-sm" id="myLink" value="{{ my_url }}" readonly>
-        <button class="btn btn-outline-primary btn-sm" type="button" onclick="copyText('myLink')">Copy</button>
-      </div>
-      <a href="{{ url_for('client_feedback') }}" class="btn btn-outline-success">Submit another response</a>
+      <h2 class="h4 mt-2">Submitted. Thank you!</h2>
+      <p class="text-muted">Your feedback has been received. We appreciate you taking the time to help improve services.</p>
+      <a href="{{ url_for('client_feedback') }}" class="btn btn-outline-success mt-2">Submit another response</a>
     </div>
-    {% elif not ambassador %}
+    {% else %}
 
     <form method="post" class="service-card p-4 shadow-sm">
-      <!-- FIRST: What would you like to do? -->
-      <div class="mb-3">
-        <label class="form-label fw-semibold">What would you like to do?</label>
-        <select name="request_type" class="form-select" id="request_type" onchange="toggleAppt()">
-          <option value="feedback_only">Give feedback only</option>
-          <option value="request_service">Request a service</option>
-          <option value="request_appointment">Request an appointment</option>
-        </select>
-      </div>
-
-      <div id="appt_fields" class="mb-3 d-none border rounded p-3 bg-light">
-        <label class="form-label small">Preferred date</label>
-        <input type="date" name="preferred_date" class="form-control mb-2">
-        <label class="form-label small">Preferred time (optional)</label>
-        <input type="time" name="preferred_time" class="form-control mb-2">
-        <label class="form-label small">Service requested</label>
-        <select name="requested_service" class="form-select">
-          <option value="">— Select —</option>
-          {% for svc in services %}
-          <option value="{{ svc }}">{{ svc }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <hr>
       <h2 class="h6 text-muted mb-3">About you (optional)</h2>
       <div class="row g-2 mb-3">
         <div class="col-md-6">
@@ -142,38 +55,13 @@
       </div>
 
       <div class="mb-3">
-        <label class="form-label small fw-semibold">Kiosk / PHC where service was or will be received</label>
+        <label class="form-label small fw-semibold">Kiosk / service point</label>
         <select name="facility_id" class="form-select">
           <option value="">— Select if known —</option>
           {% for f in facilities %}
-          <option value="{{ f.id }}">{{ f.name }}{% if f.type %} ({{ f.type }}){% endif %}</option>
+          <option value="{{ f.id }}">{{ f.name }} ({{ f.type }})</option>
           {% endfor %}
         </select>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label small fw-semibold">Name of service provider</label>
-        <input type="text" name="provider_name" class="form-control" placeholder="Provider / counsellor name">
-      </div>
-
-      <div class="row g-2 mb-3">
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold">Commodity / method received</label>
-          <select name="commodity" class="form-select">
-            <option value="">— Select —</option>
-            {% for p in products %}
-            <option value="{{ p.name }}">{{ p.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label small">Quantity</label>
-          <input type="text" name="quantity" class="form-control" placeholder="e.g. 1">
-        </div>
-        <div class="col-md-3">
-          <label class="form-label small">Date of service</label>
-          <input type="date" name="service_date" class="form-control">
-        </div>
       </div>
 
       <hr>
@@ -199,57 +87,50 @@
       </div>
 
       <div class="mb-3">
-        <label class="form-label small fw-semibold">Did you refer this service to someone else?</label>
-        <select name="referred_someone" class="form-select" id="referred_someone" onchange="toggleRefCount()">
-          <option value="no">No</option>
-          <option value="yes">Yes</option>
+        <label class="form-label small fw-semibold">What would you like to do?</label>
+        <select name="request_type" class="form-select" id="request_type" onchange="toggleAppt()">
+          <option value="feedback_only">Feedback only</option>
+          <option value="request_service">Request a service</option>
+          <option value="request_appointment">Request an appointment</option>
         </select>
       </div>
-      <div class="mb-3 d-none" id="ref_count_box">
-        <label class="form-label small">How many persons did you refer?</label>
-        <input type="number" name="referred_count" class="form-control" min="1" value="1">
+
+      <div id="appt_fields" class="mb-3 d-none">
+        <label class="form-label small">Preferred date</label>
+        <input type="date" name="preferred_date" class="form-control mb-2">
+        <label class="form-label small">Preferred time (optional)</label>
+        <input type="time" name="preferred_time" class="form-control mb-2">
+        <label class="form-label small">Service requested</label>
+        <select name="requested_service" class="form-select">
+          <option value="">— Select —</option>
+          {% for svc in services %}
+          <option value="{{ svc }}">{{ svc }}</option>
+          {% endfor %}
+        </select>
       </div>
 
-      <div class="mb-3">
-        <label class="form-label small fw-semibold">Referral code (if someone shared their code with you)</label>
-        <input type="text" name="referrer_code" class="form-control text-uppercase"
-               value="{{ ref_code or '' }}" placeholder="e.g. HC-AB12CD">
-        <div class="form-text">If you were referred, enter their code so they earn Health Ambassador progress.</div>
-      </div>
-
-      <button type="submit" class="btn btn-success w-100 btn-lg">
-        <i class="bi bi-send"></i> Submit
+      <button type="submit" class="btn btn-success w-100" style="background:#0d9488;border-color:#0d9488">
+        Submit feedback
       </button>
     </form>
     {% endif %}
+
+    <p class="text-center small text-muted mt-4">Powered by CONTRAconnect · Knowsoft</p>
   </div>
 
   <script>
   function toggleAppt() {
-    const v = document.getElementById('request_type')?.value;
-    const box = document.getElementById('appt_fields');
-    if (box) box.classList.toggle('d-none', v === 'feedback_only');
+    var v = document.getElementById('request_type').value;
+    document.getElementById('appt_fields').classList.toggle('d-none', v === 'feedback_only');
   }
-  function toggleRefCount() {
-    const v = document.getElementById('referred_someone')?.value;
-    const box = document.getElementById('ref_count_box');
-    if (box) box.classList.toggle('d-none', v !== 'yes');
-  }
-  function copyText(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.select();
-    navigator.clipboard?.writeText(el.value);
-    alert('Copied to clipboard');
-  }
-  document.querySelectorAll('.star-rating').forEach(group => {
-    const idx = group.dataset.service;
-    group.querySelectorAll('i').forEach(star => {
-      star.addEventListener('click', () => {
-        const val = parseInt(star.dataset.value, 10);
+  document.querySelectorAll('.star-rating').forEach(function(wrap) {
+    var idx = wrap.dataset.service;
+    wrap.querySelectorAll('i').forEach(function(star) {
+      star.addEventListener('click', function() {
+        var val = parseInt(this.dataset.value, 10);
         document.getElementById('rating_' + idx).value = val;
-        group.querySelectorAll('i').forEach(s => {
-          const v = parseInt(s.dataset.value, 10);
+        wrap.querySelectorAll('i').forEach(function(s) {
+          var v = parseInt(s.dataset.value, 10);
           s.className = v <= val ? 'bi bi-star-fill' : 'bi bi-star';
         });
       });
