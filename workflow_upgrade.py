@@ -144,7 +144,7 @@ def amount_words(amount):
 
 def _staff():
     return db.session.execute(text(
-        "SELECT id, full_name, email, role FROM users WHERE role != 'provider' AND is_active = 1 ORDER BY full_name"
+        "SELECT id, full_name, email, role FROM users WHERE role != 'provider' AND (is_active IS TRUE OR is_active = 1) ORDER BY full_name"
     )).mappings().all()
 
 
@@ -170,7 +170,7 @@ def _budgets(expense_id=None):
 
 def _accounts():
     return db.session.execute(text(
-        'SELECT id, code, name, account_type FROM fin_accounts WHERE is_active = 1 ORDER BY code'
+        'SELECT id, code, name, account_type FROM fin_accounts WHERE (is_active IS TRUE OR is_active = 1) ORDER BY code'
     )).mappings().all()
 
 

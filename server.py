@@ -4822,6 +4822,85 @@ try:
 except Exception as _wf_boot:
     print('Workflow upgrade boot:', _wf_boot)
 
+
+# ---------------------------------------------------------------------------
+# Branded error pages (CONTRAconnect) — never show a bare stack / blank page
+# ---------------------------------------------------------------------------
+def _render_error(code, title, message):
+    try:
+        return render_template(
+            'error.html',
+            code=code,
+            title=title,
+            message=message,
+        ), code
+    except Exception:
+        # Absolute last resort if template itself fails
+        body = (
+            f'<!DOCTYPE html><html><head><title>{code}</title></head><body style='
+            f'"font-family:system-ui;text-align:center;padding:3rem">'
+            f'<h1>{code}</h1><p>{title}</p><p>{message}</p>'
+            f'<p><a href="javascript:history.back()">Go back</a> · '
+            f'<a href="/">Home</a></p></body></html>'
+        )
+        return body, code
+
+
+@app.errorhandler(403)
+def error_403(e):
+    return _render_error(
+        403,
+        'Access denied',
+        'You do not have permission to view this page. Sign in with an authorised account, or go back to the previous screen.',
+    )
+
+
+@app.errorhandler(404)
+def error_404(e):
+    return _render_error(
+        404,
+        'Page not found',
+        'The page or resource you asked for is not available. Check the address, or use the button below to go back.',
+    )
+
+
+@app.errorhandler(405)
+def error_405(e):
+    return _render_error(
+        405,
+        'Method not allowed',
+        'This action is not supported on this page. Please go back and try another option.',
+    )
+
+
+@app.errorhandler(500)
+def error_500(e):
+    return _render_error(
+        500,
+        'Unexpected error',
+        'Something went wrong while processing your request. Your data is safe — go back and try again, or contact your administrator if it continues.',
+    )
+
+
+@app.errorhandler(Exception)
+def error_unhandled(e):
+    # Log-friendly; still show branded page in production
+    try:
+        current_app.logger.exception('Unhandled error: %s', e)
+    except Exception:
+        pass
+    code = getattr(e, 'code', None) or 500
+    if code == 403:
+        return error_403(e)
+    if code == 404:
+        return error_404(e)
+    return _render_error(
+        500,
+        'Unexpected error',
+        'Something went wrong while processing your request. Please go back and try again.',
+    )
+
+
 application = app  # WSGI alias for gunicorn / Render
 
 

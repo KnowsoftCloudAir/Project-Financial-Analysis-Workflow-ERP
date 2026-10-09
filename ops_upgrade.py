@@ -390,11 +390,23 @@ def _progress(award):
 @login_required
 @_staff_required
 def inventory_home():
-    facilities = _rows('SELECT id, name, facility_type FROM facilities ORDER BY name')
-    products = _rows('SELECT id, name, unit FROM products WHERE is_active = 1 ORDER BY name')
-    tx = _rows(
-        'SELECT facility_id, product_id, transaction_type, quantity, notes, reference FROM stock_transactions'
-    )
+    try:
+        facilities = _rows('SELECT id, name, facility_type FROM facilities ORDER BY name')
+    except Exception:
+        facilities = []
+    try:
+        products = _rows('SELECT id, name, unit FROM products WHERE (is_active IS TRUE OR is_active = 1) ORDER BY name')
+    except Exception:
+        try:
+            products = _rows('SELECT id, name, unit FROM products ORDER BY name')
+        except Exception:
+            products = []
+    try:
+        tx = _rows(
+            'SELECT facility_id, product_id, transaction_type, quantity, notes, reference FROM stock_transactions'
+        )
+    except Exception:
+        tx = []
     def _kind(fac):
         name = (fac.get('name') or '').lower()
         ftype = (fac.get('facility_type') or '').lower()
@@ -1167,16 +1179,25 @@ def bank_excel():
 def budget_template():
     import finance_core
     project_id = request.args.get('project_id', type=int)
-    projects = finance_core.FinProject.query.order_by(finance_core.FinProject.code).all()
-    q = finance_core.FinBudgetCode.query
-    if project_id:
-        q = q.filter_by(project_id=project_id)
-    rows = q.order_by(finance_core.FinBudgetCode.code).all()
-    actual = finance_core.project_actuals()
+    try:
+        projects = finance_core.FinProject.query.order_by(finance_core.FinProject.code).all()
+    except Exception:
+        projects = []
+    try:
+        q = finance_core.FinBudgetCode.query
+        if project_id:
+            q = q.filter_by(project_id=project_id)
+        rows = q.order_by(finance_core.FinBudgetCode.code).all()
+    except Exception:
+        rows = []
+    try:
+        actual = finance_core.project_actuals()
+    except Exception:
+        actual = {}
     pack = []
     for b in rows:
         spent = actual.get((b.project_id, b.id, b.expense_code_id), Decimal('0'))
-        pack.append({'budget': b, 'spent': spent, 'variance': _d(b.amount) - spent})
+        pack.append({'budget': b, 'spent': spent, 'variance': _d(getattr(b, 'amount', 0)) - spent})
     return render_template('ops_budget_template.html', projects=projects, rows=pack, project_id=project_id)
 
 
