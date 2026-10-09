@@ -1097,8 +1097,9 @@ def _bank_lines(account_code, start, end):
 @login_required
 @_staff_required
 def bank_recon():
-    """Restored FMSS-style bank reconciliation: tick lines, bank vs cash book, PDF/Excel."""
-    import finance_core
+    """Redirect to the working Cash reconciliation (permanent ticks, difference formula)."""
+    return redirect(url_for('wf.cash_recon'))
+    import finance_core  # noqa: unreachable kept for reference
     try:
         accounts = finance_core.FinAccount.query.filter(
             finance_core.FinAccount.account_type.in_(('Cash', 'cash', 'Asset', 'Current asset'))
