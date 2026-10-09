@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Procurement{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page">
+  <div class="p-3 mb-3 text-white" style="background:#1a6b9a;border-radius:12px">
+    <h3 class="mb-1">Procurement</h3>
+    <p class="mb-0">RFQ first, as in FMSS. Committee scores quotes. Technical below 50% does not move to financial. Award creates the contract for the winning vendor, then the officer sends the invoice into finance.</p>
+  </div>
+  <div class="d-flex gap-2 mb-3"><a class="btn btn-primary" href="{{ url_for('wf.rfq_new') }}">New RFQ</a></div>
+  <div class="card mb-3"><div class="card-header">RFQs</div><div class="table-responsive"><table class="table mb-0">
+    <thead><tr><th>RFQ</th><th>Title</th><th>Lot</th><th>Debit</th><th>Credit</th><th>Status</th><th></th></tr></thead>
+    <tbody>{% for r in rows %}<tr>
+      <td>{{ r.rfq_no }}</td><td>{{ r.title }}</td><td>{{ r.lot or '' }}</td><td>{{ r.debit_account_id or '—' }}</td><td>{{ r.credit_account_id or '—' }}</td><td>{{ r.status }}</td>
+      <td><a href="{{ url_for('wf.rfq_detail', rid=r.id) }}">Open</a></td>
+    </tr>{% else %}<tr><td colspan="7">No RFQ yet.</td></tr>{% endfor %}</tbody>
+  </table></div></div>
+  <div class="card"><div class="card-header">Active purchase / contracts</div><div class="table-responsive"><table class="table mb-0">
+    <thead><tr><th>RFQ</th><th>Vendor</th><th>Amount</th><th>Progress</th></tr></thead>
+    <tbody>{% for a in active %}<tr><td>{{ a.rfq.rfq_no }}</td><td>{{ a.submission.vendor_name }}</td><td>{{ '{:,.2f}'.format(a.submission.total_amount) }}</td><td>{{ a.progress }}%</td></tr>{% else %}<tr><td colspan="4">No active contract.</td></tr>{% endfor %}</tbody>
+  </table></div></div>
+  {% if mine %}<div class="alert alert-warning mt-3">{{ mine|length }} RFQ(s) waiting for your review.</div>{% endif %}
+</div>
+{% endblock %}
