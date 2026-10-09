@@ -1,71 +1,66 @@
 {% extends "base.html" %}
-{% block title %}Inventory position{% endblock %}
+{% block title %}Inventory by service unit{% endblock %}
 {% block extra_css %}
 <style>
-  .sheet { overflow-x: auto; }
-  .sheet table { min-width: 980px; font-size: .9rem; }
-  .sheet th { white-space: normal; background: #1a6b9a; color: #fff; }
-  .wh { border-left: 4px solid #0f766e; }
-  .fac { border-left: 4px solid #1d4ed8; }
+  .unit-sheet { overflow-x: auto; background: #fff; }
+  .unit-sheet table { min-width: 1100px; font-size: .92rem; }
+  .unit-sheet th { background: #0f4c6e; color: #fff; white-space: normal; }
+  .warehouse { border-top: 6px solid #0f766e; }
+  .kiosk { border-top: 6px solid #b45309; }
+  .phc { border-top: 6px solid #1d4ed8; }
+  @media print {
+    @page { size: A4 landscape; margin: 10mm; }
+    .no-print { display: none; }
+    .unit-sheet { break-after: page; }
+  }
 </style>
 {% endblock %}
 {% block content %}
 <div class="container-fluid py-3 wrap-page">
-  <h3>Inventory position</h3>
-  <p class="text-muted">Warehouse first, then each facility on its own sheet. Facility officers and approving officers can update usage as it happens.</p>
-  {% for block in sheets %}
-  <div class="card mb-4 {{ 'wh' if block.warehouse else 'fac' }}">
-    <div class="card-header"><strong>{{ block.name }}</strong> · {{ 'Main warehouse' if block.warehouse else 'Facility' }}</div>
-    <div class="sheet">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div>
+      <h3 class="mb-0">Inventory by service unit</h3>
+      <p class="text-muted mb-0">Main warehouse first, then the kiosks and PHCs it supplies. Each outlet is its own landscape sheet.</p>
+    </div>
+    <button class="btn btn-outline-secondary no-print" onclick="window.print()">Print landscape</button>
+  </div>
+  {% for group in groups %}
+    <h4 class="mt-3">{{ group.title }}</h4>
+    {% for block in group.sheets %}
+    <div class="card mb-3 unit-sheet {{ block.kind }}">
+      <div class="card-header"><strong>{{ block.name }}</strong> · {{ block.kind_label }}</div>
       <table class="table mb-0">
         {% if block.warehouse %}
-        <thead><tr><th>Commodity</th><th>Opening qty</th><th>Qty received</th><th>Qty dispatched</th><th>Facility dispatched to</th><th>Qty balance</th></tr></thead>
-        <tbody>
-          {% for line in block.lines %}
-          <tr>
-            <td>{{ line.product }}</td>
-            <td>{{ line.opening }}</td>
-            <td>{{ line.received }}</td>
-            <td>{{ line.dispatched }}</td>
-            <td>{{ line.destinations or '—' }}</td>
-            <td>{{ line.balance }}</td>
-          </tr>
-          {% else %}<tr><td colspan="6">No commodities yet.</td></tr>{% endfor %}
-        </tbody>
+        <thead><tr><th>Commodity</th><th>Opening qty</th><th>Qty received</th><th>Qty dispatched</th><th>Outlet dispatched to</th><th>Qty balance</th></tr></thead>
         {% else %}
-        <thead><tr><th>Commodity</th><th>Received qty</th><th>Administered qty</th><th>Transferred qty</th><th>Facility transferred to</th><th>Balance qty</th></tr></thead>
+        <thead><tr><th>Commodity</th><th>Received qty</th><th>Administered qty</th><th>Transferred qty</th><th>Outlet transferred to</th><th>Balance qty</th></tr></thead>
+        {% endif %}
         <tbody>
           {% for line in block.lines %}
           <tr>
             <td>{{ line.product }}</td>
+            {% if block.warehouse %}<td>{{ line.opening }}</td>{% endif %}
             <td>{{ line.received }}</td>
-            <td>{{ line.administered }}</td>
-            <td>{{ line.transferred }}</td>
+            <td>{{ line.dispatched if block.warehouse else line.administered }}</td>
+            {% if not block.warehouse %}<td>{{ line.transferred }}</td>{% endif %}
             <td>{{ line.destinations or '—' }}</td>
             <td>{{ line.balance }}</td>
           </tr>
-          {% else %}<tr><td colspan="6">No commodities yet.</td></tr>{% endfor %}
+          {% else %}<tr><td colspan="6">No commodities recorded for this outlet.</td></tr>{% endfor %}
         </tbody>
-        {% endif %}
       </table>
+      {% if can_update %}
+      <form method="post" action="{{ url_for('ops.inventory_usage') }}" class="card-body row g-2 no-print">
+        <input type="hidden" name="facility_id" value="{{ block.id }}">
+        <div class="col-md-3"><select class="form-select" name="product_id" required>{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><input class="form-control" name="quantity" type="number" min="0.01" step="0.01" placeholder="Qty" required></div>
+        <div class="col-md-2"><select class="form-select" name="kind">{% if block.warehouse %}<option value="receipt">Receive</option><option value="dispatch">Dispatch to outlet</option>{% else %}<option value="administer">Administer</option><option value="transfer">Transfer</option><option value="receipt">Receive</option>{% endif %}</select></div>
+        <div class="col-md-3"><select class="form-select" name="dest_facility_id"><option value="">Outlet</option>{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><button class="btn btn-primary">Update sheet</button></div>
+      </form>
+      {% endif %}
     </div>
-    {% if can_update %}
-    <form method="post" action="{{ url_for('ops.inventory_usage') }}" class="card-body row g-2">
-      <input type="hidden" name="facility_id" value="{{ block.id }}">
-      <div class="col-md-3"><select class="form-select" name="product_id" required>{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
-      <div class="col-md-2"><input class="form-control" name="quantity" type="number" min="0.01" step="0.01" placeholder="Qty" required></div>
-      <div class="col-md-3"><select class="form-select" name="kind">
-        {% if block.warehouse %}
-        <option value="receipt">Receive</option><option value="dispatch">Dispatch</option>
-        {% else %}
-        <option value="receipt">Receive</option><option value="administer">Administer</option><option value="transfer">Transfer</option>
-        {% endif %}
-      </select></div>
-      <div class="col-md-3"><select class="form-select" name="dest_facility_id"><option value="">Facility to</option>{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select></div>
-      <div class="col-md-1"><button class="btn btn-primary">Update</button></div>
-    </form>
-    {% endif %}
-  </div>
+    {% endfor %}
   {% endfor %}
 </div>
 {% endblock %}
