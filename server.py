@@ -137,6 +137,10 @@ def ensure_db():
         return
     try:
         db.create_all()
+        try:
+            _ensure_users_columns()
+        except Exception:
+            pass
     except Exception as e:
         try:
             app.logger.exception('create_all failed: %s', e)
@@ -1136,8 +1140,90 @@ def admin_homepage_editor():
 
 
 
+def _find_user_by_email(email):
+    """Load a user by email; tolerate missing optional columns on Postgres."""
+    email = (email or '').strip().lower()
+    if not email:
+        return None
+    try:
+        return User.query.filter_by(email=email).first()
+    except Exception as e:
+        try:
+            app.logger.warning('ORM user lookup failed, trying SQL: %s', e)
+        except Exception:
+            pass
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    # Raw fallback — only core columns required for login
+    try:
+        from sqlalchemy import text as _text
+        row = db.session.execute(
+            _text('SELECT id FROM users WHERE lower(email) = :e LIMIT 1'),
+            {'e': email},
+        ).first()
+        if row:
+            return db.session.get(User, int(row[0]))
+    except Exception as e2:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            app.logger.exception('SQL user lookup failed: %s', e2)
+        except Exception:
+            pass
+    return None
+
+
+def _ensure_users_columns():
+    """Add any missing optional columns on users (Postgres-safe)."""
+    needed = {
+        'staff_title': 'VARCHAR(120)',
+        'onboarding_status': "VARCHAR(30) DEFAULT 'active'",
+        'must_complete_onboarding': 'BOOLEAN DEFAULT FALSE',
+        'can_finance_review': 'BOOLEAN DEFAULT FALSE',
+        'can_pm_approve': 'BOOLEAN DEFAULT FALSE',
+        'can_pay_expenses': 'BOOLEAN DEFAULT FALSE',
+        'can_view_finance': 'BOOLEAN DEFAULT FALSE',
+        'can_download_financial': 'BOOLEAN DEFAULT FALSE',
+        'activation_code': 'VARCHAR(40)',
+        'profile_photo': 'VARCHAR(255)',
+        'phone': 'VARCHAR(40)',
+        'organization': 'VARCHAR(150)',
+        'role_confirmed': 'BOOLEAN DEFAULT FALSE',
+        'ethics_accepted': 'BOOLEAN DEFAULT FALSE',
+        'ethics_accepted_at': 'TIMESTAMP',
+        'onboarding_notes': 'TEXT',
+        'last_login_at': 'TIMESTAMP',
+        'password_changed_at': 'TIMESTAMP',
+        'facility_id': 'INTEGER',
+    }
+    try:
+        from sqlalchemy import text as _text, inspect as _inspect
+        cols = {c['name'] for c in _inspect(db.engine).get_columns('users')}
+    except Exception:
+        return
+    for name, decl in needed.items():
+        if name in cols:
+            continue
+        try:
+            db.session.execute(_text('ALTER TABLE users ADD COLUMN %s %s' % (name, decl)))
+            db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    try:
+        _ensure_users_columns()
+    except Exception:
+        pass
     try:
         if current_user.is_authenticated:
             return redirect(url_for('index'))
@@ -1146,24 +1232,27 @@ def login():
     if request.method == 'POST':
         email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password') or ''
-        user = None
-        try:
-            # Avoid boolean-filter issues across Postgres/SQLite — filter email then check active
-            user = User.query.filter_by(email=email).first()
-        except Exception as e:
+        user = _find_user_by_email(email)
+        if user is None and email:
+            # Distinct message only when lookup completely failed (table error)
+            # Re-check: if SQL can see the table at all
             try:
-                db.session.rollback()
-            except Exception:
-                pass
-            try:
-                app.logger.exception('login user query: %s', e)
-            except Exception:
-                pass
-            flash('Sign-in is temporarily unavailable. Please try again shortly.', 'danger')
-            try:
-                return render_template('login.html')
-            except Exception:
-                return redirect(url_for('index'))
+                from sqlalchemy import text as _text
+                db.session.execute(_text('SELECT 1 FROM users LIMIT 1')).first()
+            except Exception as e:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                try:
+                    app.logger.exception('users table unavailable: %s', e)
+                except Exception:
+                    pass
+                flash('Sign-in is temporarily unavailable. Database users table is not ready — wait for deploy to finish or check Railway logs.', 'danger')
+                try:
+                    return render_template('login.html')
+                except Exception:
+                    return redirect(url_for('index'))
         active = True
         if user is not None:
             try:
