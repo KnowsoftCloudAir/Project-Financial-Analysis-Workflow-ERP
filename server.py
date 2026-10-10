@@ -75,6 +75,32 @@ except ImportError:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'contraconnect-dev-secret-change-me')
 
+# --- Fix ERR_TOO_MANY_REDIRECTS behind Railway + Cloudflare ---
+# Trust proxy headers so request.is_secure / url_for work correctly over HTTPS
+try:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+except Exception:
+    pass
+
+# Session / remember cookies must be Secure + SameSite on HTTPS or the browser
+# drops them → login succeeds then next request looks anonymous → redirect loop
+_is_prod = bool(
+    os.environ.get('RAILWAY_ENVIRONMENT')
+    or os.environ.get('RENDER')
+    or os.environ.get('PUBLIC_BASE_URL', '').startswith('https://')
+    or os.environ.get('FORCE_HTTPS', '').lower() in ('1', 'true', 'yes')
+)
+app.config['PREFERRED_URL_SCHEME'] = 'https' if _is_prod else 'http'
+app.config['SESSION_COOKIE_SECURE'] = _is_prod
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_SECURE'] = _is_prod
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_NAME'] = 'cc_session'
+# ----------------------------------------------------------------
+
 # Database URL — prefer private Railway URL; fall back to public proxy URL
 _db_url = (
     os.environ.get('DATABASE_URL')
@@ -1317,7 +1343,14 @@ def login():
         pass
     try:
         if current_user.is_authenticated:
-            return redirect(url_for('index'))
+            # Already signed in — send to role home (avoids login↔index bounce)
+            status = getattr(current_user, 'onboarding_status', 'active') or 'active'
+            if status in ('pending_profile', 'pending_approval', 'rejected'):
+                return redirect(url_for('onboarding'))
+            try:
+                return redirect(url_for(_home_for_role(current_user.role)))
+            except Exception:
+                return redirect(url_for('index'))
     except Exception:
         pass
     if request.method == 'POST':
@@ -1430,8 +1463,11 @@ def login():
                 flash('Welcome.', 'success')
             if status in ('pending_profile', 'pending_approval'):
                 return redirect(url_for('onboarding'))
-            # Prefer role home; fall back to index
+            # Prefer safe ?next= then role home; fall back to index
             try:
+                nxt = (request.args.get('next') or request.form.get('next') or '').strip()
+                if nxt.startswith('/') and not nxt.startswith('//'):
+                    return redirect(nxt)
                 return redirect(url_for(_home_for_role(user.role)))
             except Exception:
                 return redirect(url_for('index'))
