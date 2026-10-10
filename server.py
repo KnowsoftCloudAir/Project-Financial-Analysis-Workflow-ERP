@@ -75,6 +75,32 @@ except ImportError:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'contraconnect-dev-secret-change-me')
 
+# --- Fix ERR_TOO_MANY_REDIRECTS behind Railway + Cloudflare ---
+# Trust proxy headers so request.is_secure / url_for work correctly over HTTPS
+try:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+except Exception:
+    pass
+
+# Session / remember cookies must be Secure + SameSite on HTTPS or the browser
+# drops them → login succeeds then next request looks anonymous → redirect loop
+_is_prod = bool(
+    os.environ.get('RAILWAY_ENVIRONMENT')
+    or os.environ.get('RENDER')
+    or os.environ.get('PUBLIC_BASE_URL', '').startswith('https://')
+    or os.environ.get('FORCE_HTTPS', '').lower() in ('1', 'true', 'yes')
+)
+app.config['PREFERRED_URL_SCHEME'] = 'https' if _is_prod else 'http'
+app.config['SESSION_COOKIE_SECURE'] = _is_prod
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_SECURE'] = _is_prod
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_NAME'] = 'cc_session'
+# ----------------------------------------------------------------
+
 # Database URL — prefer private Railway URL; fall back to public proxy URL
 _db_url = (
     os.environ.get('DATABASE_URL')
@@ -84,8 +110,13 @@ _db_url = (
 # Normalize schemes for SQLAlchemy
 if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
-# Prefer psycopg2 driver when available (Railway-friendly)
-if _db_url.startswith('postgresql://') and '+psycopg' not in _db_url:
+# Force psycopg2 driver. requirements.txt ships psycopg2-binary, NOT the
+# psycopg v3 package. URLs like postgresql+psycopg:// cause:
+#   ModuleNotFoundError: No module named 'psycopg'
+# and gunicorn worker fails to boot.
+if _db_url.startswith('postgresql+psycopg://'):
+    _db_url = _db_url.replace('postgresql+psycopg://', 'postgresql+psycopg2://', 1)
+elif _db_url.startswith('postgresql://') and '+psycopg2' not in _db_url:
     _db_url = _db_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -1019,6 +1050,11 @@ def index():
             if current_user.role == 'provider':
                 return redirect(url_for('provider_dashboard'))
             if _is_admin_role(current_user.role):
+                # Prefer dashboard, but never create a loop if it fails to render.
+                # ?stay=1 keeps authenticated staff on the public home shell.
+                if request.args.get('stay') in ('1', 'true', 'yes'):
+                    content = homepage_content()
+                    return render_template('public_home.html', content=content)
                 return redirect(url_for(_home_for_role(current_user.role)))
         content = homepage_content()
         return render_template('public_home.html', content=content)
@@ -1317,7 +1353,14 @@ def login():
         pass
     try:
         if current_user.is_authenticated:
-            return redirect(url_for('index'))
+            # Already signed in — send to role home (avoids login↔index bounce)
+            status = getattr(current_user, 'onboarding_status', 'active') or 'active'
+            if status in ('pending_profile', 'pending_approval', 'rejected'):
+                return redirect(url_for('onboarding'))
+            try:
+                return redirect(url_for(_home_for_role(current_user.role)))
+            except Exception:
+                return redirect(url_for('index'))
     except Exception:
         pass
     if request.method == 'POST':
@@ -1403,7 +1446,8 @@ def login():
                 flash('Your account registration was not approved. Contact the administrator.', 'danger')
                 return redirect(url_for('login'))
             try:
-                login_user(user, remember=True)
+                remember = request.form.get('remember') in ('on', '1', 'true', 'yes')
+                login_user(user, remember=remember)
             except Exception as e:
                 try:
                     app.logger.exception('login_user: %s', e)
@@ -1430,11 +1474,15 @@ def login():
                 flash('Welcome.', 'success')
             if status in ('pending_profile', 'pending_approval'):
                 return redirect(url_for('onboarding'))
-            # Prefer role home; fall back to index
+            # Prefer safe ?next= then role home; never fall back to index alone
+            # (index re-redirects admins to dashboard → loop if dashboard errors).
             try:
+                nxt = (request.args.get('next') or request.form.get('next') or '').strip()
+                if nxt.startswith('/') and not nxt.startswith('//'):
+                    return redirect(nxt)
                 return redirect(url_for(_home_for_role(user.role)))
             except Exception:
-                return redirect(url_for('index'))
+                return redirect('/dashboard')
         flash('Invalid email or password.', 'danger')
         try:
             log_activity('login_failed', email)
@@ -3927,12 +3975,14 @@ def main_dashboard():
             chart_proc=chart_proc,
         )
     except Exception as e:
+        # Never redirect to index (that caused ERR_TOO_MANY_REDIRECTS).
+        # Templates now use static paths so the real dashboard should render;
+        # if it still fails, send the user to the normal staff workspace.
         try:
             app.logger.exception('main_dashboard: %s', e)
         except Exception:
             pass
-        flash('Dashboard is temporarily limited. Use the menu to open Finance or Inventory.', 'warning')
-        return redirect(url_for('index'))
+        return redirect('/staff')
 
 
 @app.route('/dashboard/export/excel')
@@ -5300,12 +5350,14 @@ def db_health():
 @app.route('/upgrade-status')
 def upgrade_status():
     return (
-        'UPGRADE-2026-10-09\n'
+        'UPGRADE-2026-10-10-dashboard-render-fix\n'
         'finance-setup=/ops/sections/finance-setup\n'
         'financial-reports=/ops/sections/financial-reports\n'
         'rfq=/ops/rfq\n'
         'inventory-sheet=/ops/inventory\n'
-        'cash-recon=/ops/cash-recon\n',
+        'cash-recon=/ops/cash-recon\n'
+        'dashboard=/dashboard\n'
+        'fix=real-dashboard-no-temp-shell\n',
         200,
         {'Content-Type': 'text/plain; charset=utf-8'},
     )
