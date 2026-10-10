@@ -386,46 +386,260 @@ def _progress(award):
 # ---------------------------------------------------------------------------
 # Inventory — dedicated, linked to procurement, dispatch and finance
 # ---------------------------------------------------------------------------
+
 @ops_bp.route('/inventory')
 @login_required
 @_staff_required
 def inventory_home():
-    balances = _rows('''
-        SELECT f.name AS facility, p.name AS product, p.unit, p.unit_cost,
-               s.quantity_on_hand, s.reorder_level, s.facility_id, s.product_id,
-               (s.quantity_on_hand * p.unit_cost) AS value
-        FROM stock_items s
-        JOIN facilities f ON f.id = s.facility_id
-        JOIN products p ON p.id = s.product_id
-        ORDER BY f.name, p.name
-    ''')
-    moves = _rows('''
-        SELECT t.created_at, f.name AS facility, p.name AS product, t.transaction_type,
-               t.quantity, t.reference, t.notes
-        FROM stock_transactions t
-        JOIN facilities f ON f.id = t.facility_id
-        JOIN products p ON p.id = t.product_id
-        ORDER BY t.id DESC LIMIT 25
-    ''')
-    facilities = _rows('SELECT id, name FROM facilities ORDER BY name')
-    products = _rows('SELECT id, name, unit, unit_cost FROM products WHERE is_active = 1 ORDER BY name')
-    pos = _rows('''
-        SELECT id, po_no, status, amount FROM erp_purchase_orders
-        ORDER BY id DESC LIMIT 8
-    ''') if _table('erp_purchase_orders') else []
-    total_value = sum(float(r['value'] or 0) for r in balances)
-    low = [r for r in balances if (r['quantity_on_hand'] or 0) < (r['reorder_level'] or 0)]
+    """Warehouse first (procurement offload), then each outlet sheet, then system summary."""
+    try:
+        facilities = _rows('SELECT id, name, facility_type FROM facilities ORDER BY name')
+    except Exception:
+        facilities = []
+    try:
+        products = _rows(
+            "SELECT id, name, unit, unit_cost FROM products WHERE (is_active IS TRUE OR is_active = 1) ORDER BY name"
+        )
+    except Exception:
+        try:
+            products = _rows('SELECT id, name, unit, unit_cost FROM products ORDER BY name')
+        except Exception:
+            products = []
+    try:
+        tx = _rows(
+            "SELECT facility_id, product_id, transaction_type, quantity, notes, reference, created_at, unit_cost FROM stock_transactions"
+        )
+    except Exception:
+        tx = []
+
+    fac_names = {f['id']: f['name'] for f in facilities}
+
+    def _kind(fac):
+        name = (fac.get('name') or '').lower()
+        ftype = (fac.get('facility_type') or '').lower()
+        if 'warehouse' in name or ftype == 'warehouse':
+            return 'warehouse'
+        if ftype == 'phc' or 'phc' in name:
+            return 'phc'
+        if ftype == 'kiosk' or 'kiosk' in name:
+            return 'kiosk'
+        return 'other'
+
+    ordered = sorted(
+        facilities,
+        key=lambda f: ({'warehouse': 0, 'kiosk': 1, 'phc': 2, 'other': 3}[_kind(f)], f['name']),
+    )
+
+    sheets = []
+    for fac in ordered:
+        kind = _kind(fac)
+        warehouse = kind == 'warehouse'
+        lines = {}
+        for prod in products:
+            lines[prod['id']] = {
+                'product_id': prod['id'],
+                'product': prod['name'],
+                'unit': prod.get('unit') or 'piece',
+                'unit_cost': float(prod.get('unit_cost') or 0),
+                'opening': 0.0,
+                'received': 0.0,
+                'dispatched': 0.0,
+                'administered': 0.0,
+                'transferred': 0.0,
+                'destinations': [],
+                'balance': 0.0,
+            }
+        for row in tx:
+            if row['facility_id'] != fac['id'] or row['product_id'] not in lines:
+                continue
+            slot = lines[row['product_id']]
+            qty = abs(float(row['quantity'] or 0))
+            ttype = (row['transaction_type'] or '').lower()
+            note = (row['notes'] or '') or ''
+            signed = float(row['quantity'] or 0)
+            if ttype in ('opening',):
+                slot['opening'] += qty
+            elif ttype in ('receipt',):
+                slot['received'] += qty
+            elif ttype in ('dispatch',):
+                slot['dispatched'] += qty
+            elif ttype in ('issue', 'administer', 'administered', 'uptake'):
+                slot['administered'] += qty
+            elif ttype in ('transfer',):
+                if signed < 0 or 'dispatch' in note.lower() or 'to ' in note.lower() or 'transfer to' in note.lower():
+                    if warehouse:
+                        slot['dispatched'] += qty
+                    else:
+                        slot['transferred'] += qty
+                else:
+                    slot['received'] += qty
+            dest_id = None
+            for token in note.replace(',', ' ').split():
+                if token.isdigit():
+                    dest_id = int(token)
+                    break
+            if dest_id and dest_id in fac_names:
+                slot['destinations'].append(fac_names[dest_id])
+            elif 'to ' in note.lower():
+                part = note.lower().split('to ', 1)[-1].strip()
+                if part:
+                    slot['destinations'].append(part[:80])
+        for slot in lines.values():
+            if warehouse:
+                slot['balance'] = slot['opening'] + slot['received'] - slot['dispatched'] - slot['administered']
+            else:
+                slot['balance'] = slot['received'] - slot['administered'] - slot['transferred']
+            slot['destinations'] = ', '.join(dict.fromkeys(slot['destinations'])) or '—'
+            slot['value'] = slot['balance'] * slot['unit_cost']
+        sheets.append({
+            'id': fac['id'],
+            'name': fac['name'],
+            'warehouse': warehouse,
+            'kind': kind,
+            'kind_label': {
+                'warehouse': 'Main warehouse (procurement offload)',
+                'kiosk': 'Kiosk outlet',
+                'phc': 'PHC outlet',
+                'other': 'Other outlet',
+            }[kind],
+            'lines': list(lines.values()),
+        })
+
+    from datetime import datetime as _dt, timedelta as _td
+    now = _dt.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_month_end = month_start - _td(seconds=1)
+    last_month_start = last_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    summary = []
+    for prod in products:
+        pid = prod['id']
+        administered = 0.0
+        admin_this = admin_last = 0.0
+        unit_cost = float(prod.get('unit_cost') or 0)
+        for row in tx:
+            if row['product_id'] != pid:
+                continue
+            qty = abs(float(row['quantity'] or 0))
+            ttype = (row['transaction_type'] or '').lower()
+            created = row.get('created_at')
+            if ttype in ('issue', 'administer', 'administered', 'uptake'):
+                administered += qty
+                if created:
+                    try:
+                        c = created if hasattr(created, 'month') else _dt.fromisoformat(str(created).replace('Z', ''))
+                        if c >= month_start:
+                            admin_this += qty
+                        elif last_month_start <= c <= last_month_end:
+                            admin_last += qty
+                    except Exception:
+                        pass
+        try:
+            bal_row = db.session.execute(text(
+                'SELECT COALESCE(SUM(quantity_on_hand),0) FROM stock_items WHERE product_id=:p'
+            ), {'p': pid}).scalar()
+            balance = float(bal_row or 0)
+        except Exception:
+            balance = 0.0
+            for s in sheets:
+                for line in s['lines']:
+                    if line['product_id'] == pid:
+                        balance += line['balance']
+        projected = (admin_this + admin_last) / 2.0 if (admin_this or admin_last) else admin_this
+        summary.append({
+            'product': prod['name'],
+            'unit': prod.get('unit') or 'piece',
+            'quantity': balance,
+            'unit_cost': unit_cost,
+            'total_value': balance * unit_cost,
+            'admin_last_month': admin_last,
+            'admin_this_month': admin_this,
+            'admin_projected_next': projected,
+            'admin_quarterly': admin_this * 3,
+            'admin_semi_annual': admin_this * 6,
+            'admin_annual': admin_this * 12,
+        })
+
+    role = getattr(current_user, 'role', '')
+    can_update = (
+        role in ('general_admin', 'admin', 'program_admin', 'project_manager',
+                 'logistics_consultant', 'finance_admin')
+        or user_has(current_user, 'inventory.post')
+        or user_has(current_user, 'facility.confirm')
+        or user_has(current_user, 'uptake.record')
+    )
+    groups = [
+        {'title': 'Main warehouse (procurement offload)', 'sheets': [s for s in sheets if s['kind'] == 'warehouse']},
+        {'title': 'Kiosk outlets', 'sheets': [s for s in sheets if s['kind'] == 'kiosk']},
+        {'title': 'PHC outlets', 'sheets': [s for s in sheets if s['kind'] == 'phc']},
+        {'title': 'Other outlets', 'sheets': [s for s in sheets if s['kind'] == 'other']},
+    ]
+    groups = [g for g in groups if g['sheets']]
     return render_template(
-        'ops_inventory.html', balances=balances, moves=moves, facilities=facilities,
-        products=products, pos=pos, total_value=total_value, low=low,
+        'ops_inventory.html',
+        groups=groups, sheets=sheets, products=products, facilities=facilities,
+        can_update=can_update, summary=summary,
     )
 
 
-def _table(name):
-    try:
-        return name in db.inspect(db.engine).get_table_names()
-    except Exception:
-        return False
+@ops_bp.route('/inventory/usage', methods=['POST'])
+@login_required
+@_staff_required
+def inventory_usage():
+    facility_id = request.form.get('facility_id', type=int)
+    product_id = request.form.get('product_id', type=int)
+    qty = float(request.form.get('quantity') or 0)
+    kind = (request.form.get('kind') or 'administer').lower()
+    dest = request.form.get('dest_facility_id', type=int)
+    role = getattr(current_user, 'role', '')
+    allowed = (
+        role in ('general_admin', 'admin', 'program_admin', 'project_manager', 'logistics_consultant')
+        or user_has(current_user, 'inventory.post')
+        or user_has(current_user, 'facility.confirm')
+        or user_has(current_user, 'approvals.act')
+        or user_has(current_user, 'uptake.record')
+    )
+    if not allowed:
+        flash('Only a facility officer or an approving officer can update inventory.', 'danger')
+        return redirect(url_for('ops.inventory_home'))
+    if qty <= 0 or not facility_id or not product_id:
+        flash('Quantity, facility and commodity are required.', 'danger')
+        return redirect(url_for('ops.inventory_home'))
+    dest_name = ''
+    if dest:
+        try:
+            dest_name = db.session.execute(text('SELECT name FROM facilities WHERE id=:id'), {'id': dest}).scalar() or str(dest)
+        except Exception:
+            dest_name = str(dest)
+
+    if kind == 'receipt':
+        _apply_stock(facility_id, product_id, qty, 'receipt', 'PROCUREMENT', 'Goods receipt / procurement offload')
+        db.session.commit()
+        flash('Quantity received posted to this facility sheet.', 'success')
+        return redirect(url_for('ops.inventory_home'))
+
+    if kind == 'dispatch':
+        if not dest:
+            flash('Choose the facility dispatched to.', 'danger')
+            return redirect(url_for('ops.inventory_home'))
+        _apply_stock(facility_id, product_id, -qty, 'dispatch', 'DISPATCH', f'Dispatched to {dest_name}')
+        _apply_stock(dest, product_id, qty, 'receipt', 'DISPATCH', f'Received from warehouse facility {facility_id}')
+        db.session.commit()
+        return redirect(url_for('ops.dispatch_pdf_quick', src=facility_id, dest=dest, product_id=product_id, qty=qty))
+
+    if kind == 'transfer':
+        if not dest:
+            flash('Choose the outlet transferred to.', 'danger')
+            return redirect(url_for('ops.inventory_home'))
+        _apply_stock(facility_id, product_id, -qty, 'transfer', 'TRANSFER', f'Transfer to {dest_name}')
+        _apply_stock(dest, product_id, qty, 'receipt', 'TRANSFER', f'Transfer from facility {facility_id}')
+        db.session.commit()
+        flash(f'Transfer of {qty} posted to {dest_name}.', 'success')
+        return redirect(url_for('ops.inventory_home'))
+
+    _apply_stock(facility_id, product_id, -qty, 'administer', 'USAGE', 'Administered / client uptake')
+    db.session.commit()
+    flash('Usage (administered) quantity recorded.', 'success')
+    return redirect(url_for('ops.inventory_home'))
 
 
 def _apply_stock(facility_id, product_id, qty, kind, reference, notes):
@@ -438,80 +652,86 @@ def _apply_stock(facility_id, product_id, qty, kind, reference, notes):
         ), {'q': qty, 'now': datetime.utcnow(), 'id': row['id']})
     else:
         db.session.execute(text(
-            '''INSERT INTO stock_items (facility_id, product_id, quantity_on_hand, reorder_level, last_updated)
-               VALUES (:f, :p, :q, 10, :now)'''
+            'INSERT INTO stock_items (facility_id, product_id, quantity_on_hand, reorder_level, last_updated) '
+            'VALUES (:f, :p, :q, 10, :now)'
         ), {'f': facility_id, 'p': product_id, 'q': max(qty, 0), 'now': datetime.utcnow()})
     cost = db.session.execute(text('SELECT unit_cost FROM products WHERE id=:id'), {'id': product_id}).scalar() or 0
     db.session.execute(text(
-        '''INSERT INTO stock_transactions
-           (facility_id, product_id, transaction_type, quantity, unit_cost, reference, notes, created_by, created_at)
-           VALUES (:f, :p, :k, :q, :c, :r, :n, :u, :now)'''
+        'INSERT INTO stock_transactions '
+        '(facility_id, product_id, transaction_type, quantity, unit_cost, reference, notes, created_by, created_at) '
+        'VALUES (:f, :p, :k, :q, :c, :r, :n, :u, :now)'
     ), {
         'f': facility_id, 'p': product_id, 'k': kind, 'q': qty, 'c': cost,
         'r': reference, 'n': notes, 'u': getattr(current_user, 'id', None), 'now': datetime.utcnow(),
     })
 
 
-@ops_bp.route('/inventory/move', methods=['POST'])
+@ops_bp.route('/inventory/dispatch-pdf')
 @login_required
 @_staff_required
-@_need('inventory.post')
-def inventory_move():
-    kind = request.form.get('kind')
-    facility_id = request.form.get('facility_id', type=int)
-    product_id = request.form.get('product_id', type=int)
-    qty = request.form.get('quantity', type=int) or 0
-    reference = (request.form.get('reference') or '').strip()
-    dest = request.form.get('dest_facility_id', type=int)
-    if not facility_id or not product_id or qty <= 0:
-        flash('Facility, product and a positive quantity are required.', 'danger')
-        return redirect(url_for('ops.inventory_home'))
-    if kind == 'receipt':
-        _apply_stock(facility_id, product_id, qty, 'receipt', reference or 'PROCUREMENT', 'Goods receipt from procurement')
-        flash('Stock received and linked to the procurement reference.', 'success')
-    elif kind == 'dispatch':
-        if not dest:
-            flash('Choose a destination facility for dispatch.', 'danger')
-            return redirect(url_for('ops.inventory_home'))
-        _apply_stock(facility_id, product_id, -qty, 'transfer', reference or 'DISPATCH', f'Dispatch to facility {dest}')
-        _apply_stock(dest, product_id, qty, 'receipt', reference or 'DISPATCH', f'Dispatch from facility {facility_id}')
-        flash('Dispatch posted. Facility stock and the movement ledger are updated.', 'success')
-    elif kind == 'issue':
-        _apply_stock(facility_id, product_id, -qty, 'issue', reference or 'ISSUE', 'Issued for use — finance expense can be raised')
-        if request.form.get('raise_expense') == '1':
-            _raise_issue_expense(product_id, qty, reference)
-        flash('Issue posted against inventory.', 'success')
-    else:
-        flash('Unknown movement.', 'danger')
-    db.session.commit()
-    return redirect(url_for('ops.inventory_home'))
-
-
-def _raise_issue_expense(product_id, qty, reference):
+def dispatch_pdf_quick():
+    """PDF dispatch note after each warehouse dispatch — not a standalone menu page."""
+    src = request.args.get('src', type=int)
+    dest = request.args.get('dest', type=int)
+    product_id = request.args.get('product_id', type=int)
+    qty = float(request.args.get('qty') or 0)
     try:
-        import finance_core
-        cost = db.session.execute(text('SELECT unit_cost, name FROM products WHERE id=:id'), {'id': product_id}).mappings().first()
-        amount = _d(qty) * _d(cost['unit_cost'] if cost else 0)
-        doc = finance_core.FinDocument(
-            doc_no=finance_core._next_no('INV'),
-            doc_type='payment',
-            payee='Inventory issue',
-            description=f"Inventory issue {reference} — {cost['name'] if cost else product_id}",
-            amount=amount,
-            currency='NGN',
-            status='submitted',
-            source_type='inventory_issue',
-            requester_id=getattr(current_user, 'id', None),
-        )
-        finance_core.db.session.add(doc)
-        finance_core.db.session.commit()
-    except Exception as exc:
-        flash(f'Stock moved, but finance hand-off failed: {exc}', 'warning')
+        src_name = db.session.execute(text('SELECT name FROM facilities WHERE id=:id'), {'id': src}).scalar() or str(src)
+        dest_name = db.session.execute(text('SELECT name FROM facilities WHERE id=:id'), {'id': dest}).scalar() or str(dest)
+        prod = db.session.execute(
+            text('SELECT name, unit, unit_cost FROM products WHERE id=:id'), {'id': product_id}
+        ).mappings().first() or {'name': 'Commodity', 'unit': '', 'unit_cost': 0}
+    except Exception:
+        src_name, dest_name = str(src), str(dest)
+        prod = {'name': 'Commodity', 'unit': '', 'unit_cost': 0}
+
+    company = _company()
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=40, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    story = []
+    story.append(Paragraph(f"<b>{company.get('name', 'CONTRAconnect')}</b>", styles['Title']))
+    story.append(Paragraph("DISPATCH NOTE", styles['Heading1']))
+    story.append(Paragraph(f"Date: {date.today().strftime('%d %B %Y')}", styles['Normal']))
+    story.append(Spacer(1, 12))
+    data = [
+        ['From (warehouse)', src_name],
+        ['To (facility)', dest_name],
+        ['Commodity', prod.get('name') or ''],
+        ['Unit', prod.get('unit') or ''],
+        ['Quantity dispatched', f"{qty:,.2f}"],
+        ['Unit cost', f"{float(prod.get('unit_cost') or 0):,.2f}"],
+        ['Line value', f"{qty * float(prod.get('unit_cost') or 0):,.2f}"],
+        ['Reference', f"DISPATCH-{date.today().strftime('%Y%m%d')}-{src}-{dest}"],
+    ]
+    t = Table(data, colWidths=[160, 320])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#0f4c6e')),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.white),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 24))
+    story.append(Paragraph(
+        "Prepared by: ______________________     Received by: ______________________", styles['Normal']
+    ))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph(
+        "Approving officer: ______________________     Date: __________", styles['Normal']
+    ))
+    doc.build(story)
+    buf.seek(0)
+    return send_file(
+        buf, mimetype='application/pdf', as_attachment=True,
+        download_name=f"Dispatch_{date.today().strftime('%Y%m%d')}_{dest}.pdf",
+    )
 
 
-# ---------------------------------------------------------------------------
-# Vendor REF procurement
-# ---------------------------------------------------------------------------
 @ops_bp.route('/procurement')
 @login_required
 @_staff_required
@@ -833,24 +1053,39 @@ def tracker_invoice(aid):
 # Bank reconciliation — desktop FMSS layout
 # ---------------------------------------------------------------------------
 def _bank_lines(account_code, start, end):
+    """Cash-book lines for the selected bank/cash account (FMSS-style)."""
     import finance_core
-    accounts = finance_core.FinAccount.query.filter_by(account_type='Cash').all()
+    try:
+        accounts = finance_core.FinAccount.query.filter(
+            finance_core.FinAccount.account_type.in_(('Cash', 'cash', 'Asset', 'Current asset'))
+        ).all()
+        if not accounts:
+            accounts = finance_core.FinAccount.query.order_by(finance_core.FinAccount.code).all()
+    except Exception:
+        accounts = []
     chosen = next((a for a in accounts if a.code == account_code), accounts[0] if accounts else None)
     if not chosen:
         return None, []
-    q = finance_core.FinJournalLine.query.filter_by(account_id=chosen.id)
-    lines = q.order_by(finance_core.FinJournalLine.entry_date, finance_core.FinJournalLine.id).all()
-    ticks = {t.journal_line_id: t for t in finance_core.FinBankTick.query.all()}
+    try:
+        q = finance_core.FinJournalLine.query.filter_by(account_id=chosen.id)
+        lines = q.order_by(finance_core.FinJournalLine.entry_date, finance_core.FinJournalLine.id).all()
+    except Exception:
+        lines = []
+    try:
+        ticks = {t.journal_line_id: t for t in finance_core.FinBankTick.query.all()}
+    except Exception:
+        ticks = {}
     view = []
     running = Decimal('0')
     for line in lines:
-        if start and line.entry_date and line.entry_date < start:
-            running += _d(line.debit) - _d(line.credit)
+        debit = _d(getattr(line, 'debit', 0))
+        credit = _d(getattr(line, 'credit', 0))
+        edate = getattr(line, 'entry_date', None)
+        if start and edate and edate < start:
+            running += debit - credit
             continue
-        if end and line.entry_date and line.entry_date > end:
+        if end and edate and edate > end:
             continue
-        debit = _d(line.debit)
-        credit = _d(line.credit)
         running += debit - credit
         view.append({
             'line': line, 'tick': ticks.get(line.id), 'debit': debit, 'credit': credit, 'running': running,
@@ -862,13 +1097,43 @@ def _bank_lines(account_code, start, end):
 @login_required
 @_staff_required
 def bank_recon():
-    import finance_core
-    accounts = finance_core.FinAccount.query.filter_by(account_type='Cash').all()
-    ws = BankWorkspace.query.order_by(BankWorkspace.id.desc()).first()
+    """Redirect to the working Cash reconciliation (permanent ticks, difference formula)."""
+    return redirect(url_for('wf.cash_recon'))
+    import finance_core  # noqa: unreachable kept for reference
+    try:
+        accounts = finance_core.FinAccount.query.filter(
+            finance_core.FinAccount.account_type.in_(('Cash', 'cash', 'Asset', 'Current asset'))
+        ).all()
+        if not accounts:
+            accounts = finance_core.FinAccount.query.order_by(finance_core.FinAccount.code).all()
+    except Exception:
+        accounts = []
+    try:
+        ws = BankWorkspace.query.order_by(BankWorkspace.id.desc()).first()
+    except Exception:
+        try:
+            db.create_all()
+        except Exception:
+            pass
+        ws = None
     if not ws:
-        ws = BankWorkspace(start_date=date.today().replace(day=1), end_date=date.today())
-        db.session.add(ws)
-        db.session.commit()
+        try:
+            ws = BankWorkspace(start_date=date.today().replace(day=1), end_date=date.today())
+            db.session.add(ws)
+            db.session.commit()
+        except Exception:
+            # Fallback plain object so template still renders
+            class _WS:
+                account_code = ''
+                start_date = date.today().replace(day=1)
+                end_date = date.today()
+                bank_balance = 0
+                unpresented = direct_deposits = interest_credited = 0
+                cashbook_errors_add = other_additions = 0
+                uncleared_deposits = bank_charges = standing_orders = 0
+                dishonoured = cashbook_errors_less = other_deductions = 0
+                prepared_by = reviewed_by = ''
+            ws = _WS()
     if request.method == 'POST' and user_has(current_user, 'bank.reconcile'):
         ws.account_code = request.form.get('account_code') or ws.account_code
         if request.form.get('start_date'):
@@ -897,20 +1162,55 @@ def bank_recon():
         finance_core.db.session.commit()
         flash('Bank reconciliation saved.', 'success')
         return redirect(url_for('ops.bank_recon'))
-    chosen, view = _bank_lines(ws.account_code, ws.start_date, ws.end_date)
+    try:
+        chosen, view = _bank_lines(ws.account_code, ws.start_date, ws.end_date)
+    except Exception as _be:
+        chosen, view = None, []
+        try:
+            current_app.logger.exception('bank lines: %s', _be)
+        except Exception:
+            pass
     book = view[-1]['running'] if view else Decimal('0')
-    additions = _d(ws.unpresented) + _d(ws.direct_deposits) + _d(ws.interest_credited) + _d(ws.cashbook_errors_add) + _d(ws.other_additions)
-    deductions = _d(ws.uncleared_deposits) + _d(ws.bank_charges) + _d(ws.standing_orders) + _d(ws.dishonoured) + _d(ws.cashbook_errors_less) + _d(ws.other_deductions)
-    adjusted = _d(ws.bank_balance) + additions - deductions
-    outstanding = [r for r in view if not (r['tick'] and r['tick'].ticked)]
-    return render_template(
-        'ops_bank.html', accounts=accounts, ws=ws, chosen=chosen, view=view, book=book,
-        additions=additions, deductions=deductions, adjusted=adjusted, outstanding=outstanding,
-        company=_company(),
+    additions = (
+        _d(ws.unpresented) + _d(ws.direct_deposits) + _d(ws.interest_credited)
+        + _d(ws.cashbook_errors_add) + _d(ws.other_additions)
     )
+    deductions = (
+        _d(ws.uncleared_deposits) + _d(ws.bank_charges) + _d(ws.standing_orders)
+        + _d(ws.dishonoured) + _d(ws.cashbook_errors_less) + _d(ws.other_deductions)
+    )
+    adjusted = _d(ws.bank_balance) + additions - deductions
+    outstanding = [r for r in view if not (r.get('tick') and getattr(r['tick'], 'ticked', False))]
+    uncleared_net = sum((_d(r['debit']) - _d(r['credit']) for r in outstanding), Decimal('0'))
+    difference = _d(ws.bank_balance) - (book - uncleared_net)
+    try:
+        company = _company()
+    except Exception:
+        company = {'name': 'CONTRAconnect', 'address': ''}
+    try:
+        return render_template(
+            'ops_bank.html', accounts=accounts or [], ws=ws, chosen=chosen, view=view or [],
+            book=book, additions=additions, deductions=deductions, adjusted=adjusted,
+            outstanding=outstanding, uncleared_net=uncleared_net, difference=difference,
+            company=company,
+        )
+    except Exception as e:
+        try:
+            current_app.logger.exception('bank template: %s', e)
+        except Exception:
+            pass
+        flash('Bank reconciliation opened with limited data. Check chart of accounts includes a Cash account.', 'warning')
+        return render_template(
+            'ops_bank.html', accounts=accounts or [], ws=ws, chosen=None, view=[],
+            book=0, additions=0, deductions=0, adjusted=0,
+            outstanding=[], uncleared_net=0, difference=0,
+            company=company if 'company' in dir() else {'name': 'CONTRAconnect', 'address': ''},
+        )
 
 
 def _bank_pdf_bytes():
+    from reportlab.platypus import Image as RLImage
+    import os
     ws = BankWorkspace.query.order_by(BankWorkspace.id.desc()).first()
     chosen, view = _bank_lines(ws.account_code if ws else '', ws.start_date if ws else None, ws.end_date if ws else None)
     company = _company()
@@ -918,8 +1218,27 @@ def _bank_pdf_bytes():
     doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=28, bottomMargin=20)
     styles = getSampleStyleSheet()
     story = []
+    # Letterhead logo if available
+    logo_path = _logo_path() if '_logo_path' in dir() else None
+    try:
+        from facility_flow import _logo_file
+        logo_path = _logo_file()
+    except Exception:
+        logo_path = None
+    if not logo_path:
+        for rel in ('static/branding/knowsoft_logo.png', 'static/branding/app_logo_default.png'):
+            p = os.path.join(current_app.root_path, rel)
+            if os.path.exists(p):
+                logo_path = p
+                break
+    if logo_path and os.path.exists(logo_path):
+        try:
+            story.append(RLImage(logo_path, width=90, height=40))
+            story.append(Spacer(1, 6))
+        except Exception:
+            pass
     story.append(Paragraph(f"<b>{company['name']}</b>", styles['Title']))
-    story.append(Paragraph(company['address'], styles['Normal']))
+    story.append(Paragraph(company.get('address') or '', styles['Normal']))
     story.append(Spacer(1, 8))
     story.append(Paragraph('<b>BANK RECONCILIATION STATEMENT</b>', styles['Heading2']))
     story.append(Spacer(1, 8))
@@ -1071,16 +1390,25 @@ def bank_excel():
 def budget_template():
     import finance_core
     project_id = request.args.get('project_id', type=int)
-    projects = finance_core.FinProject.query.order_by(finance_core.FinProject.code).all()
-    q = finance_core.FinBudgetCode.query
-    if project_id:
-        q = q.filter_by(project_id=project_id)
-    rows = q.order_by(finance_core.FinBudgetCode.code).all()
-    actual = finance_core.project_actuals()
+    try:
+        projects = finance_core.FinProject.query.order_by(finance_core.FinProject.code).all()
+    except Exception:
+        projects = []
+    try:
+        q = finance_core.FinBudgetCode.query
+        if project_id:
+            q = q.filter_by(project_id=project_id)
+        rows = q.order_by(finance_core.FinBudgetCode.code).all()
+    except Exception:
+        rows = []
+    try:
+        actual = finance_core.project_actuals()
+    except Exception:
+        actual = {}
     pack = []
     for b in rows:
         spent = actual.get((b.project_id, b.id, b.expense_code_id), Decimal('0'))
-        pack.append({'budget': b, 'spent': spent, 'variance': _d(b.amount) - spent})
+        pack.append({'budget': b, 'spent': spent, 'variance': _d(getattr(b, 'amount', 0)) - spent})
     return render_template('ops_budget_template.html', projects=projects, rows=pack, project_id=project_id)
 
 

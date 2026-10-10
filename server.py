@@ -10,7 +10,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, redirect, url_for, flash, request,
-    jsonify, abort, session, send_file
+    jsonify, abort, session, send_file, current_app
 )
 from io import BytesIO
 from openpyxl import Workbook
@@ -621,6 +621,8 @@ def report_branding():
         'org_line': get_setting('org_line', 'United Nations Development Programme (UNDP)'),
         'app_name': get_setting('app_name', 'Project Financial Management Workflow'),
         'app_logo': get_setting('app_logo_path', 'branding/app_logo_default.png'),
+        'official_address': get_setting('official_address', ''),
+        'youtube_url': get_setting('youtube_url', ''),
     }
 
 
@@ -2878,10 +2880,18 @@ def expense_list():
     if current_user.role == 'provider':
         flash('Expense claims are for programme staff.', 'warning')
         return redirect(url_for('provider_dashboard'))
-    q = ExpenseRequest.query.order_by(ExpenseRequest.created_at.desc())
-    if not (_can_review_expense(current_user) or _can_approve_expense_pm(current_user)):
-        q = q.filter_by(requester_id=current_user.id)
-    items = q.limit(200).all()
+    try:
+        q = ExpenseRequest.query.order_by(ExpenseRequest.created_at.desc())
+        if not (_can_review_expense(current_user) or _can_approve_expense_pm(current_user)):
+            q = q.filter_by(requester_id=current_user.id)
+        items = q.limit(200).all()
+    except Exception as e:
+        try:
+            current_app.logger.exception('expense_list: %s', e)
+        except Exception:
+            pass
+        items = []
+        flash('Expense register could not load fully. If this continues, ask an administrator to check the database.', 'warning')
     return render_template('expense_list.html', items=items)
 
 
@@ -2905,6 +2915,9 @@ def expense_new():
             return redirect(url_for('expense_new'))
         if amount <= 0:
             flash('Amount must be positive.', 'danger')
+            return redirect(url_for('expense_new'))
+        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id') or not request.form.get('project_id') or not request.form.get('expense_code_id'):
+            flash('Debit account, credit account, project code and expense code are required.', 'danger')
             return redirect(url_for('expense_new'))
         action = request.form.get('action', 'draft')
         num = f"EXP-{datetime.utcnow().strftime('%Y%m%d')}-{current_user.id}-{int(datetime.utcnow().timestamp()) % 10000}"
@@ -2931,6 +2944,9 @@ def expense_new():
             f.save(os.path.join(d, safe))
             er.evidence_filename = safe
         db.session.add(er)
+        db.session.flush()
+        from fmss_align import save_coding, read_coding
+        save_coding('expense_request', er.id, read_coding())
         db.session.commit()
         log_activity('expense_submitted', er.request_number)
         flash(f'Expense {er.request_number} saved ({er.status}).', 'success')
@@ -2948,7 +2964,8 @@ def expense_detail(eid):
         _can_review_expense(current_user) or _can_approve_expense_pm(current_user)
     ):
         abort(403)
-    return render_template('expense_detail.html', er=er)
+    from fmss_align import codebook, get_coding
+    return render_template('expense_detail.html', er=er, codebook=codebook(), coding=get_coding('expense_request', er.id))
 
 
 @app.route('/expenses/<int:eid>/submit', methods=['POST'])
@@ -2978,6 +2995,11 @@ def expense_finance_review(eid):
     er.finance_reviewer_id = current_user.id
     er.finance_reviewed_at = datetime.utcnow()
     if request.form.get('decision') == 'approve':
+        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id'):
+            flash('Select debit and credit accounts, plus project, expense and budget codes.', 'danger')
+            return redirect(url_for('expense_detail', eid=eid))
+        from fmss_align import save_coding, read_coding
+        save_coding('expense_request', er.id, read_coding())
         er.status = 'finance_review'
         flash('Cleared for Project Manager approval.', 'success')
     else:
@@ -3035,8 +3057,22 @@ def expense_mark_paid(eid):
         created_by=current_user.id,
     ))
     try:
-        from finance_core import post_legacy_expense
-        post_legacy_expense(er)
+        from fmss_align import get_coding
+        from finance_core import post_journal
+        coding = get_coding('expense_request', er.id)
+        if coding and coding.debit_account_id and coding.credit_account_id:
+            full = er.amount
+            paid = full if (coding.pay_mode or 'full') == 'full' else coding.pay_amount
+            lines = [
+                {'account_id': coding.debit_account_id, 'debit': full, 'credit': 0, 'project_id': coding.project_id, 'expense_code_id': coding.expense_code_id, 'budget_code_id': coding.budget_code_id, 'description': er.description},
+                {'account_id': coding.credit_account_id, 'debit': 0, 'credit': paid, 'project_id': coding.project_id, 'expense_code_id': coding.expense_code_id, 'budget_code_id': coding.budget_code_id, 'description': er.description},
+            ]
+            if (coding.pay_mode or 'full') == 'part' and coding.payable_account_id:
+                lines.append({'account_id': coding.payable_account_id, 'debit': 0, 'credit': full - paid, 'description': 'Unpaid balance'})
+            post_journal(lines, er.description, 'expense_request', er.id)
+        else:
+            from finance_core import post_legacy_expense
+            post_legacy_expense(er)
     except Exception as fin_exc:
         print('finance post:', fin_exc)
     db.session.commit()
@@ -3873,7 +3909,13 @@ def invoice_new():
         if not inv.deliverable_title or amount <= 0:
             flash('Deliverable title and a positive amount are required.', 'danger')
             return redirect(url_for('invoice_new'))
+        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id') or not request.form.get('project_id') or not request.form.get('expense_code_id'):
+            flash('Debit account, credit account, project code and expense code are required.', 'danger')
+            return redirect(url_for('invoice_new'))
         db.session.add(inv)
+        db.session.flush()
+        from fmss_align import save_coding, read_coding
+        save_coding('invoice', inv.id, read_coding())
         db.session.commit()
         flash(f'Invoice {inv.invoice_number} saved as {status}.', 'success')
         return redirect(url_for('invoice_detail', iid=inv.id))
@@ -4362,6 +4404,8 @@ def admin_branding():
         set_setting('report_subtitle', request.form.get('report_subtitle', '').strip())
         set_setting('org_line', request.form.get('org_line', '').strip())
         set_setting('app_name', request.form.get('app_name', '').strip() or 'CONTRAconnect')
+        set_setting('official_address', request.form.get('official_address', '').strip())
+        set_setting('youtube_url', request.form.get('youtube_url', '').strip())
         f = request.files.get('logo')
         if f and f.filename:
             ext = f.filename.rsplit('.', 1)[-1].lower()
@@ -4764,6 +4808,106 @@ try:
     print('Ops upgrade registered (/ops/inventory, /ops/procurement, /ops/bank, /ops/privileges)')
 except Exception as _ops_boot:
     print('Ops upgrade boot:', _ops_boot)
+
+
+@app.route('/upgrade-status')
+def upgrade_status():
+    return (
+        'UPGRADE-2026-10-09\n'
+        'finance-setup=/ops/sections/finance-setup\n'
+        'financial-reports=/ops/sections/financial-reports\n'
+        'rfq=/ops/rfq\n'
+        'inventory-sheet=/ops/inventory\n'
+        'cash-recon=/ops/cash-recon\n',
+        200,
+        {'Content-Type': 'text/plain; charset=utf-8'},
+    )
+
+try:
+    from workflow_upgrade import init_workflow_upgrade
+    init_workflow_upgrade(app, db)
+    print('Workflow upgrade registered (/ops/rfq, /ops/cash-recon)')
+except Exception as _wf_boot:
+    print('Workflow upgrade boot:', _wf_boot)
+
+
+# ---------------------------------------------------------------------------
+# Branded error pages (CONTRAconnect) — never show a bare stack / blank page
+# ---------------------------------------------------------------------------
+def _render_error(code, title, message):
+    try:
+        return render_template(
+            'error.html',
+            code=code,
+            title=title,
+            message=message,
+        ), code
+    except Exception:
+        # Absolute last resort if template itself fails
+        body = (
+            f'<!DOCTYPE html><html><head><title>{code}</title></head><body style='
+            f'"font-family:system-ui;text-align:center;padding:3rem">'
+            f'<h1>{code}</h1><p>{title}</p><p>{message}</p>'
+            f'<p><a href="javascript:history.back()">Go back</a> · '
+            f'<a href="/">Home</a></p></body></html>'
+        )
+        return body, code
+
+
+@app.errorhandler(403)
+def error_403(e):
+    return _render_error(
+        403,
+        'Access denied',
+        'You do not have permission to view this page. Sign in with an authorised account, or go back to the previous screen.',
+    )
+
+
+@app.errorhandler(404)
+def error_404(e):
+    return _render_error(
+        404,
+        'Page not found',
+        'The page or resource you asked for is not available. Check the address, or use the button below to go back.',
+    )
+
+
+@app.errorhandler(405)
+def error_405(e):
+    return _render_error(
+        405,
+        'Method not allowed',
+        'This action is not supported on this page. Please go back and try another option.',
+    )
+
+
+@app.errorhandler(500)
+def error_500(e):
+    return _render_error(
+        500,
+        'Unexpected error',
+        'Something went wrong while processing your request. Your data is safe — go back and try again, or contact your administrator if it continues.',
+    )
+
+
+@app.errorhandler(Exception)
+def error_unhandled(e):
+    # Log-friendly; still show branded page in production
+    try:
+        current_app.logger.exception('Unhandled error: %s', e)
+    except Exception:
+        pass
+    code = getattr(e, 'code', None) or 500
+    if code == 403:
+        return error_403(e)
+    if code == 404:
+        return error_404(e)
+    return _render_error(
+        500,
+        'Unexpected error',
+        'Something went wrong while processing your request. Please go back and try again.',
+    )
+
 
 application = app  # WSGI alias for gunicorn / Render
 
