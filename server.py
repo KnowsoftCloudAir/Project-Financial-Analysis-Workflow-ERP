@@ -1045,6 +1045,11 @@ def index():
             if current_user.role == 'provider':
                 return redirect(url_for('provider_dashboard'))
             if _is_admin_role(current_user.role):
+                # Prefer dashboard, but never create a loop if it fails to render.
+                # ?stay=1 keeps authenticated staff on the public home shell.
+                if request.args.get('stay') in ('1', 'true', 'yes'):
+                    content = homepage_content()
+                    return render_template('public_home.html', content=content)
                 return redirect(url_for(_home_for_role(current_user.role)))
         content = homepage_content()
         return render_template('public_home.html', content=content)
@@ -1436,7 +1441,8 @@ def login():
                 flash('Your account registration was not approved. Contact the administrator.', 'danger')
                 return redirect(url_for('login'))
             try:
-                login_user(user, remember=True)
+                remember = request.form.get('remember') in ('on', '1', 'true', 'yes')
+                login_user(user, remember=remember)
             except Exception as e:
                 try:
                     app.logger.exception('login_user: %s', e)
@@ -1463,14 +1469,15 @@ def login():
                 flash('Welcome.', 'success')
             if status in ('pending_profile', 'pending_approval'):
                 return redirect(url_for('onboarding'))
-            # Prefer safe ?next= then role home; fall back to index
+            # Prefer safe ?next= then role home; never fall back to index alone
+            # (index re-redirects admins to dashboard → loop if dashboard errors).
             try:
                 nxt = (request.args.get('next') or request.form.get('next') or '').strip()
                 if nxt.startswith('/') and not nxt.startswith('//'):
                     return redirect(nxt)
                 return redirect(url_for(_home_for_role(user.role)))
             except Exception:
-                return redirect(url_for('index'))
+                return redirect('/dashboard')
         flash('Invalid email or password.', 'danger')
         try:
             log_activity('login_failed', email)
@@ -3963,12 +3970,53 @@ def main_dashboard():
             chart_proc=chart_proc,
         )
     except Exception as e:
+        # CRITICAL: never redirect to index here — index sends admins back to
+        # main_dashboard and creates ERR_TOO_MANY_REDIRECTS after login.
         try:
             app.logger.exception('main_dashboard: %s', e)
         except Exception:
             pass
-        flash('Dashboard is temporarily limited. Use the menu to open Finance or Inventory.', 'warning')
-        return redirect(url_for('index'))
+        try:
+            flash(
+                'Dashboard is temporarily limited. Use the links below or the menu.',
+                'warning',
+            )
+        except Exception:
+            pass
+        try:
+            return render_template(
+                'error.html',
+                code=200,
+                title='Workspace',
+                message=(
+                    'The executive dashboard could not fully load. '
+                    'Open Finance, Inventory, or Procurement from the menu or these paths: '
+                    '/ops/inventory · /ops/sections/finance · /ops/sections/procurement · /finance/'
+                ),
+            )
+        except Exception:
+            pass
+        return (
+            '<!DOCTYPE html><html><head><meta charset="utf-8">'
+            '<title>Workspace</title>'
+            '<style>body{font-family:system-ui;max-width:640px;margin:3rem auto;padding:1rem}'
+            'a{display:inline-block;margin:.4rem .6rem .4rem 0;padding:.55rem 1rem;'
+            'background:#0d6e6e;color:#fff;border-radius:8px;text-decoration:none}</style>'
+            '</head><body>'
+            '<h1>Project Financial Management Workflow</h1>'
+            '<p>Dashboard is temporarily limited. Continue here:</p>'
+            '<p>'
+            '<a href="/ops/inventory">Inventory</a>'
+            '<a href="/ops/sections/finance">Finance</a>'
+            '<a href="/ops/sections/procurement">Procurement</a>'
+            '<a href="/ops/sections/program-items">Program</a>'
+            '<a href="/finance/">Finance books</a>'
+            '<a href="/erp/">ERP</a>'
+            '<a href="/logout">Sign out</a>'
+            '</p></body></html>',
+            200,
+            {'Content-Type': 'text/html; charset=utf-8'},
+        )
 
 
 @app.route('/dashboard/export/excel')
@@ -5336,12 +5384,14 @@ def db_health():
 @app.route('/upgrade-status')
 def upgrade_status():
     return (
-        'UPGRADE-2026-10-09\n'
+        'UPGRADE-2026-10-10-login-redirect-fix\n'
         'finance-setup=/ops/sections/finance-setup\n'
         'financial-reports=/ops/sections/financial-reports\n'
         'rfq=/ops/rfq\n'
         'inventory-sheet=/ops/inventory\n'
-        'cash-recon=/ops/cash-recon\n',
+        'cash-recon=/ops/cash-recon\n'
+        'dashboard=/dashboard\n'
+        'fix=no-redirect-loop-after-login\n',
         200,
         {'Content-Type': 'text/plain; charset=utf-8'},
     )
