@@ -10,7 +10,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, redirect, url_for, flash, request,
-    jsonify, abort, session, send_file, current_app
+    jsonify, abort, session, send_file
 )
 from io import BytesIO
 from openpyxl import Workbook
@@ -75,18 +75,10 @@ except ImportError:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'contraconnect-dev-secret-change-me')
 
-# Database URL — prefer private Railway URL; fall back to public proxy URL
-_db_url = (
-    os.environ.get('DATABASE_URL')
-    or os.environ.get('DATABASE_PUBLIC_URL')
-    or 'sqlite:////tmp/contraconnect.db'
-)
-# Normalize schemes for SQLAlchemy
+# Database URL (Render Postgres uses postgres:// — SQLAlchemy needs postgresql://)
+_db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/contraconnect.db')
 if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
-# Prefer psycopg2 driver when available (Railway-friendly)
-if _db_url.startswith('postgresql://') and '+psycopg' not in _db_url:
-    _db_url = _db_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB uploads
@@ -146,74 +138,28 @@ def ensure_db():
     try:
         db.create_all()
         try:
-            _ensure_users_columns()
-        except Exception:
-            pass
-    except Exception as e:
-        try:
-            app.logger.exception('create_all failed: %s', e)
-        except Exception:
-            pass
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-    try:
-        from erp_extension import bind_and_create, erp_bp
-        if 'erp' not in app.blueprints:
-            app.register_blueprint(erp_bp)
-        bind_and_create(app, db)
-    except Exception as _erp_err:
-        print('ERP extension init:', _erp_err)
-    try:
+            from erp_extension import bind_and_create, erp_bp
+            if 'erp' not in app.blueprints:
+                app.register_blueprint(erp_bp)
+            bind_and_create(app, db)
+        except Exception as _erp_err:
+            print('ERP extension init:', _erp_err)
         if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
             seed_data()
-    except Exception as e:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        print('seed_data:', e)
-    try:
-        if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
-            import os as _os
-            pw = _os.environ.get('ADMIN_PASSWORD') or 'Contra@Admin2026!'
-            u = User(
-                email=(_os.environ.get('ADMIN_EMAIL') or 'admin@contraconnect.local').lower(),
-                full_name='General Administrator',
-                role='general_admin',
-                is_active=True,
-                onboarding_status='active',
-            )
-            u.set_password(pw)
-            db.session.add(u)
-            db.session.commit()
-            print('bootstrap admin created')
-    except Exception as e:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        print('bootstrap admin:', e)
-    try:
         ensure_expense_codes()
+        # Auto-populate sample operational/financial data so dashboards are never empty on first launch
+        try:
+            if ClientEncounter.query.count() < 5:
+                load_report_sample_data()
+        except Exception as _auto_sample_err:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            print('auto sample load:', _auto_sample_err)
+        _db_ready = True
     except Exception as e:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        print('ensure_expense_codes:', e)
-    try:
-        if ClientEncounter.query.count() < 5:
-            load_report_sample_data()
-    except Exception as _auto_sample_err:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        print('auto sample load:', _auto_sample_err)
-    # Mark ready even on partial init so every request is not blocked retrying forever
-    _db_ready = True
+        app.logger.exception('ensure_db failed: %s', e)
 
 
 def log_activity(action, detail=None, user=None):
@@ -237,13 +183,7 @@ def log_activity(action, detail=None, user=None):
 
 @app.before_request
 def _before_request_init_db():
-    try:
-        ensure_db()
-    except Exception as e:
-        try:
-            app.logger.exception('before_request ensure_db: %s', e)
-        except Exception:
-            pass
+    ensure_db()
     # Skip static and auth endpoints for onboarding gate
     if request.endpoint in (
         'static', 'login', 'logout', 'register', 'admin_access',
@@ -657,33 +597,19 @@ class AppSetting(db.Model):
 
 
 def get_setting(key, default=''):
-    try:
-        row = AppSetting.query.filter_by(key=key).first()
-        return row.value if row and row.value is not None else default
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return default
+    row = AppSetting.query.filter_by(key=key).first()
+    return row.value if row and row.value is not None else default
 
 
 def set_setting(key, value):
-    try:
-        row = AppSetting.query.filter_by(key=key).first()
-        if not row:
-            row = AppSetting(key=key, value=value)
-            db.session.add(row)
-        else:
-            row.value = value
-        db.session.commit()
-        return row
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return None
+    row = AppSetting.query.filter_by(key=key).first()
+    if not row:
+        row = AppSetting(key=key, value=value)
+        db.session.add(row)
+    else:
+        row.value = value
+    db.session.commit()
+    return row
 
 
 def report_branding():
@@ -695,8 +621,6 @@ def report_branding():
         'org_line': get_setting('org_line', 'United Nations Development Programme (UNDP)'),
         'app_name': get_setting('app_name', 'Project Financial Management Workflow'),
         'app_logo': get_setting('app_logo_path', 'branding/app_logo_default.png'),
-        'official_address': get_setting('official_address', ''),
-        'youtube_url': get_setting('youtube_url', ''),
     }
 
 
@@ -742,14 +666,7 @@ def amount_in_words(amount):
 # ---------------------------------------------------------------------------
 @login_manager.user_loader
 def load_user(user_id):
-    try:
-        return db.session.get(User, int(user_id))
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return None
+    return db.session.get(User, int(user_id))
 
 
 # Role hierarchy — programme staff + legacy admin roles
@@ -1012,33 +929,15 @@ def get_refusal_reasons(start_date=None, end_date=None):
 @app.route('/')
 def index():
     """Public marketing home; authenticated users go to their workspace."""
-    try:
-        if current_user.is_authenticated:
-            if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
-                return redirect(url_for('onboarding'))
-            if current_user.role == 'provider':
-                return redirect(url_for('provider_dashboard'))
-            if _is_admin_role(current_user.role):
-                return redirect(url_for(_home_for_role(current_user.role)))
-        content = homepage_content()
-        return render_template('public_home.html', content=content)
-    except Exception as e:
-        try:
-            app.logger.exception('index failed: %s', e)
-        except Exception:
-            pass
-        try:
-            return render_template(
-                'error.html', code=500, title='Temporary problem',
-                message='The home page could not load fully. Please try Sign in or refresh in a moment.',
-            ), 500
-        except Exception:
-            return (
-                '<h1>Project Financial Management Workflow</h1>'
-                '<p>Home is temporarily unavailable. <a href="/login">Sign in</a></p>',
-                500,
-                {'Content-Type': 'text/html; charset=utf-8'},
-            )
+    if current_user.is_authenticated:
+        if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
+            return redirect(url_for('onboarding'))
+        if current_user.role == 'provider':
+            return redirect(url_for('provider_dashboard'))
+        if _is_admin_role(current_user.role):
+            return redirect(url_for(_home_for_role(current_user.role)))
+    content = homepage_content()
+    return render_template('public_home.html', content=content)
 
 
 @app.route('/about')
@@ -1148,316 +1047,29 @@ def admin_homepage_editor():
 
 
 
-def _ensure_users_table():
-    """Create users table if missing (Postgres first, then generic create_all)."""
-    from sqlalchemy import text as _text
-    try:
-        db.session.execute(_text('SELECT 1 FROM users LIMIT 1'))
-        return True
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-    try:
-        db.create_all()
-        db.session.execute(_text('SELECT 1 FROM users LIMIT 1'))
-        return True
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-    ddl = (
-        "CREATE TABLE IF NOT EXISTS users ("
-        "id SERIAL PRIMARY KEY,"
-        "email VARCHAR(120) UNIQUE NOT NULL,"
-        "password_hash VARCHAR(256) NOT NULL,"
-        "full_name VARCHAR(120) NOT NULL,"
-        "role VARCHAR(40) NOT NULL DEFAULT 'provider',"
-        "staff_title VARCHAR(120),"
-        "facility_id INTEGER,"
-        "is_active BOOLEAN DEFAULT TRUE,"
-        "must_complete_onboarding BOOLEAN DEFAULT FALSE,"
-        "onboarding_status VARCHAR(30) DEFAULT 'active',"
-        "can_finance_review BOOLEAN DEFAULT FALSE,"
-        "can_pm_approve BOOLEAN DEFAULT FALSE,"
-        "can_pay_expenses BOOLEAN DEFAULT FALSE,"
-        "can_view_finance BOOLEAN DEFAULT FALSE,"
-        "can_download_financial BOOLEAN DEFAULT FALSE,"
-        "activation_code VARCHAR(40),"
-        "profile_photo VARCHAR(255),"
-        "phone VARCHAR(40),"
-        "organization VARCHAR(150),"
-        "role_confirmed BOOLEAN DEFAULT FALSE,"
-        "ethics_accepted BOOLEAN DEFAULT FALSE,"
-        "ethics_accepted_at TIMESTAMP,"
-        "onboarding_notes TEXT,"
-        "last_login_at TIMESTAMP,"
-        "password_changed_at TIMESTAMP,"
-        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        ")"
-    )
-    try:
-        db.session.execute(_text(ddl))
-        db.session.commit()
-        return True
-    except Exception as e:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        try:
-            app.logger.exception('Could not create users table: %s', e)
-        except Exception:
-            pass
-        return False
-
-
-def _find_user_by_email(email):
-    """Load a user by email; create table if needed; tolerate schema drift."""
-    email = (email or '').strip().lower()
-    if not email:
-        return None
-    _ensure_users_table()
-    try:
-        _ensure_users_columns()
-    except Exception:
-        pass
-    try:
-        return User.query.filter_by(email=email).first()
-    except Exception as e:
-        try:
-            app.logger.warning('ORM user lookup failed, trying SQL: %s', e)
-        except Exception:
-            pass
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-    try:
-        from sqlalchemy import text as _text
-        row = db.session.execute(
-            _text('SELECT id FROM users WHERE lower(email) = :e LIMIT 1'),
-            {'e': email},
-        ).first()
-        if row:
-            try:
-                return db.session.get(User, int(row[0]))
-            except Exception:
-                try:
-                    db.session.rollback()
-                except Exception:
-                    pass
-                try:
-                    return User.query.get(int(row[0]))
-                except Exception:
-                    try:
-                        db.session.rollback()
-                    except Exception:
-                        pass
-    except Exception as e2:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        try:
-            app.logger.exception('SQL user lookup failed: %s', e2)
-        except Exception:
-            pass
-    return None
-
-
-def _ensure_users_columns():
-    """Add any missing optional columns on users (Postgres-safe)."""
-    needed = {
-        'staff_title': 'VARCHAR(120)',
-        'onboarding_status': "VARCHAR(30) DEFAULT 'active'",
-        'must_complete_onboarding': 'BOOLEAN DEFAULT FALSE',
-        'can_finance_review': 'BOOLEAN DEFAULT FALSE',
-        'can_pm_approve': 'BOOLEAN DEFAULT FALSE',
-        'can_pay_expenses': 'BOOLEAN DEFAULT FALSE',
-        'can_view_finance': 'BOOLEAN DEFAULT FALSE',
-        'can_download_financial': 'BOOLEAN DEFAULT FALSE',
-        'activation_code': 'VARCHAR(40)',
-        'profile_photo': 'VARCHAR(255)',
-        'phone': 'VARCHAR(40)',
-        'organization': 'VARCHAR(150)',
-        'role_confirmed': 'BOOLEAN DEFAULT FALSE',
-        'ethics_accepted': 'BOOLEAN DEFAULT FALSE',
-        'ethics_accepted_at': 'TIMESTAMP',
-        'onboarding_notes': 'TEXT',
-        'last_login_at': 'TIMESTAMP',
-        'password_changed_at': 'TIMESTAMP',
-        'facility_id': 'INTEGER',
-    }
-    try:
-        from sqlalchemy import text as _text, inspect as _inspect
-        cols = {c['name'] for c in _inspect(db.engine).get_columns('users')}
-    except Exception:
-        return
-    for name, decl in needed.items():
-        if name in cols:
-            continue
-        try:
-            db.session.execute(_text('ALTER TABLE users ADD COLUMN %s %s' % (name, decl)))
-            db.session.commit()
-        except Exception:
-            try:
-                db.session.rollback()
-            except Exception:
-                pass
-
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    try:
-        _ensure_users_columns()
-    except Exception:
-        pass
-    try:
-        if current_user.is_authenticated:
-            return redirect(url_for('index'))
-    except Exception:
-        pass
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
     if request.method == 'POST':
-        email = (request.form.get('email') or '').strip().lower()
-        password = request.form.get('password') or ''
-        user = _find_user_by_email(email)
-        if user is None and email:
-            table_ok = False
-            try:
-                table_ok = _ensure_users_table()
-            except Exception:
-                table_ok = False
-            if not table_ok:
-                detail = ''
-                try:
-                    from sqlalchemy import text as _text
-                    db.session.execute(_text('SELECT 1 FROM users LIMIT 1'))
-                except Exception as _ue:
-                    detail = str(_ue)[:180]
-                    try:
-                        db.session.rollback()
-                    except Exception:
-                        pass
-                flash(
-                    'Cannot reach the users table. %s '
-                    'Open /db-health on this site for diagnostics. '
-                    'DATABASE_URL should be the private URL (postgres.railway.internal) '
-                    'or set DATABASE_PUBLIC_URL as fallback.'
-                    % (detail or ''),
-                    'danger',
-                )
-                try:
-                    return render_template('login.html')
-                except Exception:
-                    return redirect(url_for('index'))
-            try:
-                from sqlalchemy import text as _text
-                n = db.session.execute(_text('SELECT COUNT(*) FROM users')).scalar() or 0
-            except Exception:
-                n = -1
-            if n == 0:
-                try:
-                    import os as _os
-                    pw = _os.environ.get('ADMIN_PASSWORD') or 'Contra@Admin2026!'
-                    admin_email = (_os.environ.get('ADMIN_EMAIL') or 'knowsoftconsult@gmail.com').strip().lower()
-                    u = User(
-                        email=admin_email,
-                        full_name='General Administrator',
-                        role='general_admin',
-                        is_active=True,
-                        onboarding_status='active',
-                    )
-                    u.set_password(pw)
-                    db.session.add(u)
-                    db.session.commit()
-                    flash(
-                        'First admin was created for this database. Sign in with ADMIN_EMAIL and ADMIN_PASSWORD '
-                        '(defaults: knowsoftconsult@gmail.com / Contra@Admin2026!).',
-                        'warning',
-                    )
-                    try:
-                        return render_template('login.html')
-                    except Exception:
-                        return redirect(url_for('login'))
-                except Exception as e:
-                    try:
-                        db.session.rollback()
-                    except Exception:
-                        pass
-                    try:
-                        app.logger.exception('bootstrap admin on login: %s', e)
-                    except Exception:
-                        pass
-        active = True
-        if user is not None:
-            try:
-                active = bool(user.is_active)
-            except Exception:
-                active = True
-        if user and active and user.check_password(password):
-            status = getattr(user, 'onboarding_status', None) or 'active'
-            if status == 'rejected':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        user = User.query.filter_by(email=email, is_active=True).first()
+        if user and user.check_password(password):
+            if getattr(user, 'onboarding_status', 'active') == 'rejected':
                 flash('Your account registration was not approved. Contact the administrator.', 'danger')
                 return redirect(url_for('login'))
-            try:
-                login_user(user, remember=True)
-            except Exception as e:
-                try:
-                    app.logger.exception('login_user: %s', e)
-                except Exception:
-                    pass
-                flash('Could not start your session. Please try again.', 'danger')
-                return redirect(url_for('login'))
-            try:
-                user.last_login_at = datetime.utcnow()
-                db.session.commit()
-            except Exception:
-                try:
-                    db.session.rollback()
-                except Exception:
-                    pass
-            try:
-                log_activity('login', 'role=%s' % getattr(user, 'role', ''), user=user)
-            except Exception:
-                pass
-            try:
-                label = user.role_label if hasattr(user, 'role_label') else user.role
-                flash('Welcome, %s (%s).' % (user.full_name, label), 'success')
-            except Exception:
-                flash('Welcome.', 'success')
-            if status in ('pending_profile', 'pending_approval'):
+            login_user(user, remember=True)
+            user.last_login_at = datetime.utcnow()
+            db.session.commit()
+            log_activity('login', f'role={user.role}', user=user)
+            flash(f'Welcome, {user.full_name} ({user.role_label}).', 'success')
+            if getattr(user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval'):
                 return redirect(url_for('onboarding'))
-            # Prefer role home; fall back to index
-            try:
-                return redirect(url_for(_home_for_role(user.role)))
-            except Exception:
-                return redirect(url_for('index'))
+            return redirect(url_for('index'))
         flash('Invalid email or password.', 'danger')
-        try:
-            log_activity('login_failed', email)
-        except Exception:
-            pass
-    try:
-        return render_template('login.html')
-    except Exception as e:
-        try:
-            app.logger.exception('login template: %s', e)
-        except Exception:
-            pass
-        return (
-            '<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:420px;margin:3rem auto">'
-            '<h1>Sign in</h1>'
-            '<form method="post">'
-            '<p><label>Email<br><input name="email" type="email" required style="width:100%"></label></p>'
-            '<p><label>Password<br><input name="password" type="password" required style="width:100%"></label></p>'
-            '<button type="submit">Sign in</button></form>'
-            '<p><a href="/">Home</a></p></body></html>',
-            200,
-            {'Content-Type': 'text/html; charset=utf-8'},
-        )
+        log_activity('login_failed', email)
+    return render_template('login.html')
 
 
 @app.route('/logout')
@@ -1480,8 +1092,8 @@ def admin_access():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
-        user = User.query.filter_by(email=email).first()
-        if user and bool(getattr(user, 'is_active', True)) and _is_admin_role(user.role) and user.check_password(password):
+        user = User.query.filter_by(email=email, is_active=True).first()
+        if user and _is_admin_role(user.role) and user.check_password(password):
             login_user(user, remember=False)
             flash(f'Welcome, {user.full_name} ({user.role_label}).', 'success')
             return redirect(url_for(_home_for_role(user.role)))
@@ -1661,15 +1273,7 @@ def admin_dashboard():
 @login_required
 @admin_required
 def admin_facilities():
-    try:
-        facilities = Facility.query.order_by(Facility.created_at.desc()).all()
-    except Exception as e:
-        try:
-            current_app.logger.exception('admin_facilities: %s', e)
-        except Exception:
-            pass
-        facilities = []
-        flash('Could not load facilities fully. Try creating Main Warehouse from Program items.', 'warning')
+    facilities = Facility.query.order_by(Facility.created_at.desc()).all()
     return render_template('admin_facilities.html', facilities=facilities)
 
 
@@ -1700,24 +1304,20 @@ def admin_facility_new():
             target_clients_monthly=target,
             is_active=request.form.get('is_active') == '1',
         )
-        try:
-            db.session.add(fac)
-            db.session.flush()
-            for prod in Product.query.all():
-                db.session.add(StockItem(
-                    facility_id=fac.id, product_id=prod.id,
-                    quantity_on_hand=0, reorder_level=10,
-                ))
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Could not create facility: {e}', 'danger')
-            return render_template('admin_facility_form.html', facility=None)
+        db.session.add(fac)
+        db.session.flush()
+        # Seed zero stock lines for all catalogue products
+        for prod in Product.query.all():
+            db.session.add(StockItem(
+                facility_id=fac.id, product_id=prod.id,
+                quantity_on_hand=0, reorder_level=10,
+            ))
+        db.session.commit()
         try:
             log_activity('facility_create', f'{fac.name} ({fac.facility_type})')
         except Exception:
             pass
-        flash(f'Service unit "{fac.name}" created.', 'success')
+        flash(f'Service unit “{fac.name}” created.', 'success')
         return redirect(url_for('admin_facility_detail', fid=fac.id))
     return render_template('admin_facility_form.html', facility=None)
 
@@ -3278,18 +2878,10 @@ def expense_list():
     if current_user.role == 'provider':
         flash('Expense claims are for programme staff.', 'warning')
         return redirect(url_for('provider_dashboard'))
-    try:
-        q = ExpenseRequest.query.order_by(ExpenseRequest.created_at.desc())
-        if not (_can_review_expense(current_user) or _can_approve_expense_pm(current_user)):
-            q = q.filter_by(requester_id=current_user.id)
-        items = q.limit(200).all()
-    except Exception as e:
-        try:
-            current_app.logger.exception('expense_list: %s', e)
-        except Exception:
-            pass
-        items = []
-        flash('Expense register could not load fully. If this continues, ask an administrator to check the database.', 'warning')
+    q = ExpenseRequest.query.order_by(ExpenseRequest.created_at.desc())
+    if not (_can_review_expense(current_user) or _can_approve_expense_pm(current_user)):
+        q = q.filter_by(requester_id=current_user.id)
+    items = q.limit(200).all()
     return render_template('expense_list.html', items=items)
 
 
@@ -3313,9 +2905,6 @@ def expense_new():
             return redirect(url_for('expense_new'))
         if amount <= 0:
             flash('Amount must be positive.', 'danger')
-            return redirect(url_for('expense_new'))
-        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id') or not request.form.get('project_id') or not request.form.get('expense_code_id'):
-            flash('Debit account, credit account, project code and expense code are required.', 'danger')
             return redirect(url_for('expense_new'))
         action = request.form.get('action', 'draft')
         num = f"EXP-{datetime.utcnow().strftime('%Y%m%d')}-{current_user.id}-{int(datetime.utcnow().timestamp()) % 10000}"
@@ -3342,9 +2931,6 @@ def expense_new():
             f.save(os.path.join(d, safe))
             er.evidence_filename = safe
         db.session.add(er)
-        db.session.flush()
-        from fmss_align import save_coding, read_coding
-        save_coding('expense_request', er.id, read_coding())
         db.session.commit()
         log_activity('expense_submitted', er.request_number)
         flash(f'Expense {er.request_number} saved ({er.status}).', 'success')
@@ -3362,8 +2948,7 @@ def expense_detail(eid):
         _can_review_expense(current_user) or _can_approve_expense_pm(current_user)
     ):
         abort(403)
-    from fmss_align import codebook, get_coding
-    return render_template('expense_detail.html', er=er, codebook=codebook(), coding=get_coding('expense_request', er.id))
+    return render_template('expense_detail.html', er=er)
 
 
 @app.route('/expenses/<int:eid>/submit', methods=['POST'])
@@ -3393,11 +2978,6 @@ def expense_finance_review(eid):
     er.finance_reviewer_id = current_user.id
     er.finance_reviewed_at = datetime.utcnow()
     if request.form.get('decision') == 'approve':
-        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id'):
-            flash('Select debit and credit accounts, plus project, expense and budget codes.', 'danger')
-            return redirect(url_for('expense_detail', eid=eid))
-        from fmss_align import save_coding, read_coding
-        save_coding('expense_request', er.id, read_coding())
         er.status = 'finance_review'
         flash('Cleared for Project Manager approval.', 'success')
     else:
@@ -3455,22 +3035,8 @@ def expense_mark_paid(eid):
         created_by=current_user.id,
     ))
     try:
-        from fmss_align import get_coding
-        from finance_core import post_journal
-        coding = get_coding('expense_request', er.id)
-        if coding and coding.debit_account_id and coding.credit_account_id:
-            full = er.amount
-            paid = full if (coding.pay_mode or 'full') == 'full' else coding.pay_amount
-            lines = [
-                {'account_id': coding.debit_account_id, 'debit': full, 'credit': 0, 'project_id': coding.project_id, 'expense_code_id': coding.expense_code_id, 'budget_code_id': coding.budget_code_id, 'description': er.description},
-                {'account_id': coding.credit_account_id, 'debit': 0, 'credit': paid, 'project_id': coding.project_id, 'expense_code_id': coding.expense_code_id, 'budget_code_id': coding.budget_code_id, 'description': er.description},
-            ]
-            if (coding.pay_mode or 'full') == 'part' and coding.payable_account_id:
-                lines.append({'account_id': coding.payable_account_id, 'debit': 0, 'credit': full - paid, 'description': 'Unpaid balance'})
-            post_journal(lines, er.description, 'expense_request', er.id)
-        else:
-            from finance_core import post_legacy_expense
-            post_legacy_expense(er)
+        from finance_core import post_legacy_expense
+        post_legacy_expense(er)
     except Exception as fin_exc:
         print('finance post:', fin_exc)
     db.session.commit()
@@ -3900,39 +3466,16 @@ def _chart_data():
 @login_required
 def main_dashboard():
     """Illustrative 3D-style executive dashboard for Program, Procurement, Inventory, Finance."""
-    try:
-        if current_user.role == 'provider':
-            return redirect(url_for('provider_dashboard'))
-    except Exception:
-        pass
-    try:
-        kpis = _dashboard_kpis()
-    except Exception:
-        kpis = {
-            'facilities': 0, 'products': 0, 'encounters': 0, 'learning_subs': 0,
-            'vendors': 0, 'rfqs': 0, 'pos': 0, 'proc_invoices': 0,
-            'stock_lines': 0, 'open_requests': 0, 'dispatches': 0, 'low_stock': 0,
-            'pending_finance': 0, 'expense_reqs': 0, 'accounts': 0, 'journals': 0,
-        }
-    try:
-        chart_methods, chart_proc = _chart_data()
-    except Exception:
-        chart_methods = {'labels': [], 'data': []}
-        chart_proc = {'labels': [], 'data': []}
-    try:
-        return render_template(
-            'main_dashboard.html',
-            kpis=kpis,
-            chart_methods=chart_methods,
-            chart_proc=chart_proc,
-        )
-    except Exception as e:
-        try:
-            app.logger.exception('main_dashboard: %s', e)
-        except Exception:
-            pass
-        flash('Dashboard is temporarily limited. Use the menu to open Finance or Inventory.', 'warning')
-        return redirect(url_for('index'))
+    if current_user.role == 'provider':
+        return redirect(url_for('provider_dashboard'))
+    kpis = _dashboard_kpis()
+    chart_methods, chart_proc = _chart_data()
+    return render_template(
+        'main_dashboard.html',
+        kpis=kpis,
+        chart_methods=chart_methods,
+        chart_proc=chart_proc,
+    )
 
 
 @app.route('/dashboard/export/excel')
@@ -4330,13 +3873,7 @@ def invoice_new():
         if not inv.deliverable_title or amount <= 0:
             flash('Deliverable title and a positive amount are required.', 'danger')
             return redirect(url_for('invoice_new'))
-        if not request.form.get('debit_account_id') or not request.form.get('credit_account_id') or not request.form.get('project_id') or not request.form.get('expense_code_id'):
-            flash('Debit account, credit account, project code and expense code are required.', 'danger')
-            return redirect(url_for('invoice_new'))
         db.session.add(inv)
-        db.session.flush()
-        from fmss_align import save_coding, read_coding
-        save_coding('invoice', inv.id, read_coding())
         db.session.commit()
         flash(f'Invoice {inv.invoice_number} saved as {status}.', 'success')
         return redirect(url_for('invoice_detail', iid=inv.id))
@@ -4825,8 +4362,6 @@ def admin_branding():
         set_setting('report_subtitle', request.form.get('report_subtitle', '').strip())
         set_setting('org_line', request.form.get('org_line', '').strip())
         set_setting('app_name', request.form.get('app_name', '').strip() or 'CONTRAconnect')
-        set_setting('official_address', request.form.get('official_address', '').strip())
-        set_setting('youtube_url', request.form.get('youtube_url', '').strip())
         f = request.files.get('logo')
         if f and f.filename:
             ext = f.filename.rsplit('.', 1)[-1].lower()
@@ -5229,183 +4764,6 @@ try:
     print('Ops upgrade registered (/ops/inventory, /ops/procurement, /ops/bank, /ops/privileges)')
 except Exception as _ops_boot:
     print('Ops upgrade boot:', _ops_boot)
-
-
-
-@app.route('/db-health')
-def db_health():
-    """Safe DB diagnostics for Railway setup (no secrets)."""
-    import os as _os
-    from sqlalchemy import text as _text
-    info = {
-        'has_DATABASE_URL': bool(_os.environ.get('DATABASE_URL')),
-        'has_DATABASE_PUBLIC_URL': bool(_os.environ.get('DATABASE_PUBLIC_URL')),
-        'uri_scheme': '',
-        'uri_host': '',
-        'connect_ok': False,
-        'users_table_ok': False,
-        'users_count': None,
-        'error': '',
-    }
-    try:
-        uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
-        # redact password
-        if '@' in uri:
-            head, tail = uri.split('@', 1)
-            scheme_user = head.split('://', 1)
-            info['uri_scheme'] = (scheme_user[0] + '://***@' + tail.split('/')[0]) if len(scheme_user) == 2 else '***'
-            info['uri_host'] = tail.split('/')[0]
-        else:
-            info['uri_scheme'] = uri[:32]
-    except Exception as e:
-        info['error'] = 'uri parse: %s' % e
-    try:
-        db.session.execute(_text('SELECT 1'))
-        info['connect_ok'] = True
-    except Exception as e:
-        info['error'] = 'connect: %s' % e
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return app.response_class(
-            '\n'.join('%s=%s' % (k, info[k]) for k in info) + '\n',
-            mimetype='text/plain',
-        )
-    try:
-        n = db.session.execute(_text('SELECT COUNT(*) FROM users')).scalar()
-        info['users_table_ok'] = True
-        info['users_count'] = n
-    except Exception as e:
-        info['error'] = 'users: %s' % e
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        # try create
-        try:
-            ok = _ensure_users_table()
-            info['create_attempted'] = ok
-            if ok:
-                n = db.session.execute(_text('SELECT COUNT(*) FROM users')).scalar()
-                info['users_table_ok'] = True
-                info['users_count'] = n
-                info['error'] = ''
-        except Exception as e2:
-            info['error'] = 'users+create: %s | %s' % (e, e2)
-    lines = ['%s=%s' % (k, info[k]) for k in info]
-    return app.response_class('\n'.join(lines) + '\n', mimetype='text/plain')
-
-
-@app.route('/upgrade-status')
-def upgrade_status():
-    return (
-        'UPGRADE-2026-10-09\n'
-        'finance-setup=/ops/sections/finance-setup\n'
-        'financial-reports=/ops/sections/financial-reports\n'
-        'rfq=/ops/rfq\n'
-        'inventory-sheet=/ops/inventory\n'
-        'cash-recon=/ops/cash-recon\n',
-        200,
-        {'Content-Type': 'text/plain; charset=utf-8'},
-    )
-
-try:
-    from workflow_upgrade import init_workflow_upgrade
-    init_workflow_upgrade(app, db)
-    print('Workflow upgrade registered (/ops/rfq, /ops/cash-recon)')
-except Exception as _wf_boot:
-    print('Workflow upgrade boot:', _wf_boot)
-
-try:
-    from logistics_flow import init_logistics
-    init_logistics(app, db)
-    print('Logistics registered (warehouse, GRN, dispatch, uptake)')
-except Exception as _log_boot:
-    print('Logistics boot:', _log_boot)
-
-
-# ---------------------------------------------------------------------------
-# Branded error pages (CONTRAconnect) — never show a bare stack / blank page
-# ---------------------------------------------------------------------------
-def _render_error(code, title, message):
-    try:
-        app.logger.error('HTTP %s: %s — %s', code, title, message)
-    except Exception:
-        pass
-    try:
-        return render_template(
-            'error.html',
-            code=code,
-            title=title,
-            message=message,
-        ), code
-    except Exception:
-        # Absolute last resort if template itself fails
-        body = (
-            f'<!DOCTYPE html><html><head><title>{code}</title></head><body style='
-            f'"font-family:system-ui;text-align:center;padding:3rem">'
-            f'<h1>{code}</h1><p>{title}</p><p>{message}</p>'
-            f'<p><a href="javascript:history.back()">Go back</a> · '
-            f'<a href="/">Home</a></p></body></html>'
-        )
-        return body, code
-
-
-@app.errorhandler(403)
-def error_403(e):
-    return _render_error(
-        403,
-        'Access denied',
-        'You do not have permission to view this page. Sign in with an authorised account, or go back to the previous screen.',
-    )
-
-
-@app.errorhandler(404)
-def error_404(e):
-    return _render_error(
-        404,
-        'Page not found',
-        'The page or resource you asked for is not available. Check the address, or use the button below to go back.',
-    )
-
-
-@app.errorhandler(405)
-def error_405(e):
-    return _render_error(
-        405,
-        'Method not allowed',
-        'This action is not supported on this page. Please go back and try another option.',
-    )
-
-
-@app.errorhandler(500)
-def error_500(e):
-    return _render_error(
-        500,
-        'Unexpected error',
-        'Something went wrong while processing your request. Your data is safe — go back and try again, or contact your administrator if it continues.',
-    )
-
-
-@app.errorhandler(Exception)
-def error_unhandled(e):
-    # Log-friendly; still show branded page in production
-    try:
-        current_app.logger.exception('Unhandled error: %s', e)
-    except Exception:
-        pass
-    code = getattr(e, 'code', None) or 500
-    if code == 403:
-        return error_403(e)
-    if code == 404:
-        return error_404(e)
-    return _render_error(
-        500,
-        'Unexpected error',
-        'Something went wrong while processing your request. Please go back and try again.',
-    )
-
 
 application = app  # WSGI alias for gunicorn / Render
 

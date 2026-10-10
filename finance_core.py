@@ -29,14 +29,8 @@ FinAccount = FinProject = FinExpenseCode = FinBudgetCode = None
 FinDocument = FinJournalLine = FinApproval = FinBankTick = FinBankSession = None
 
 ACCOUNT_TYPES = (
-    'Non-current asset', 'Current asset', 'Expenses', 'Cash', 'Account Receivable',
-    'Income', 'Account payables', 'Liabilities', 'Current liabilities', 'Equity', 'Capital', 'Reserve',
+    'Cash', 'Expense', 'Asset', 'Liability', 'Equity', 'Receivable', 'Payable', 'Income',
 )
-# Older books still post. These map into the same debit / credit rule.
-LEGACY_DEBIT = {'Asset', 'Expense', 'Receivable', 'Cash'}
-DEBIT_TYPES = {
-    'Non-current asset', 'Current asset', 'Expenses', 'Cash', 'Account Receivable',
-} | LEGACY_DEBIT
 
 DEFAULT_ACCOUNTS = [
     ('1000', 'Cash at bank', 'Cash'),
@@ -167,11 +161,6 @@ def init_finance(app, database):
         finance_note = database.Column(database.Text, default='')
         journal_no = database.Column(database.String(40))
         payment_journal_no = database.Column(database.String(40))
-        debit_account_id = database.Column(database.Integer)
-        credit_account_id = database.Column(database.Integer)
-        payable_account_id = database.Column(database.Integer)
-        pay_mode = database.Column(database.String(10), default='full')
-        pay_amount = database.Column(database.Numeric(14, 2), default=0)
         created_at = database.Column(database.DateTime, default=datetime.utcnow)
         project = database.relationship('FinProject')
         expense_code = database.relationship('FinExpenseCode')
@@ -227,8 +216,6 @@ def init_finance(app, database):
     with app.app_context():
         database.create_all()
         seed_finance()
-        from fmss_align import init_fmss_align
-        init_fmss_align(app, database)
     return True
 
 
@@ -333,53 +320,35 @@ def _account(code):
 
 
 def post_document_accrual(doc):
-    """Finance approval posts the selected debit and credit accounts."""
+    """Finance approval: Dr expense/asset, Cr accounts payable. Hits AP ledger and GL."""
     if doc.journal_no:
         return doc.journal_no
-    debit_id = getattr(doc, 'debit_account_id', None)
-    credit_id = getattr(doc, 'credit_account_id', None)
-    if not debit_id or not credit_id:
-        expense = doc.expense_code or FinExpenseCode.query.get(doc.expense_code_id)
-        payable = _account('2000')
-        if not expense or not payable:
-            raise ValueError('Select a debit account and a credit account before finance approval.')
-        debit_id = expense.account_id
-        credit_id = payable.id
-    full = _d(doc.amount)
-    paid = full if (getattr(doc, 'pay_mode', 'full') or 'full') == 'full' else _d(getattr(doc, 'pay_amount', 0) or full)
-    lines = [{
-        'account_id': debit_id, 'debit': full, 'credit': 0,
-        'project_id': doc.project_id, 'expense_code_id': doc.expense_code_id,
-        'budget_code_id': doc.budget_code_id,
-        'description': f'{doc.doc_no} {doc.payee}',
-    }, {
-        'account_id': credit_id, 'debit': 0, 'credit': paid,
-        'project_id': doc.project_id, 'expense_code_id': doc.expense_code_id,
-        'budget_code_id': doc.budget_code_id,
-        'description': f'{doc.doc_no} credit {doc.payee}',
-    }]
-    if (getattr(doc, 'pay_mode', 'full') or 'full') == 'part':
-        payable_id = getattr(doc, 'payable_account_id', None) or ( _account('2000').id if _account('2000') else None)
-        if not payable_id:
-            raise ValueError('Select the payable account for the unpaid balance.')
-        lines.append({
-            'account_id': payable_id, 'debit': 0, 'credit': full - paid,
+    expense = doc.expense_code or FinExpenseCode.query.get(doc.expense_code_id)
+    payable = _account('2000')
+    if not expense or not payable:
+        raise ValueError('Expense code and Accounts payable (2000) are required before posting.')
+    entry = post_journal([
+        {
+            'account_id': expense.account_id, 'debit': doc.amount, 'credit': 0,
             'project_id': doc.project_id, 'expense_code_id': doc.expense_code_id,
             'budget_code_id': doc.budget_code_id,
-            'description': f'{doc.doc_no} unpaid balance',
-        })
-    entry = post_journal(lines, doc.description, source_type=doc.doc_type or 'payment', source_id=doc.id)
+            'description': f'{doc.doc_no} accrual {doc.payee}',
+        },
+        {
+            'account_id': payable.id, 'debit': 0, 'credit': doc.amount,
+            'project_id': doc.project_id, 'expense_code_id': doc.expense_code_id,
+            'budget_code_id': doc.budget_code_id,
+            'description': f'{doc.doc_no} payable {doc.payee}',
+        },
+    ], doc.description, source_type=doc.doc_type or 'payment', source_id=doc.id)
     doc.journal_no = entry
     return entry
 
 
 def post_document_payment(doc):
-    """Cash settlement if finance approval only accrued the payable."""
+    """Paid: Dr accounts payable, Cr cash. Hits cash book for bank reconciliation."""
     if doc.payment_journal_no:
         return doc.payment_journal_no
-    if getattr(doc, 'pay_mode', 'full') == 'part' or getattr(doc, 'debit_account_id', None):
-        doc.payment_journal_no = doc.journal_no
-        return doc.journal_no
     payable = _account('2000')
     cash = _account('1000')
     if not payable or not cash:
@@ -487,7 +456,7 @@ def _balances(lines):
     for slot in rows.values():
         acc = slot['account']
         dr, cr = slot['debit'], slot['credit']
-        if acc.account_type in DEBIT_TYPES:
+        if acc.account_type in ('Asset', 'Cash', 'Expense', 'Receivable'):
             balance = dr - cr
         else:
             balance = cr - dr
@@ -505,93 +474,39 @@ def trial_balance(lines):
     return rows, total_dr, total_cr
 
 
-def _bucket(row):
-    typ = row['account'].account_type
-    code = row['account'].code or ''
-    name = (row['account'].name or '').lower()
-    if typ in ('Non-current asset',) or (typ == 'Asset' and (code.startswith('15') or 'fixed' in name)):
-        return 'noncurrent'
-    if typ in ('Cash',):
-        return 'cash'
-    if typ in ('Current asset', 'Account Receivable', 'Receivable', 'Asset'):
-        return 'current'
-    if typ in ('Expenses', 'Expense'):
-        return 'expense'
-    if typ in ('Income',):
-        return 'income'
-    if typ in ('Capital',):
-        return 'capital'
-    if typ in ('Reserve',):
-        return 'reserve'
-    if typ in ('Equity',):
-        return 'equity'
-    if typ in ('Current liabilities',):
-        return 'current_liab'
-    if typ in ('Account payables', 'Payable', 'Liabilities', 'Liability'):
-        return 'liability'
-    return 'equity'
-
-
-def statements(lines, adjusted_cash=None):
+def statements(lines):
     rows = _balances(lines)
-    groups = {k: [] for k in ('noncurrent', 'current', 'cash', 'expense', 'income', 'capital', 'reserve', 'equity', 'liability', 'current_liab')}
+    groups = {t: [] for t in ACCOUNT_TYPES}
     for row in rows:
-        groups[_bucket(row)].append(row)
-    if adjusted_cash:
-        for row in groups['cash']:
-            if row['account'].id in adjusted_cash:
-                row['balance'] = adjusted_cash[row['account'].id]
-                row['from_reconciliation'] = True
-    assets = groups['noncurrent'] + groups['current'] + groups['cash']
-    income = sum((r['balance'] for r in groups['income']), Decimal('0'))
-    expense = sum((r['balance'] for r in groups['expense']), Decimal('0'))
+        groups.setdefault(row['account'].account_type, []).append(row)
+    assets = groups['Cash'] + groups['Receivable'] + groups['Asset']
+    liabilities = groups['Payable'] + groups['Liability']
+    equity = groups['Equity']
+    income = sum((r['balance'] for r in groups['Income']), Decimal('0'))
+    expense = sum((r['balance'] for r in groups['Expense']), Decimal('0'))
     surplus = income - expense
     asset_total = sum((r['balance'] for r in assets), Decimal('0'))
-    liability_total = sum((r['balance'] for r in groups['liability'] + groups['current_liab']), Decimal('0'))
-    equity_base = sum((r['balance'] for r in groups['capital'] + groups['equity'] + groups['reserve']), Decimal('0'))
-    equity_total = equity_base + surplus
-    tb_reserve = Decimal('0')
-    # Trial-balance difference is reserve. Statement reserve also absorbs surplus and any remaining imbalance.
-    reserve_accounts = sum((r['balance'] for r in groups['reserve']), Decimal('0'))
-    financing = equity_base + surplus + liability_total
-    plug = asset_total - financing
-    reserve_total = reserve_accounts + surplus + plug
-    equity_total = equity_base - reserve_accounts + reserve_total
-    financing = equity_total + liability_total
+    liability_total = sum((r['balance'] for r in liabilities), Decimal('0'))
+    equity_total = sum((r['balance'] for r in equity), Decimal('0')) + surplus
     return {
-        'noncurrent': groups['noncurrent'], 'current': groups['current'], 'cash': groups['cash'],
-        'assets': assets,
-        'capital': groups['capital'], 'equity': groups['equity'], 'reserve_rows': groups['reserve'],
-        'liabilities': groups['liability'], 'current_liab': groups['current_liab'],
-        'income': groups['income'], 'expense': groups['expense'],
+        'assets': assets, 'liabilities': liabilities, 'equity': equity,
+        'income': groups['Income'], 'expense': groups['Expense'],
         'asset_total': asset_total, 'liability_total': liability_total,
         'equity_total': equity_total, 'surplus': surplus, 'income_total': income,
-        'expense_total': expense, 'reserve_total': reserve_total,
-        'financing_total': financing, 'result_label': 'Surplus' if surplus >= 0 else 'Deficit',
+        'expense_total': expense,
     }
 
 
 def project_actuals():
+    lines = FinJournalLine.query.all()
     actual = {}
-    try:
-        lines = FinJournalLine.query.all()
-    except Exception:
-        return actual
     for line in lines:
-        try:
-            if not line.project_id:
-                continue
-            acc = getattr(line, 'account', None)
-            if acc is None:
-                continue
-            if getattr(acc, 'account_type', '') not in ('Expense', 'Expenses'):
-                continue
-            if line.source_type == 'payment' and _d(line.debit):
-                continue
-            key = (line.project_id, line.budget_code_id, line.expense_code_id)
-            actual[key] = actual.get(key, Decimal('0')) + _d(line.debit) - _d(line.credit)
-        except Exception:
+        if not line.project_id or not line.account or line.account.account_type != 'Expense':
             continue
+        if line.source_type == 'payment' and _d(line.debit):
+            continue  # settlement, not a new expense
+        key = (line.project_id, line.budget_code_id, line.expense_code_id)
+        actual[key] = actual.get(key, Decimal('0')) + _d(line.debit) - _d(line.credit)
     return actual
 
 
@@ -635,8 +550,7 @@ def coa():
             flash('Account added.', 'success')
         return redirect(url_for('fin.coa'))
     rows = FinAccount.query.order_by(FinAccount.code).all()
-    from fmss_align import account_balances
-    return render_template('fin_coa.html', accounts=rows, types=ACCOUNT_TYPES, can_edit=_can_finance(), balances=account_balances())
+    return render_template('fin_coa.html', accounts=rows, types=ACCOUNT_TYPES, can_edit=_can_finance())
 
 
 @fin_bp.route('/projects', methods=['GET', 'POST'])
@@ -731,71 +645,31 @@ def budget_codes():
 @login_required
 @_staff_required
 def payments():
-    """Payment / expense requests — never 500 on empty ledgers or missing codes."""
-    try:
-        seed_finance()
-    except Exception:
-        pass
     if request.method == 'POST':
-        try:
-            budget = FinBudgetCode.query.get(request.form.get('budget_code_id', type=int))
-            amount = _d(request.form.get('amount'))
-            payee = (request.form.get('payee') or '').strip()
-            desc = (request.form.get('description') or '').strip()
-            if not budget or amount <= 0 or not payee or not desc:
-                flash('Payee, amount, description and a budget code are required.', 'danger')
-            else:
-                doc = FinDocument(
-                    doc_no=_next_no('PAY'), doc_type='payment',
-                    project_id=request.form.get('project_id', type=int) or budget.project_id,
-                    expense_code_id=request.form.get('expense_code_id', type=int) or budget.expense_code_id,
-                    budget_code_id=budget.id, payee=payee, description=desc, amount=amount,
-                    status='submitted', requester_id=current_user.id,
-                    debit_account_id=request.form.get('debit_account_id', type=int),
-                    credit_account_id=request.form.get('credit_account_id', type=int),
-                    payable_account_id=request.form.get('payable_account_id', type=int),
-                    pay_mode=request.form.get('pay_mode') or 'full',
-                    pay_amount=_d(request.form.get('pay_amount') or amount),
-                )
-                if not doc.debit_account_id or not doc.credit_account_id:
-                    flash('Select the debit account and the credit account.', 'danger')
-                    return redirect(url_for('fin.payments'))
-                db.session.add(doc)
-                db.session.flush()
-                _log(doc, 'submitted', 'Payment request')
-                db.session.commit()
-                flash(f'{doc.doc_no} submitted for program approval.', 'success')
-                return redirect(url_for('fin.payment_detail', did=doc.id))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Could not save payment request: {e}', 'danger')
+        budget = FinBudgetCode.query.get(request.form.get('budget_code_id', type=int))
+        amount = _d(request.form.get('amount'))
+        payee = (request.form.get('payee') or '').strip()
+        desc = (request.form.get('description') or '').strip()
+        if not budget or amount <= 0 or not payee or not desc:
+            flash('Payee, amount, description and a budget code are required.', 'danger')
+        else:
+            doc = FinDocument(
+                doc_no=_next_no('PAY'), doc_type='payment',
+                project_id=budget.project_id, expense_code_id=budget.expense_code_id,
+                budget_code_id=budget.id, payee=payee, description=desc, amount=amount,
+                status='submitted', requester_id=current_user.id,
+            )
+            db.session.add(doc)
+            db.session.flush()
+            _log(doc, 'submitted', 'Payment request')
+            db.session.commit()
+            flash(f'{doc.doc_no} submitted for program approval.', 'success')
+            return redirect(url_for('fin.payment_detail', did=doc.id))
         return redirect(url_for('fin.payments'))
-    try:
-        docs = FinDocument.query.order_by(FinDocument.id.desc()).all()
-    except Exception:
-        docs = []
-    try:
-        budgets = FinBudgetCode.query.filter_by(is_active=True).all()
-    except Exception:
-        try:
-            budgets = FinBudgetCode.query.all()
-        except Exception:
-            budgets = []
-    try:
-        projects = FinProject.query.filter_by(is_active=True).order_by(FinProject.code).all()
-    except Exception:
-        projects = []
-    try:
-        expenses = FinExpenseCode.query.filter_by(is_active=True).order_by(FinExpenseCode.code).all()
-    except Exception:
-        expenses = []
-    try:
-        accounts = FinAccount.query.filter_by(is_active=True).order_by(FinAccount.code).all()
-    except Exception:
-        accounts = []
+    docs = FinDocument.query.order_by(FinDocument.id.desc()).all()
     return render_template(
-        'fin_payments.html', docs=docs, budgets=budgets,
-        projects=projects, expenses=expenses, accounts=accounts,
+        'fin_payments.html', docs=docs,
+        budgets=FinBudgetCode.query.filter_by(is_active=True).all(),
     )
 
 
@@ -824,20 +698,10 @@ def payment_act(did):
             doc.program_note = note
             _log(doc, 'program_approved', note)
         elif step == 'finance' and doc.status == 'program_approved' and _can_finance():
-            doc.project_id = request.form.get('project_id', type=int) or doc.project_id
-            doc.expense_code_id = request.form.get('expense_code_id', type=int) or doc.expense_code_id
-            doc.budget_code_id = request.form.get('budget_code_id', type=int) or doc.budget_code_id
-            doc.debit_account_id = request.form.get('debit_account_id', type=int) or doc.debit_account_id
-            doc.credit_account_id = request.form.get('credit_account_id', type=int) or doc.credit_account_id
-            doc.payable_account_id = request.form.get('payable_account_id', type=int) or doc.payable_account_id
-            doc.pay_mode = request.form.get('pay_mode') or doc.pay_mode or 'full'
-            doc.pay_amount = _d(request.form.get('pay_amount') or doc.pay_amount or doc.amount)
-            if not doc.debit_account_id or not doc.credit_account_id:
-                raise ValueError('Select debit and credit accounts before posting.')
             post_document_accrual(doc)
             doc.status = 'finance_approved'
             doc.finance_note = note
-            _log(doc, 'finance_approved', note or 'Posted selected debit and credit')
+            _log(doc, 'finance_approved', note or 'Posted to payable and expense ledgers')
         elif step == 'pay' and doc.status == 'finance_approved' and _can_finance():
             post_document_payment(doc)
             doc.status = 'paid'
@@ -869,16 +733,12 @@ def journals():
                     'account_id': request.form.get('debit_account_id', type=int),
                     'debit': request.form.get('amount'), 'credit': 0,
                     'project_id': request.form.get('project_id', type=int) or None,
-                    'expense_code_id': request.form.get('expense_code_id', type=int) or None,
-                    'budget_code_id': request.form.get('budget_code_id', type=int) or None,
                     'description': request.form.get('description'),
                 },
                 {
                     'account_id': request.form.get('credit_account_id', type=int),
                     'debit': 0, 'credit': request.form.get('amount'),
                     'project_id': request.form.get('project_id', type=int) or None,
-                    'expense_code_id': request.form.get('expense_code_id', type=int) or None,
-                    'budget_code_id': request.form.get('budget_code_id', type=int) or None,
                     'description': request.form.get('description'),
                 },
             ], request.form.get('description') or 'Manual journal', source_type='manual')
@@ -924,33 +784,16 @@ def ledger():
 @login_required
 @_staff_required
 def trial():
-    start = request.args.get('start') or ''
-    end = request.args.get('end') or ''
-    q = FinJournalLine.query
-    if start:
-        q = q.filter(FinJournalLine.entry_date >= date.fromisoformat(start))
-    if end:
-        q = q.filter(FinJournalLine.entry_date <= date.fromisoformat(end))
-    rows, total_dr, total_cr = trial_balance(q.all())
-    reserve = total_cr - total_dr
-    return render_template('fin_trial_balance.html', rows=rows, total_dr=total_dr, total_cr=total_cr, reserve=reserve, start=start, end=end)
+    rows, total_dr, total_cr = trial_balance(FinJournalLine.query.all())
+    return render_template('fin_trial_balance.html', rows=rows, total_dr=total_dr, total_cr=total_cr)
 
 
 @fin_bp.route('/statements')
 @login_required
 @_staff_required
 def financial_statements():
-    start = request.args.get('start') or ''
-    end = request.args.get('end') or str(date.today())
-    adjusted = {}
-    try:
-        from workflow_upgrade import adjusted_cash_map
-        adjusted = adjusted_cash_map(date.fromisoformat(end) if end else None)
-    except Exception:
-        adjusted = {}
-    from ifrs_reports import build_pack
-    built = build_pack(date.fromisoformat(start) if start else None, date.fromisoformat(end) if end else None, adjusted)
-    return render_template('fin_statements.html', pack=built['pack'], sfp=built['sfp'], cashflow=built['cashflow'], rows=built['rows'], total_dr=built['total_dr'], total_cr=built['total_cr'], reserve=built['reserve'], today=date.today(), start=start, end=end)
+    pack = statements(FinJournalLine.query.all())
+    return render_template('fin_statements.html', pack=pack, today=date.today())
 
 
 @fin_bp.route('/projects/<int:pid>/report')
@@ -968,29 +811,21 @@ def project_report(pid):
 @_staff_required
 def variance():
     project_id = request.args.get('project_id', type=int)
-    try:
-        projects = FinProject.query.order_by(FinProject.code).all()
-    except Exception:
-        projects = []
-    try:
-        actual = project_actuals()
-    except Exception:
-        actual = {}
+    actual = project_actuals()
     rows = []
+    query = FinBudgetCode.query
     if project_id:
-        try:
-            q = FinBudgetCode.query.filter_by(project_id=project_id).order_by(FinBudgetCode.code)
-            for budget in q:
-                spent = actual.get((budget.project_id, budget.id, budget.expense_code_id), Decimal('0'))
-                amount = _d(getattr(budget, 'amount', 0))
-                rows.append({
-                    'budget': budget, 'amount': amount, 'spent': spent, 'variance': amount - spent,
-                })
-        except Exception:
-            rows = []
+        query = query.filter_by(project_id=project_id)
+    for budget in query.order_by(FinBudgetCode.code).all():
+        spent = actual.get((budget.project_id, budget.id, budget.expense_code_id), Decimal('0'))
+        amount = _d(budget.amount)
+        rows.append({
+            'budget': budget, 'amount': amount, 'spent': spent, 'variance': amount - spent,
+        })
     return render_template(
         'fin_variance.html', rows=rows,
-        projects=projects, project_id=project_id,
+        projects=FinProject.query.order_by(FinProject.code).all(),
+        project_id=project_id,
     )
 
 

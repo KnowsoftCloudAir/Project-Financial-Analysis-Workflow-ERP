@@ -30,7 +30,7 @@ def bind(database, note, line, transfer, story):
 
 def _warehouse_id():
     row = db.session.execute(text(
-        "SELECT id FROM facilities WHERE name IN ('Main Warehouse', 'Central warehouse')"
+        "SELECT id FROM facilities WHERE name = 'Central warehouse'"
     )).first()
     if row:
         return row[0]
@@ -39,7 +39,7 @@ def _warehouse_id():
            VALUES ('Central warehouse', 'other', 'Central store', 'Pilot City', 'Store officer', '', 0, 1, :now)"""
     ), {'now': datetime.utcnow()})
     db.session.commit()
-    return db.session.execute(text("SELECT id FROM facilities WHERE name IN ('Main Warehouse', 'Central warehouse')")).scalar()
+    return db.session.execute(text("SELECT id FROM facilities WHERE name = 'Central warehouse'")).scalar()
 
 
 def _can_approve():
@@ -66,42 +66,23 @@ def _logo_path(brand):
 @login_required
 @_staff_required
 def section_finance():
-    return render_template('ops_section.html', title='Finance', intro='Setup, reports, payments, journals and cash reconciliation.', links=[
-        ('Finance setup', 'ops.section_finance_setup'),
-        ('Financial reports', 'ops.section_finance_reports'),
-        ('Journals', 'fin.journals'),
-        ('Payments and expense requests', 'fin.payments'),
-        ('Expense requests', 'expense_list'),
-        ('Cost analytics', 'admin_costs'),
-        ('Finance books', 'fin.home'),
-        ('Cash reconciliation', 'wf.cash_recon'),
-        ('Currencies and exchange', 'ops.fx_setup'),
-    ])
-
-
-@ops_bp.route('/sections/finance-setup')
-@login_required
-@_staff_required
-def section_finance_setup():
-    return render_template('ops_section.html', title='Finance setup', intro='Chart of accounts, project codes, expense codes and budget codes.', links=[
+    return render_template('ops_section.html', title='Finance', intro='Budget, variance, reports, account codes, cost analysis, expense requests and finance books.', links=[
         ('Chart of accounts', 'fin.coa'),
         ('Project codes', 'fin.projects'),
         ('Expense codes', 'fin.expense_codes'),
         ('Budget codes', 'fin.budget_codes'),
         ('Project budget template', 'ops.budget_template'),
-    ])
-
-
-@ops_bp.route('/sections/financial-reports')
-@login_required
-@_staff_required
-def section_finance_reports():
-    return render_template('ops_section.html', title='Financial reports', intro='Trial balance, income statement, statement of financial position, cash flow and project reports.', links=[
-        ('Trial balance', 'fin.trial'),
-        ('Financial statements', 'fin.financial_statements'),
-        ('Account ledger', 'fin.ledger'),
         ('Variance by project', 'fin.variance'),
-        ('Project reports', 'fin.projects'),
+        ('Financial statements', 'fin.financial_statements'),
+        ('Trial balance', 'fin.trial'),
+        ('Account ledger', 'fin.ledger'),
+        ('Journals', 'fin.journals'),
+        ('Payments and expense requests', 'fin.payments'),
+        ('Expense requests', 'expense_list'),
+        ('Cost analytics', 'admin_costs'),
+        ('Finance books', 'fin.home'),
+        ('Bank reconciliation', 'ops.bank_recon'),
+        ('Currencies and exchange', 'ops.fx_setup'),
     ])
 
 
@@ -109,8 +90,7 @@ def section_finance_reports():
 @login_required
 @_staff_required
 def section_procurement():
-    return render_template('ops_section.html', title='Procurement', intro='RFQ first. Review, one vendor link, committee scores, award, contract and invoice.', links=[
-        ('RFQs', 'wf.rfq_home'),
+    return render_template('ops_section.html', title='Procurement', intro='Vendor REF links, committee evaluation, bids, purchase orders and procurement reports.', links=[
         ('Vendor REF links', 'ops.procurement_home'),
         ('RFQs and evaluation', 'erp.rfqs_list'),
         ('Vendors', 'erp.vendors_list'),
@@ -137,10 +117,9 @@ def section_staff():
 @login_required
 @_staff_required
 def section_program_core():
-    return render_template('ops_section.html', title='Program Core', intro='Learning data, learning report, client feedback, program report, PowerPoint and the public homepage.', links=[
+    return render_template('ops_section.html', title='Program Core', intro='Learning data, learning report, program report, PowerPoint and the public homepage.', links=[
         ('Learning data', 'learning_hub'),
         ('Learning report', 'learning_report_dashboard'),
-        ('Client feedback', 'client_feedback_hub'),
         ('Public homepage editor', 'admin_homepage_editor'),
         ('Report sample data', 'admin_sample_data'),
         ('Branding and logo', 'admin_branding'),
@@ -151,15 +130,14 @@ def section_program_core():
 @login_required
 @_staff_required
 def section_program_items():
-    return render_template('ops_section.html', title='Program items', intro='Main Warehouse receives GRN stock. Dispatch moves to kiosks/PHCs. Uptake administers commodities. Inventory is view-only with Excel/PDF export.', links=[
+    return render_template('ops_section.html', title='Program items', intro='Facilities, products, dispatch and stock requests. Dispatch moves stock from the central warehouse to a facility. It is not an outflow.', links=[
         ('Facilities', 'admin_facilities'),
-        ('Product catalogue', 'logistics.catalogue'),
-        ('Products (manage)', 'admin_products'),
-        ('Goods received note', 'logistics.grn_new'),
-        ('Dispatch from warehouse', 'logistics.dispatch_move'),
-        ('Inventory position', 'ops.inventory_home'),
-        ('Uptake Administration', 'logistics.uptake_home'),
+        ('Products', 'admin_products'),
+        ('Dispatch note', 'ops.dispatch_new'),
+        ('Dispatch register', 'ops.dispatch_list'),
         ('Stock requests', 'admin_requests'),
+        ('Inventory position', 'ops.inventory_home'),
+        ('Transfer approvals', 'ops.transfer_queue'),
     ])
 
 
@@ -175,10 +153,8 @@ def dispatch_list():
 @login_required
 @_staff_required
 def dispatch_new():
-    if DispatchNote is None:
-        return redirect(url_for("logistics.dispatch_move"))
     facilities = _rows("SELECT id, name FROM facilities WHERE name != 'Central warehouse' ORDER BY name")
-    products = _rows('SELECT id, name, unit FROM products WHERE (is_active IS TRUE OR is_active = 1) ORDER BY name')
+    products = _rows('SELECT id, name, unit FROM products WHERE is_active = 1 ORDER BY name')
     if request.method == 'POST':
         if not (user_has(current_user, 'dispatch.create') or _can_approve()):
             flash('Only a dispatch officer or the program manager can raise a dispatch.', 'danger')
