@@ -1,0 +1,333 @@
+[
+  {
+    "id": 1,
+    "lq_code": "H",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "engaged_app": 420,
+      "engaged_mobilizer": 310,
+      "engaged_walkin": 180,
+      "overlap": 25,
+      "receiving_method": 350
+    },
+    "computed": {
+      "engaged_dedup": 885.0,
+      "conversion_rate": 0.3955,
+      "conversion_rate_pct": 39.55,
+      "vs_target": "Below"
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Method uptake conversion",
+    "indicator": "Uptake conversion rate (%)",
+    "target": "60%"
+  },
+  {
+    "id": 2,
+    "lq_code": "LQ1",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "exit_surveys": 120,
+      "surveys_with_barrier": 38,
+      "avg_satisfaction": 4.3,
+      "observations": 8,
+      "avg_counseling": 3.9,
+      "qual_summary": "Fear of side effects most cited; short waiting times valued."
+    },
+    "computed": {
+      "barrier_rate": 0.3167,
+      "avg_satisfaction": 4.3,
+      "vs_target": "Met"
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Uptake drivers, barriers & client experience",
+    "indicator": "Avg. client satisfaction (1\u20135)",
+    "target": "4.00"
+  },
+  {
+    "id": 3,
+    "lq_code": "LQ2",
+    "period_label": "Week 1 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "week_num": 1,
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "app_engagement": 600,
+      "registration": 410,
+      "referral_checkin": 320,
+      "method_uptake": 210
+    },
+    "computed": {
+      "reg_vs_eng": 0.6833,
+      "ref_vs_reg": 0.7805,
+      "up_vs_ref": 0.6563,
+      "overall": 0.35
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Client-journey drop-off points",
+    "indicator": "Funnel conversion",
+    "target": "Monitor"
+  },
+  {
+    "id": 4,
+    "lq_code": "LQ3",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "responses": 100,
+      "promoters": 60,
+      "passives": 25,
+      "detractors": 15
+    },
+    "computed": {
+      "nps": 45.0,
+      "vs_target": "Met"
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "User satisfaction",
+    "indicator": "Net Promoter Score",
+    "target": "40"
+  },
+  {
+    "id": 5,
+    "lq_code": "LQ4",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "started": 80,
+      "completed_unassisted": 41,
+      "completed_assisted": 118,
+      "abandoned": 12
+    },
+    "computed": {
+      "unassisted_pct": 0.5125,
+      "vs_target": "Met"
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Unassisted digital journey completion",
+    "indicator": "% completed",
+    "target": "50%"
+  },
+  {
+    "id": 6,
+    "lq_code": "LQ5",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "staff_start": 12,
+      "staff_end": 11,
+      "leavers": 1,
+      "joiners": 0,
+      "avg_incentive": 25000,
+      "pulse_score": 4.1,
+      "notes": "Performance bonus piloted at K02."
+    },
+    "computed": {
+      "attrition_rate": 0.0833,
+      "vs_target": "Above limit"
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Staff incentives & staffing model",
+    "indicator": "Monthly attrition rate",
+    "target": "5% limit"
+  },
+  {
+    "id": 7,
+    "lq_code": "LQ6",
+    "period_label": "Week 1 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "week_num": 1,
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "kiosk_id": "K01",
+      "site_category": "Market",
+      "foot_traffic": 1200,
+      "registrations": 310,
+      "methods_issued": 150
+    },
+    "computed": {
+      "ft_to_reg": 0.2583,
+      "reg_to_method": 0.4839
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Kiosk location yield",
+    "indicator": "Best site category",
+    "target": "Monitor"
+  },
+  {
+    "id": 8,
+    "lq_code": "LQ7",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "method": "Injectable",
+      "issued": 120,
+      "discontinued": 4,
+      "refusal_reason": "Fear of side effects",
+      "refusal_count": 18
+    },
+    "computed": {
+      "discontinuation_rate": 0.0333
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Method utilization & discontinuation",
+    "indicator": "Most-used method",
+    "target": "Monitor"
+  },
+  {
+    "id": 9,
+    "lq_code": "LQ8",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "facility_or_kiosk": "Kiosk Market Road (K01)",
+      "total_op_cost": 4500000,
+      "clients_served": 885,
+      "commodity_cost": 1200000,
+      "staff_cost": 2400000,
+      "other_cost": 900000
+    },
+    "computed": {
+      "unit_cost": 5084.75
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Operational cost per client/kiosk",
+    "indicator": "Unit cost per client",
+    "target": "Monitor"
+  },
+  {
+    "id": 10,
+    "lq_code": "LQ9",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "channel": "Mobilizer",
+      "age_group": "20-24 yrs",
+      "acquired": 85,
+      "converted": 40
+    },
+    "computed": {
+      "channel_conversion": 0.4706
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "SBC effectiveness by demographic",
+    "indicator": "Best channel",
+    "target": "Monitor"
+  },
+  {
+    "id": 11,
+    "lq_code": "LQ10",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "period_month": "2026-11",
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "sync_attempts": 1500,
+      "sync_successes": 1410,
+      "avg_latency_hours": 36,
+      "dashboard_usability": 4.2,
+      "notes": "API stable; one overnight batch delayed."
+    },
+    "computed": {
+      "sync_rate": 0.94,
+      "vs_target": "Below",
+      "latency_ok": true,
+      "usability_ok": true
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "DHIS2 / government data integration",
+    "indicator": "Data-sync success rate",
+    "target": "95%"
+  },
+  {
+    "id": 12,
+    "lq_code": "LQ11",
+    "period_label": "2026-11 \u00b7 Kiosk Market Road (K01)",
+    "period_num": 202611,
+    "data": {
+      "quarter_num": 1,
+      "facility_id": 1,
+      "facility_name": "Kiosk Market Road (K01)",
+      "milestone": "State co-financing tranche 1",
+      "funder": "Edo State Government",
+      "due_date": "2027-03-31",
+      "target_amount": 50000,
+      "achieved_amount": 20000,
+      "status": "In progress",
+      "policy_commitment": "MoU on DHIS2 data sharing",
+      "policy_status": "In progress",
+      "notes": "Ministry committed to 2027 budget line for kiosks."
+    },
+    "computed": {
+      "pct_achieved": 0.4
+    },
+    "staff_name": "Ada Okonkwo",
+    "staff_email": "mel@contraconnect.local",
+    "submitted_at": "2026-11-28T14:32:00Z",
+    "status": "submitted",
+    "title": "Stakeholder ownership & sustainability",
+    "indicator": "% co-financing target achieved",
+    "target": "Monitor"
+  }
+]

@@ -67,7 +67,7 @@ def init_fmss_align(app, database):
 
 def codebook():
     accounts = db.session.execute(text(
-        'SELECT id, code, name, account_type FROM fin_accounts WHERE (is_active IS TRUE OR is_active = 1) ORDER BY code'
+        'SELECT id, code, name, account_type FROM fin_accounts WHERE is_active = 1 ORDER BY code'
     )).mappings().all()
     projects = db.session.execute(text(
         'SELECT id, code, name FROM fin_projects ORDER BY code'

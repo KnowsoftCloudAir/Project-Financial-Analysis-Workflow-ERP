@@ -572,26 +572,15 @@ def statements(lines, adjusted_cash=None):
 
 
 def project_actuals():
+    lines = FinJournalLine.query.all()
     actual = {}
-    try:
-        lines = FinJournalLine.query.all()
-    except Exception:
-        return actual
     for line in lines:
-        try:
-            if not line.project_id:
-                continue
-            acc = getattr(line, 'account', None)
-            if acc is None:
-                continue
-            if getattr(acc, 'account_type', '') not in ('Expense', 'Expenses'):
-                continue
-            if line.source_type == 'payment' and _d(line.debit):
-                continue
-            key = (line.project_id, line.budget_code_id, line.expense_code_id)
-            actual[key] = actual.get(key, Decimal('0')) + _d(line.debit) - _d(line.credit)
-        except Exception:
+        if not line.project_id or not line.account or line.account.account_type not in ('Expense', 'Expenses'):
             continue
+        if line.source_type == 'payment' and _d(line.debit):
+            continue  # settlement, not a new expense
+        key = (line.project_id, line.budget_code_id, line.expense_code_id)
+        actual[key] = actual.get(key, Decimal('0')) + _d(line.debit) - _d(line.credit)
     return actual
 
 
@@ -731,71 +720,40 @@ def budget_codes():
 @login_required
 @_staff_required
 def payments():
-    """Payment / expense requests — never 500 on empty ledgers or missing codes."""
-    try:
-        seed_finance()
-    except Exception:
-        pass
     if request.method == 'POST':
-        try:
-            budget = FinBudgetCode.query.get(request.form.get('budget_code_id', type=int))
-            amount = _d(request.form.get('amount'))
-            payee = (request.form.get('payee') or '').strip()
-            desc = (request.form.get('description') or '').strip()
-            if not budget or amount <= 0 or not payee or not desc:
-                flash('Payee, amount, description and a budget code are required.', 'danger')
-            else:
-                doc = FinDocument(
-                    doc_no=_next_no('PAY'), doc_type='payment',
-                    project_id=request.form.get('project_id', type=int) or budget.project_id,
-                    expense_code_id=request.form.get('expense_code_id', type=int) or budget.expense_code_id,
-                    budget_code_id=budget.id, payee=payee, description=desc, amount=amount,
-                    status='submitted', requester_id=current_user.id,
-                    debit_account_id=request.form.get('debit_account_id', type=int),
-                    credit_account_id=request.form.get('credit_account_id', type=int),
-                    payable_account_id=request.form.get('payable_account_id', type=int),
-                    pay_mode=request.form.get('pay_mode') or 'full',
-                    pay_amount=_d(request.form.get('pay_amount') or amount),
-                )
-                if not doc.debit_account_id or not doc.credit_account_id:
-                    flash('Select the debit account and the credit account.', 'danger')
-                    return redirect(url_for('fin.payments'))
-                db.session.add(doc)
-                db.session.flush()
-                _log(doc, 'submitted', 'Payment request')
-                db.session.commit()
-                flash(f'{doc.doc_no} submitted for program approval.', 'success')
-                return redirect(url_for('fin.payment_detail', did=doc.id))
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Could not save payment request: {e}', 'danger')
+        budget = FinBudgetCode.query.get(request.form.get('budget_code_id', type=int))
+        amount = _d(request.form.get('amount'))
+        payee = (request.form.get('payee') or '').strip()
+        desc = (request.form.get('description') or '').strip()
+        if not budget or amount <= 0 or not payee or not desc:
+            flash('Payee, amount, description and a budget code are required.', 'danger')
+        else:
+            doc = FinDocument(
+                doc_no=_next_no('PAY'), doc_type='payment',
+                project_id=request.form.get('project_id', type=int) or budget.project_id,
+                expense_code_id=request.form.get('expense_code_id', type=int) or budget.expense_code_id,
+                budget_code_id=budget.id, payee=payee, description=desc, amount=amount,
+                status='submitted', requester_id=current_user.id,
+                debit_account_id=request.form.get('debit_account_id', type=int),
+                credit_account_id=request.form.get('credit_account_id', type=int),
+                payable_account_id=request.form.get('payable_account_id', type=int),
+                pay_mode=request.form.get('pay_mode') or 'full',
+                pay_amount=_d(request.form.get('pay_amount') or amount),
+            )
+            if not doc.debit_account_id or not doc.credit_account_id:
+                flash('Select the debit account and the credit account.', 'danger')
+                return redirect(url_for('fin.payments'))
+            db.session.add(doc)
+            db.session.flush()
+            _log(doc, 'submitted', 'Payment request')
+            db.session.commit()
+            flash(f'{doc.doc_no} submitted for program approval.', 'success')
+            return redirect(url_for('fin.payment_detail', did=doc.id))
         return redirect(url_for('fin.payments'))
-    try:
-        docs = FinDocument.query.order_by(FinDocument.id.desc()).all()
-    except Exception:
-        docs = []
-    try:
-        budgets = FinBudgetCode.query.filter_by(is_active=True).all()
-    except Exception:
-        try:
-            budgets = FinBudgetCode.query.all()
-        except Exception:
-            budgets = []
-    try:
-        projects = FinProject.query.filter_by(is_active=True).order_by(FinProject.code).all()
-    except Exception:
-        projects = []
-    try:
-        expenses = FinExpenseCode.query.filter_by(is_active=True).order_by(FinExpenseCode.code).all()
-    except Exception:
-        expenses = []
-    try:
-        accounts = FinAccount.query.filter_by(is_active=True).order_by(FinAccount.code).all()
-    except Exception:
-        accounts = []
+    docs = FinDocument.query.order_by(FinDocument.id.desc()).all()
     return render_template(
-        'fin_payments.html', docs=docs, budgets=budgets,
-        projects=projects, expenses=expenses, accounts=accounts,
+        'fin_payments.html', docs=docs,
+        budgets=FinBudgetCode.query.filter_by(is_active=True).all(),
     )
 
 
@@ -968,29 +926,21 @@ def project_report(pid):
 @_staff_required
 def variance():
     project_id = request.args.get('project_id', type=int)
-    try:
-        projects = FinProject.query.order_by(FinProject.code).all()
-    except Exception:
-        projects = []
-    try:
-        actual = project_actuals()
-    except Exception:
-        actual = {}
+    actual = project_actuals()
     rows = []
+    query = FinBudgetCode.query
     if project_id:
-        try:
-            q = FinBudgetCode.query.filter_by(project_id=project_id).order_by(FinBudgetCode.code)
-            for budget in q:
-                spent = actual.get((budget.project_id, budget.id, budget.expense_code_id), Decimal('0'))
-                amount = _d(getattr(budget, 'amount', 0))
-                rows.append({
-                    'budget': budget, 'amount': amount, 'spent': spent, 'variance': amount - spent,
-                })
-        except Exception:
-            rows = []
+        query = query.filter_by(project_id=project_id)
+    for budget in query.order_by(FinBudgetCode.code).all():
+        spent = actual.get((budget.project_id, budget.id, budget.expense_code_id), Decimal('0'))
+        amount = _d(budget.amount)
+        rows.append({
+            'budget': budget, 'amount': amount, 'spent': spent, 'variance': amount - spent,
+        })
     return render_template(
         'fin_variance.html', rows=rows,
-        projects=projects, project_id=project_id,
+        projects=FinProject.query.order_by(FinProject.code).all(),
+        project_id=project_id,
     )
 
 
