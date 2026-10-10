@@ -152,16 +152,16 @@
       <p class="mb-0 opacity-90">At-a-glance view of Program · Procurement · Inventory · Finance</p>
     </div>
     <div class="export-bar d-flex flex-wrap gap-2">
-      <a href="{{ url_for('dashboard_export_excel') }}" class="btn btn-light btn-sm">
+      <a href="/dashboard/export/excel" class="btn btn-light btn-sm">
         <i class="bi bi-file-earmark-excel text-success"></i> Excel
       </a>
-      <a href="{{ url_for('dashboard_export_pdf') }}" class="btn btn-light btn-sm">
+      <a href="/dashboard/export/pdf" class="btn btn-light btn-sm">
         <i class="bi bi-file-earmark-pdf text-danger"></i> PDF
       </a>
-      <a href="{{ url_for('dashboard_export_pptx') }}" class="btn btn-light btn-sm">
+      <a href="/dashboard/export/pptx" class="btn btn-light btn-sm">
         <i class="bi bi-file-earmark-ppt text-warning"></i> PPT
       </a>
-      <a href="{{ url_for('data_exchange') }}" class="btn btn-outline-light btn-sm">
+      <a href="/data-exchange" class="btn btn-outline-light btn-sm">
         <i class="bi bi-arrow-left-right"></i> Data exchange
       </a>
     </div>
@@ -194,7 +194,7 @@
               <div class="kpi-lbl">LQ entries</div>
             </div>
           </div>
-          <a class="domain-link" href="{{ url_for('ops.section_program_items') }}">
+          <a class="domain-link" href="/ops/sections/program-items">
             Open Program <i class="bi bi-arrow-right"></i>
           </a>
         </div>
@@ -226,7 +226,7 @@
               <div class="kpi-lbl">Invoices</div>
             </div>
           </div>
-          <a class="domain-link" href="{{ url_for('ops.section_procurement') }}">
+          <a class="domain-link" href="/ops/sections/procurement">
             Open Procurement <i class="bi bi-arrow-right"></i>
           </a>
         </div>
@@ -258,7 +258,7 @@
               <div class="kpi-lbl">Low stock</div>
             </div>
           </div>
-          <a class="domain-link" href="{{ url_for('ops.inventory_home') }}">
+          <a class="domain-link" href="/ops/inventory">
             Open Inventory <i class="bi bi-arrow-right"></i>
           </a>
         </div>
@@ -290,7 +290,7 @@
               <div class="kpi-lbl">Journals</div>
             </div>
           </div>
-          <a class="domain-link" href="{{ url_for('ops.section_finance') }}">
+          <a class="domain-link" href="/ops/sections/finance">
             Open Finance <i class="bi bi-arrow-right"></i>
           </a>
         </div>
@@ -329,28 +329,28 @@
         <h5 class="mb-0"><i class="bi bi-cloud-arrow-down me-2 text-primary"></i>Data download &amp; upload</h5>
         <p class="small text-muted mb-0">Download all report data as CSV (Excel-ready) or upload updated CSV to refresh records.</p>
       </div>
-      <a href="{{ url_for('data_exchange') }}" class="btn btn-primary btn-sm">
+      <a href="/data-exchange" class="btn btn-primary btn-sm">
         Go to Data Exchange <i class="bi bi-arrow-right"></i>
       </a>
     </div>
     <div class="row g-2">
       <div class="col-md-3">
-        <a href="{{ url_for('data_download_csv', dataset='facilities') }}" class="btn btn-outline-success btn-sm w-100">
+        <a href="/data/download/facilities" class="btn btn-outline-success btn-sm w-100">
           <i class="bi bi-download"></i> Facilities CSV
         </a>
       </div>
       <div class="col-md-3">
-        <a href="{{ url_for('data_download_csv', dataset='products') }}" class="btn btn-outline-success btn-sm w-100">
+        <a href="/data/download/products" class="btn btn-outline-success btn-sm w-100">
           <i class="bi bi-download"></i> Products CSV
         </a>
       </div>
       <div class="col-md-3">
-        <a href="{{ url_for('data_download_csv', dataset='encounters') }}" class="btn btn-outline-success btn-sm w-100">
+        <a href="/data/download/encounters" class="btn btn-outline-success btn-sm w-100">
           <i class="bi bi-download"></i> Encounters CSV
         </a>
       </div>
       <div class="col-md-3">
-        <a href="{{ url_for('data_download_csv', dataset='expenses') }}" class="btn btn-outline-success btn-sm w-100">
+        <a href="/data/download/expenses" class="btn btn-outline-success btn-sm w-100">
           <i class="bi bi-download"></i> Expenses CSV
         </a>
       </div>
