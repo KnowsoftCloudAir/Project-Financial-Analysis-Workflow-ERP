@@ -163,6 +163,27 @@ def ensure_db():
             pass
         print('seed_data:', e)
     try:
+        if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
+            import os as _os
+            pw = _os.environ.get('ADMIN_PASSWORD') or 'Contra@Admin2026!'
+            u = User(
+                email=(_os.environ.get('ADMIN_EMAIL') or 'admin@contraconnect.local').lower(),
+                full_name='General Administrator',
+                role='general_admin',
+                is_active=True,
+                onboarding_status='active',
+            )
+            u.set_password(pw)
+            db.session.add(u)
+            db.session.commit()
+            print('bootstrap admin created')
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print('bootstrap admin:', e)
+    try:
         ensure_expense_codes()
     except Exception as e:
         try:
@@ -709,7 +730,14 @@ def amount_in_words(amount):
 # ---------------------------------------------------------------------------
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    try:
+        return db.session.get(User, int(user_id))
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return None
 
 
 # Role hierarchy — programme staff + legacy admin roles
@@ -1110,27 +1138,99 @@ def admin_homepage_editor():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for('index'))
+    except Exception:
+        pass
     if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '')
-        user = User.query.filter_by(email=email, is_active=True).first()
-        if user and user.check_password(password):
-            if getattr(user, 'onboarding_status', 'active') == 'rejected':
+        email = (request.form.get('email') or '').strip().lower()
+        password = request.form.get('password') or ''
+        user = None
+        try:
+            # Avoid boolean-filter issues across Postgres/SQLite — filter email then check active
+            user = User.query.filter_by(email=email).first()
+        except Exception as e:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            try:
+                app.logger.exception('login user query: %s', e)
+            except Exception:
+                pass
+            flash('Sign-in is temporarily unavailable. Please try again shortly.', 'danger')
+            try:
+                return render_template('login.html')
+            except Exception:
+                return redirect(url_for('index'))
+        active = True
+        if user is not None:
+            try:
+                active = bool(user.is_active)
+            except Exception:
+                active = True
+        if user and active and user.check_password(password):
+            status = getattr(user, 'onboarding_status', None) or 'active'
+            if status == 'rejected':
                 flash('Your account registration was not approved. Contact the administrator.', 'danger')
                 return redirect(url_for('login'))
-            login_user(user, remember=True)
-            user.last_login_at = datetime.utcnow()
-            db.session.commit()
-            log_activity('login', f'role={user.role}', user=user)
-            flash(f'Welcome, {user.full_name} ({user.role_label}).', 'success')
-            if getattr(user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval'):
+            try:
+                login_user(user, remember=True)
+            except Exception as e:
+                try:
+                    app.logger.exception('login_user: %s', e)
+                except Exception:
+                    pass
+                flash('Could not start your session. Please try again.', 'danger')
+                return redirect(url_for('login'))
+            try:
+                user.last_login_at = datetime.utcnow()
+                db.session.commit()
+            except Exception:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+            try:
+                log_activity('login', 'role=%s' % getattr(user, 'role', ''), user=user)
+            except Exception:
+                pass
+            try:
+                label = user.role_label if hasattr(user, 'role_label') else user.role
+                flash('Welcome, %s (%s).' % (user.full_name, label), 'success')
+            except Exception:
+                flash('Welcome.', 'success')
+            if status in ('pending_profile', 'pending_approval'):
                 return redirect(url_for('onboarding'))
-            return redirect(url_for('index'))
+            # Prefer role home; fall back to index
+            try:
+                return redirect(url_for(_home_for_role(user.role)))
+            except Exception:
+                return redirect(url_for('index'))
         flash('Invalid email or password.', 'danger')
-        log_activity('login_failed', email)
-    return render_template('login.html')
+        try:
+            log_activity('login_failed', email)
+        except Exception:
+            pass
+    try:
+        return render_template('login.html')
+    except Exception as e:
+        try:
+            app.logger.exception('login template: %s', e)
+        except Exception:
+            pass
+        return (
+            '<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:420px;margin:3rem auto">'
+            '<h1>Sign in</h1>'
+            '<form method="post">'
+            '<p><label>Email<br><input name="email" type="email" required style="width:100%"></label></p>'
+            '<p><label>Password<br><input name="password" type="password" required style="width:100%"></label></p>'
+            '<button type="submit">Sign in</button></form>'
+            '<p><a href="/">Home</a></p></body></html>',
+            200,
+            {'Content-Type': 'text/html; charset=utf-8'},
+        )
 
 
 @app.route('/logout')
@@ -1153,8 +1253,8 @@ def admin_access():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
-        user = User.query.filter_by(email=email, is_active=True).first()
-        if user and _is_admin_role(user.role) and user.check_password(password):
+        user = User.query.filter_by(email=email).first()
+        if user and bool(getattr(user, 'is_active', True)) and _is_admin_role(user.role) and user.check_password(password):
             login_user(user, remember=False)
             flash(f'Welcome, {user.full_name} ({user.role_label}).', 'success')
             return redirect(url_for(_home_for_role(user.role)))
@@ -3573,16 +3673,39 @@ def _chart_data():
 @login_required
 def main_dashboard():
     """Illustrative 3D-style executive dashboard for Program, Procurement, Inventory, Finance."""
-    if current_user.role == 'provider':
-        return redirect(url_for('provider_dashboard'))
-    kpis = _dashboard_kpis()
-    chart_methods, chart_proc = _chart_data()
-    return render_template(
-        'main_dashboard.html',
-        kpis=kpis,
-        chart_methods=chart_methods,
-        chart_proc=chart_proc,
-    )
+    try:
+        if current_user.role == 'provider':
+            return redirect(url_for('provider_dashboard'))
+    except Exception:
+        pass
+    try:
+        kpis = _dashboard_kpis()
+    except Exception:
+        kpis = {
+            'facilities': 0, 'products': 0, 'encounters': 0, 'learning_subs': 0,
+            'vendors': 0, 'rfqs': 0, 'pos': 0, 'proc_invoices': 0,
+            'stock_lines': 0, 'open_requests': 0, 'dispatches': 0, 'low_stock': 0,
+            'pending_finance': 0, 'expense_reqs': 0, 'accounts': 0, 'journals': 0,
+        }
+    try:
+        chart_methods, chart_proc = _chart_data()
+    except Exception:
+        chart_methods = {'labels': [], 'data': []}
+        chart_proc = {'labels': [], 'data': []}
+    try:
+        return render_template(
+            'main_dashboard.html',
+            kpis=kpis,
+            chart_methods=chart_methods,
+            chart_proc=chart_proc,
+        )
+    except Exception as e:
+        try:
+            app.logger.exception('main_dashboard: %s', e)
+        except Exception:
+            pass
+        flash('Dashboard is temporarily limited. Use the menu to open Finance or Inventory.', 'warning')
+        return redirect(url_for('index'))
 
 
 @app.route('/dashboard/export/excel')
