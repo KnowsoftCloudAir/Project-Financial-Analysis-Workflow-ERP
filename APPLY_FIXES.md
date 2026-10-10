@@ -1,37 +1,42 @@
-# CONTRAconnect / Finance ERP fixes — 2026-10-09 (v2)
+# CONTRAconnect logistics + finance fixes — 2026-10-10
 
-## Inventory (your logic)
-- **Main warehouse first** (facility name or type containing “warehouse”) — procurement is offloaded here.
-  Columns: Commodity | Opening qty | Qty received | Qty dispatched | Facility dispatched to | Qty balance
-- **Each other facility** (kiosk / PHC / other) on its own sheet:
-  Columns: Commodity | Received qty | Administered qty | Transferred qty | Facility transferred to | Balance qty
-- **System summary** across all sites:
-  Item | Quantity | Total value (unit cost from product/procurement) | Administered last month | this month | projected next month | quarterly | semi-annual | annual
-- Facility officers / approving officers can post receive, dispatch, transfer, administer on each sheet.
-- **Dispatch is no longer a standalone menu page.** After a warehouse **Dispatch to outlet**, the system posts the stock movement and immediately offers a **downloadable dispatch-note PDF**.
+## Confirmed repository access
+Work continues on the live Flask ERP (`financeerp.knowsoft.org.uk` / Project-Financial-Analysis-Workflow-ERP pattern).
+`KnowsoftCloudAir/FMSS_Smark_Multi_user_online` was also cloned for reference (FastAPI stack).
 
-## Bank reconciliation (restored)
-- Hardened `/ops/bank` so missing cash accounts, empty ledgers, or tick-table issues no longer 500.
-- Loads Cash / Asset accounts, ticks journal lines, bank vs cash-book difference, ADD/LESS statement fields, PDF and Excel — aligned with the Knowsoft FMSS bank reconciliation flow.
+## Strict stock logic implemented
 
-## Budget template
-- Remains a **view** of recorded budget lines (Budget ID, Project, Expense code, Description, Start, End, Budget, Actual, Variance, Status) with Excel download. No change to the data model.
+1. **Main Warehouse** (permanent, auto-created with sample opening stock)
+2. **Goods Received Note** (`/ops/grn`)  
+   - Item, qty, description, unit cost, total value, shelf life  
+   - Updates product catalogue cost + shelf life  
+   - Stock into Main Warehouse  
+   - Journal: **Dr Commodity stock (1300) / Cr Cash (1000)**
+3. **Dispatch** (`/ops/dispatch-move`)  
+   - Moves stock Main Warehouse → kiosk/PHC  
+   - **PDF dispatch note** after each dispatch (not a menu icon)
+4. **Inventory** (`/ops/inventory`)  
+   - **View only** (no input forms)  
+   - Excel / PDF export (PM/admin: all sites; facility user: own site)
+5. **Product catalogue** (`/ops/catalogue`)  
+   - Shelf life + total qty across warehouse + all outlets + total value
+6. **Uptake Administration** (`/ops/uptake`) — Admin, PM, privileged users  
+   - **Uptake form**: up to 10 commodity lines + method, quality, testimony, complaints → **Administer**  
+     → reduces service-point stock; journal **Dr Commodity expensed (5100) / Cr Commodity stock (1300)**  
+   - **Transfer form**: between outlets or back to warehouse → pending PM/Admin approval  
+   - **Transfers list**: approve / accept / reject → certificate PDF after accept  
+   - **Client assigned list**: open request / contact details
 
-## Error page
-- Branded CONTRAconnect full-page error with **Go back** for 403/404/405/500.
+## Facilities / dispatch 500s
+- Facility list and create wrapped so DB errors surface as flash messages, not blank 500
+- Dispatch falls back to `/ops/dispatch-move` if legacy DispatchNote model is unbound
+- Warehouse helper prefers Main Warehouse
 
-## Files to deploy
-- `server.py`
-- `ops_upgrade.py`
-- `facility_flow.py`, `fmss_align.py`, `workflow_upgrade.py` (boolean SQL fix)
-- `templates/error.html` (new)
-- `templates/ops_inventory.html`
-- `templates/ops_budget_template.html`
-- `templates/fin_variance.html`
-- `templates/fin_payments.html`
-- `templates/expense_list.html`
-- `templates/ops_bank.html` (existing, keep)
-- `templates/base.html` (dispatch nav removed)
-- `templates/ops_section.html` (dispatch cards removed)
+## Deploy
+Copy all files from this package into the app root (especially):
+- `logistics_flow.py` **(new)**
+- `server.py`, `ops_upgrade.py`, `facility_flow.py`, `workflow_upgrade.py`, `finance_core.py`
+- `templates/logistics_*.html`, `templates/ops_inventory.html`, `templates/base.html`, `templates/error.html`
+- Restart the web process
 
-Restart the web process after copy. Create at least one facility whose name includes “warehouse” so the warehouse sheet appears first.
+After deploy, open `/upgrade-status` — should show `UPGRADE-2026-10-10` and the new paths.

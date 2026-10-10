@@ -174,6 +174,21 @@ def _accounts():
     )).mappings().all()
 
 
+def _catalogue_products():
+    """Active products/services from the Product Catalogue for RFQ lines."""
+    try:
+        return _rows(
+            "SELECT id, name, method_code, unit, unit_cost, description "
+            "FROM products WHERE (is_active IS TRUE OR is_active = 1) ORDER BY name"
+        )
+    except Exception:
+        return _rows("SELECT id, name, method_code, unit, unit_cost, description FROM products ORDER BY name")
+
+
+def _product_map():
+    return {int(p['id']): p for p in _catalogue_products()}
+
+
 def _next_rfq_no():
     n = (Rfq.query.count() or 0) + 1
     return f'RFQ-{datetime.utcnow().strftime("%Y")}-{n:04d}'
@@ -217,9 +232,11 @@ def init_workflow_upgrade(app, database):
         id = database.Column(database.Integer, primary_key=True)
         rfq_id = database.Column(database.Integer, database.ForeignKey('upgrade_rfqs.id'), nullable=False)
         line_no = database.Column(database.Integer, default=1)
+        product_id = database.Column(database.Integer)  # links to products catalogue
         description = database.Column(database.String(240), nullable=False)
         quantity = database.Column(database.Numeric(14, 2), default=1)
         unit = database.Column(database.String(40), default='unit')
+        unit_cost = database.Column(database.Numeric(14, 2), default=0)
 
     class VendorSubmission(database.Model):
         __tablename__ = 'upgrade_submissions'
@@ -358,6 +375,19 @@ def init_workflow_upgrade(app, database):
         app.register_blueprint(wf_bp)
     with app.app_context():
         database.create_all()
+        # Ensure RFQ lines can store catalogue product_id
+        try:
+            cols = [c['name'] for c in database.inspect(database.engine).get_columns('upgrade_rfq_items')]
+            if 'product_id' not in cols:
+                database.session.execute(text('ALTER TABLE upgrade_rfq_items ADD COLUMN product_id INTEGER'))
+            if 'unit_cost' not in cols:
+                database.session.execute(text('ALTER TABLE upgrade_rfq_items ADD COLUMN unit_cost NUMERIC(14,2) DEFAULT 0'))
+            database.session.commit()
+        except Exception:
+            try:
+                database.session.rollback()
+            except Exception:
+                pass
 
 
 def _agg(rfq_id):
@@ -418,24 +448,50 @@ def rfq_new():
             errors.append('Closing date is required.')
         if closing_at and closing_at <= datetime.utcnow():
             errors.append('Closing date must be in the future.')
-        descs = request.form.getlist('item_desc')
+        product_ids = request.form.getlist('item_product_id')
         qtys = request.form.getlist('item_qty')
+        # Fallback for any residual free-text lines
+        descs = request.form.getlist('item_desc')
         units = request.form.getlist('item_unit')
+        pmap = _product_map()
         items = []
-        for i, desc in enumerate(descs):
-            desc = (desc or '').strip()
-            if not desc:
+        seen_pids = set()
+        for i, pid_raw in enumerate(product_ids):
+            try:
+                pid = int(pid_raw) if pid_raw else 0
+            except Exception:
+                pid = 0
+            if not pid or pid not in pmap:
                 continue
+            if pid in seen_pids:
+                errors.append(f'Duplicate catalogue product on line {i + 1}.')
+                continue
+            seen_pids.add(pid)
+            prod = pmap[pid]
             try:
                 qty = _d(qtys[i] if i < len(qtys) else 0)
             except Exception:
                 qty = Decimal('0')
-            unit = (units[i] if i < len(units) else 'unit') or 'unit'
             if qty <= 0:
-                errors.append(f'Item {i + 1} needs a quantity greater than zero.')
-            items.append((desc, qty, unit))
-        if len(items) < 4:
-            errors.append('An RFQ needs at least 4 items.')
+                errors.append(f'{prod["name"]}: quantity must be greater than zero.')
+            unit = (prod.get('unit') or 'unit')
+            desc = prod.get('name') or ''
+            cost = _d(prod.get('unit_cost'))
+            items.append((pid, desc, qty, unit, cost))
+        # Legacy free-text only if no catalogue lines (should not happen on new form)
+        if not items and descs:
+            for i, desc in enumerate(descs):
+                desc = (desc or '').strip()
+                if not desc:
+                    continue
+                try:
+                    qty = _d(qtys[i] if i < len(qtys) else 0)
+                except Exception:
+                    qty = Decimal('0')
+                unit = (units[i] if i < len(units) else 'unit') or 'unit'
+                items.append((None, desc, qty, unit, Decimal('0')))
+        if len(items) < 1:
+            errors.append('Select at least one product from the Product Catalogue.')
         if len(items) > 20:
             errors.append('An RFQ cannot have more than 20 items.')
         tor, terr = _save_upload('tor', 'tor', MAX_TOR, required=True)
@@ -466,14 +522,22 @@ def rfq_new():
         )
         db.session.add(rfq)
         db.session.flush()
-        for n, (desc, qty, unit) in enumerate(items, 1):
-            db.session.add(RfqItem(rfq_id=rfq.id, line_no=n, description=desc, quantity=qty, unit=unit))
+        for n, row in enumerate(items, 1):
+            pid, desc, qty, unit, cost = row
+            kwargs = dict(rfq_id=rfq.id, line_no=n, description=desc, quantity=qty, unit=unit)
+            # product_id / unit_cost columns may not exist on older DBs
+            try:
+                db.session.add(RfqItem(product_id=pid, unit_cost=cost, **kwargs))
+            except Exception:
+                db.session.add(RfqItem(**kwargs))
         db.session.commit()
-        flash(f'{rfq.rfq_no} sent for review.', 'success')
+        flash(f'{rfq.rfq_no} sent for review with {len(items)} catalogue line(s).', 'success')
         return redirect(url_for('wf.rfq_detail', rid=rfq.id))
+    products = _catalogue_products()
     return render_template(
         'wf_rfq_form.html', staff=_staff(), projects=_projects(),
         expenses=_expenses(), budgets=_budgets(),
+        products=products,
     )
 
 

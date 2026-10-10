@@ -137,29 +137,50 @@ def ensure_db():
         return
     try:
         db.create_all()
+    except Exception as e:
         try:
-            from erp_extension import bind_and_create, erp_bp
-            if 'erp' not in app.blueprints:
-                app.register_blueprint(erp_bp)
-            bind_and_create(app, db)
-        except Exception as _erp_err:
-            print('ERP extension init:', _erp_err)
+            app.logger.exception('create_all failed: %s', e)
+        except Exception:
+            pass
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    try:
+        from erp_extension import bind_and_create, erp_bp
+        if 'erp' not in app.blueprints:
+            app.register_blueprint(erp_bp)
+        bind_and_create(app, db)
+    except Exception as _erp_err:
+        print('ERP extension init:', _erp_err)
+    try:
         if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
             seed_data()
-        ensure_expense_codes()
-        # Auto-populate sample operational/financial data so dashboards are never empty on first launch
-        try:
-            if ClientEncounter.query.count() < 5:
-                load_report_sample_data()
-        except Exception as _auto_sample_err:
-            try:
-                db.session.rollback()
-            except Exception:
-                pass
-            print('auto sample load:', _auto_sample_err)
-        _db_ready = True
     except Exception as e:
-        app.logger.exception('ensure_db failed: %s', e)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print('seed_data:', e)
+    try:
+        ensure_expense_codes()
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print('ensure_expense_codes:', e)
+    try:
+        if ClientEncounter.query.count() < 5:
+            load_report_sample_data()
+    except Exception as _auto_sample_err:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print('auto sample load:', _auto_sample_err)
+    # Mark ready even on partial init so every request is not blocked retrying forever
+    _db_ready = True
 
 
 def log_activity(action, detail=None, user=None):
@@ -183,7 +204,13 @@ def log_activity(action, detail=None, user=None):
 
 @app.before_request
 def _before_request_init_db():
-    ensure_db()
+    try:
+        ensure_db()
+    except Exception as e:
+        try:
+            app.logger.exception('before_request ensure_db: %s', e)
+        except Exception:
+            pass
     # Skip static and auth endpoints for onboarding gate
     if request.endpoint in (
         'static', 'login', 'logout', 'register', 'admin_access',
@@ -597,19 +624,33 @@ class AppSetting(db.Model):
 
 
 def get_setting(key, default=''):
-    row = AppSetting.query.filter_by(key=key).first()
-    return row.value if row and row.value is not None else default
+    try:
+        row = AppSetting.query.filter_by(key=key).first()
+        return row.value if row and row.value is not None else default
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return default
 
 
 def set_setting(key, value):
-    row = AppSetting.query.filter_by(key=key).first()
-    if not row:
-        row = AppSetting(key=key, value=value)
-        db.session.add(row)
-    else:
-        row.value = value
-    db.session.commit()
-    return row
+    try:
+        row = AppSetting.query.filter_by(key=key).first()
+        if not row:
+            row = AppSetting(key=key, value=value)
+            db.session.add(row)
+        else:
+            row.value = value
+        db.session.commit()
+        return row
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return None
 
 
 def report_branding():
@@ -931,15 +972,33 @@ def get_refusal_reasons(start_date=None, end_date=None):
 @app.route('/')
 def index():
     """Public marketing home; authenticated users go to their workspace."""
-    if current_user.is_authenticated:
-        if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
-            return redirect(url_for('onboarding'))
-        if current_user.role == 'provider':
-            return redirect(url_for('provider_dashboard'))
-        if _is_admin_role(current_user.role):
-            return redirect(url_for(_home_for_role(current_user.role)))
-    content = homepage_content()
-    return render_template('public_home.html', content=content)
+    try:
+        if current_user.is_authenticated:
+            if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
+                return redirect(url_for('onboarding'))
+            if current_user.role == 'provider':
+                return redirect(url_for('provider_dashboard'))
+            if _is_admin_role(current_user.role):
+                return redirect(url_for(_home_for_role(current_user.role)))
+        content = homepage_content()
+        return render_template('public_home.html', content=content)
+    except Exception as e:
+        try:
+            app.logger.exception('index failed: %s', e)
+        except Exception:
+            pass
+        try:
+            return render_template(
+                'error.html', code=500, title='Temporary problem',
+                message='The home page could not load fully. Please try Sign in or refresh in a moment.',
+            ), 500
+        except Exception:
+            return (
+                '<h1>Project Financial Management Workflow</h1>'
+                '<p>Home is temporarily unavailable. <a href="/login">Sign in</a></p>',
+                500,
+                {'Content-Type': 'text/html; charset=utf-8'},
+            )
 
 
 @app.route('/about')
@@ -1275,7 +1334,15 @@ def admin_dashboard():
 @login_required
 @admin_required
 def admin_facilities():
-    facilities = Facility.query.order_by(Facility.created_at.desc()).all()
+    try:
+        facilities = Facility.query.order_by(Facility.created_at.desc()).all()
+    except Exception as e:
+        try:
+            current_app.logger.exception('admin_facilities: %s', e)
+        except Exception:
+            pass
+        facilities = []
+        flash('Could not load facilities fully. Try creating Main Warehouse from Program items.', 'warning')
     return render_template('admin_facilities.html', facilities=facilities)
 
 
@@ -1306,20 +1373,24 @@ def admin_facility_new():
             target_clients_monthly=target,
             is_active=request.form.get('is_active') == '1',
         )
-        db.session.add(fac)
-        db.session.flush()
-        # Seed zero stock lines for all catalogue products
-        for prod in Product.query.all():
-            db.session.add(StockItem(
-                facility_id=fac.id, product_id=prod.id,
-                quantity_on_hand=0, reorder_level=10,
-            ))
-        db.session.commit()
+        try:
+            db.session.add(fac)
+            db.session.flush()
+            for prod in Product.query.all():
+                db.session.add(StockItem(
+                    facility_id=fac.id, product_id=prod.id,
+                    quantity_on_hand=0, reorder_level=10,
+                ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Could not create facility: {e}', 'danger')
+            return render_template('admin_facility_form.html', facility=None)
         try:
             log_activity('facility_create', f'{fac.name} ({fac.facility_type})')
         except Exception:
             pass
-        flash(f'Service unit “{fac.name}” created.', 'success')
+        flash(f'Service unit "{fac.name}" created.', 'success')
         return redirect(url_for('admin_facility_detail', fid=fac.id))
     return render_template('admin_facility_form.html', facility=None)
 
@@ -4830,11 +4901,22 @@ try:
 except Exception as _wf_boot:
     print('Workflow upgrade boot:', _wf_boot)
 
+try:
+    from logistics_flow import init_logistics
+    init_logistics(app, db)
+    print('Logistics registered (warehouse, GRN, dispatch, uptake)')
+except Exception as _log_boot:
+    print('Logistics boot:', _log_boot)
+
 
 # ---------------------------------------------------------------------------
 # Branded error pages (CONTRAconnect) — never show a bare stack / blank page
 # ---------------------------------------------------------------------------
 def _render_error(code, title, message):
+    try:
+        app.logger.error('HTTP %s: %s — %s', code, title, message)
+    except Exception:
+        pass
     try:
         return render_template(
             'error.html',
