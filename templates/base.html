@@ -123,33 +123,35 @@
             <nav class="col-md-2 d-none d-md-block sidebar sidebar-cc py-3">
                 <ul class="nav flex-column">
                     {% if current_user.role != 'provider' %}
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('main_dashboard') }}"><i class="bi bi-speedometer2"></i> Executive Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('staff_dashboard') }}"><i class="bi bi-house"></i> My workspace</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/dashboard"><i class="bi bi-speedometer2"></i> Executive Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/staff"><i class="bi bi-house"></i> My workspace</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Program items</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_program_items') }}"><i class="bi bi-boxes"></i> Facilities, products, dispatch</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.inventory_home') }}"><i class="bi bi-box-seam"></i> Inventory position</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/sections/program-items"><i class="bi bi-boxes"></i> Facilities, products, dispatch</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/inventory"><i class="bi bi-box-seam"></i> Inventory position</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/uptake"><i class="bi bi-heart-pulse"></i> Uptake Administration</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/catalogue"><i class="bi bi-journal-medical"></i> Product catalogue</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Program Core</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_program_core') }}"><i class="bi bi-clipboard-data"></i> Learning, reports, homepage</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('client_feedback_hub') }}"><i class="bi bi-chat-heart"></i> Client feedback</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/sections/program-core"><i class="bi bi-clipboard-data"></i> Learning, reports, homepage</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/client-feedback"><i class="bi bi-chat-heart"></i> Client feedback</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Procurement</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_procurement') }}"><i class="bi bi-briefcase"></i> Vendors, bids, committee</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/sections/procurement"><i class="bi bi-briefcase"></i> Vendors, bids, committee</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Finance</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_finance') }}"><i class="bi bi-bank"></i> Budget, books, cost analysis</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/sections/finance"><i class="bi bi-bank"></i> Budget, books, cost analysis</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Data</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('data_exchange') }}"><i class="bi bi-arrow-left-right"></i> Download / Upload CSV</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/data-exchange"><i class="bi bi-arrow-left-right"></i> Download / Upload CSV</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Staff</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.section_staff') }}"><i class="bi bi-shield-lock"></i> Rights, approvals, privileges</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/sections/staff"><i class="bi bi-shield-lock"></i> Rights, approvals, privileges</a></li>
                     {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_backup_page') }}"><i class="bi bi-cloud-arrow-down"></i> Backup and restore</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/admin/backup"><i class="bi bi-cloud-arrow-down"></i> Backup and restore</a></li>
                     {% endif %}
                     {% else %}
                     <li class="nav-item"><span class="nav-link text-uppercase small fw-bold">My facility</span></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('ops.facility_home') }}"><i class="bi bi-building"></i> Facility desk</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('provider_dashboard') }}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('provider_stock') }}"><i class="bi bi-boxes"></i> My stock</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('provider_request') }}"><i class="bi bi-plus-circle"></i> Request stock</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('provider_encounter') }}"><i class="bi bi-person-hearts"></i> Service and uptake</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('provider_messages') }}"><i class="bi bi-chat-dots"></i> Messages</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/ops/facility"><i class="bi bi-building"></i> Facility desk</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/provider"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/provider/stock"><i class="bi bi-boxes"></i> My stock</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/provider/request"><i class="bi bi-plus-circle"></i> Request stock</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/provider/encounter"><i class="bi bi-person-hearts"></i> Service and uptake</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/provider/messages"><i class="bi bi-chat-dots"></i> Messages</a></li>
                     {% endif %}
                 </ul>
             </nav>
@@ -171,7 +173,7 @@
 
                 {% if current_user.is_authenticated and not hide_back_button %}
                 <div class="mb-2">
-                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="if(history.length>1){history.back()}else{window.location='{{ url_for('main_dashboard') if current_user.role != 'provider' else url_for('provider_dashboard') }}'}">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="if(history.length>1){history.back()}else{window.location='{{ '/dashboard' if current_user.role != 'provider' else '/provider' }}'}">
                     <i class="bi bi-arrow-left"></i> Back
                   </button>
                 </div>
