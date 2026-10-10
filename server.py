@@ -75,10 +75,18 @@ except ImportError:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'contraconnect-dev-secret-change-me')
 
-# Database URL (Render Postgres uses postgres:// — SQLAlchemy needs postgresql://)
-_db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/contraconnect.db')
+# Database URL — prefer private Railway URL; fall back to public proxy URL
+_db_url = (
+    os.environ.get('DATABASE_URL')
+    or os.environ.get('DATABASE_PUBLIC_URL')
+    or 'sqlite:////tmp/contraconnect.db'
+)
+# Normalize schemes for SQLAlchemy
 if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+# Prefer psycopg2 driver when available (Railway-friendly)
+if _db_url.startswith('postgresql://') and '+psycopg' not in _db_url:
+    _db_url = _db_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB uploads
@@ -138,28 +146,74 @@ def ensure_db():
     try:
         db.create_all()
         try:
-            from erp_extension import bind_and_create, erp_bp
-            if 'erp' not in app.blueprints:
-                app.register_blueprint(erp_bp)
-            bind_and_create(app, db)
-        except Exception as _erp_err:
-            print('ERP extension init:', _erp_err)
+            _ensure_users_columns()
+        except Exception:
+            pass
+    except Exception as e:
+        try:
+            app.logger.exception('create_all failed: %s', e)
+        except Exception:
+            pass
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    try:
+        from erp_extension import bind_and_create, erp_bp
+        if 'erp' not in app.blueprints:
+            app.register_blueprint(erp_bp)
+        bind_and_create(app, db)
+    except Exception as _erp_err:
+        print('ERP extension init:', _erp_err)
+    try:
         if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
             seed_data()
-        ensure_expense_codes()
-        # Auto-populate sample operational/financial data so dashboards are never empty on first launch
-        try:
-            if ClientEncounter.query.count() < 5:
-                load_report_sample_data()
-        except Exception as _auto_sample_err:
-            try:
-                db.session.rollback()
-            except Exception:
-                pass
-            print('auto sample load:', _auto_sample_err)
-        _db_ready = True
     except Exception as e:
-        app.logger.exception('ensure_db failed: %s', e)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print('seed_data:', e)
+    try:
+        if not User.query.filter(User.role.in_(['general_admin', 'admin'])).first():
+            import os as _os
+            pw = _os.environ.get('ADMIN_PASSWORD') or 'Contra@Admin2026!'
+            u = User(
+                email=(_os.environ.get('ADMIN_EMAIL') or 'admin@contraconnect.local').lower(),
+                full_name='General Administrator',
+                role='general_admin',
+                is_active=True,
+                onboarding_status='active',
+            )
+            u.set_password(pw)
+            db.session.add(u)
+            db.session.commit()
+            print('bootstrap admin created')
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print('bootstrap admin:', e)
+    try:
+        ensure_expense_codes()
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print('ensure_expense_codes:', e)
+    try:
+        if ClientEncounter.query.count() < 5:
+            load_report_sample_data()
+    except Exception as _auto_sample_err:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print('auto sample load:', _auto_sample_err)
+    # Mark ready even on partial init so every request is not blocked retrying forever
+    _db_ready = True
 
 
 def log_activity(action, detail=None, user=None):
@@ -183,7 +237,13 @@ def log_activity(action, detail=None, user=None):
 
 @app.before_request
 def _before_request_init_db():
-    ensure_db()
+    try:
+        ensure_db()
+    except Exception as e:
+        try:
+            app.logger.exception('before_request ensure_db: %s', e)
+        except Exception:
+            pass
     # Skip static and auth endpoints for onboarding gate
     if request.endpoint in (
         'static', 'login', 'logout', 'register', 'admin_access',
@@ -597,19 +657,33 @@ class AppSetting(db.Model):
 
 
 def get_setting(key, default=''):
-    row = AppSetting.query.filter_by(key=key).first()
-    return row.value if row and row.value is not None else default
+    try:
+        row = AppSetting.query.filter_by(key=key).first()
+        return row.value if row and row.value is not None else default
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return default
 
 
 def set_setting(key, value):
-    row = AppSetting.query.filter_by(key=key).first()
-    if not row:
-        row = AppSetting(key=key, value=value)
-        db.session.add(row)
-    else:
-        row.value = value
-    db.session.commit()
-    return row
+    try:
+        row = AppSetting.query.filter_by(key=key).first()
+        if not row:
+            row = AppSetting(key=key, value=value)
+            db.session.add(row)
+        else:
+            row.value = value
+        db.session.commit()
+        return row
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return None
 
 
 def report_branding():
@@ -668,7 +742,14 @@ def amount_in_words(amount):
 # ---------------------------------------------------------------------------
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    try:
+        return db.session.get(User, int(user_id))
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return None
 
 
 # Role hierarchy — programme staff + legacy admin roles
@@ -931,15 +1012,33 @@ def get_refusal_reasons(start_date=None, end_date=None):
 @app.route('/')
 def index():
     """Public marketing home; authenticated users go to their workspace."""
-    if current_user.is_authenticated:
-        if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
-            return redirect(url_for('onboarding'))
-        if current_user.role == 'provider':
-            return redirect(url_for('provider_dashboard'))
-        if _is_admin_role(current_user.role):
-            return redirect(url_for(_home_for_role(current_user.role)))
-    content = homepage_content()
-    return render_template('public_home.html', content=content)
+    try:
+        if current_user.is_authenticated:
+            if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
+                return redirect(url_for('onboarding'))
+            if current_user.role == 'provider':
+                return redirect(url_for('provider_dashboard'))
+            if _is_admin_role(current_user.role):
+                return redirect(url_for(_home_for_role(current_user.role)))
+        content = homepage_content()
+        return render_template('public_home.html', content=content)
+    except Exception as e:
+        try:
+            app.logger.exception('index failed: %s', e)
+        except Exception:
+            pass
+        try:
+            return render_template(
+                'error.html', code=500, title='Temporary problem',
+                message='The home page could not load fully. Please try Sign in or refresh in a moment.',
+            ), 500
+        except Exception:
+            return (
+                '<h1>Project Financial Management Workflow</h1>'
+                '<p>Home is temporarily unavailable. <a href="/login">Sign in</a></p>',
+                500,
+                {'Content-Type': 'text/html; charset=utf-8'},
+            )
 
 
 @app.route('/about')
@@ -1049,29 +1148,316 @@ def admin_homepage_editor():
 
 
 
+def _ensure_users_table():
+    """Create users table if missing (Postgres first, then generic create_all)."""
+    from sqlalchemy import text as _text
+    try:
+        db.session.execute(_text('SELECT 1 FROM users LIMIT 1'))
+        return True
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    try:
+        db.create_all()
+        db.session.execute(_text('SELECT 1 FROM users LIMIT 1'))
+        return True
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS users ("
+        "id SERIAL PRIMARY KEY,"
+        "email VARCHAR(120) UNIQUE NOT NULL,"
+        "password_hash VARCHAR(256) NOT NULL,"
+        "full_name VARCHAR(120) NOT NULL,"
+        "role VARCHAR(40) NOT NULL DEFAULT 'provider',"
+        "staff_title VARCHAR(120),"
+        "facility_id INTEGER,"
+        "is_active BOOLEAN DEFAULT TRUE,"
+        "must_complete_onboarding BOOLEAN DEFAULT FALSE,"
+        "onboarding_status VARCHAR(30) DEFAULT 'active',"
+        "can_finance_review BOOLEAN DEFAULT FALSE,"
+        "can_pm_approve BOOLEAN DEFAULT FALSE,"
+        "can_pay_expenses BOOLEAN DEFAULT FALSE,"
+        "can_view_finance BOOLEAN DEFAULT FALSE,"
+        "can_download_financial BOOLEAN DEFAULT FALSE,"
+        "activation_code VARCHAR(40),"
+        "profile_photo VARCHAR(255),"
+        "phone VARCHAR(40),"
+        "organization VARCHAR(150),"
+        "role_confirmed BOOLEAN DEFAULT FALSE,"
+        "ethics_accepted BOOLEAN DEFAULT FALSE,"
+        "ethics_accepted_at TIMESTAMP,"
+        "onboarding_notes TEXT,"
+        "last_login_at TIMESTAMP,"
+        "password_changed_at TIMESTAMP,"
+        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        ")"
+    )
+    try:
+        db.session.execute(_text(ddl))
+        db.session.commit()
+        return True
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            app.logger.exception('Could not create users table: %s', e)
+        except Exception:
+            pass
+        return False
+
+
+def _find_user_by_email(email):
+    """Load a user by email; create table if needed; tolerate schema drift."""
+    email = (email or '').strip().lower()
+    if not email:
+        return None
+    _ensure_users_table()
+    try:
+        _ensure_users_columns()
+    except Exception:
+        pass
+    try:
+        return User.query.filter_by(email=email).first()
+    except Exception as e:
+        try:
+            app.logger.warning('ORM user lookup failed, trying SQL: %s', e)
+        except Exception:
+            pass
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    try:
+        from sqlalchemy import text as _text
+        row = db.session.execute(
+            _text('SELECT id FROM users WHERE lower(email) = :e LIMIT 1'),
+            {'e': email},
+        ).first()
+        if row:
+            try:
+                return db.session.get(User, int(row[0]))
+            except Exception:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                try:
+                    return User.query.get(int(row[0]))
+                except Exception:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+    except Exception as e2:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            app.logger.exception('SQL user lookup failed: %s', e2)
+        except Exception:
+            pass
+    return None
+
+
+def _ensure_users_columns():
+    """Add any missing optional columns on users (Postgres-safe)."""
+    needed = {
+        'staff_title': 'VARCHAR(120)',
+        'onboarding_status': "VARCHAR(30) DEFAULT 'active'",
+        'must_complete_onboarding': 'BOOLEAN DEFAULT FALSE',
+        'can_finance_review': 'BOOLEAN DEFAULT FALSE',
+        'can_pm_approve': 'BOOLEAN DEFAULT FALSE',
+        'can_pay_expenses': 'BOOLEAN DEFAULT FALSE',
+        'can_view_finance': 'BOOLEAN DEFAULT FALSE',
+        'can_download_financial': 'BOOLEAN DEFAULT FALSE',
+        'activation_code': 'VARCHAR(40)',
+        'profile_photo': 'VARCHAR(255)',
+        'phone': 'VARCHAR(40)',
+        'organization': 'VARCHAR(150)',
+        'role_confirmed': 'BOOLEAN DEFAULT FALSE',
+        'ethics_accepted': 'BOOLEAN DEFAULT FALSE',
+        'ethics_accepted_at': 'TIMESTAMP',
+        'onboarding_notes': 'TEXT',
+        'last_login_at': 'TIMESTAMP',
+        'password_changed_at': 'TIMESTAMP',
+        'facility_id': 'INTEGER',
+    }
+    try:
+        from sqlalchemy import text as _text, inspect as _inspect
+        cols = {c['name'] for c in _inspect(db.engine).get_columns('users')}
+    except Exception:
+        return
+    for name, decl in needed.items():
+        if name in cols:
+            continue
+        try:
+            db.session.execute(_text('ALTER TABLE users ADD COLUMN %s %s' % (name, decl)))
+            db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
+    try:
+        _ensure_users_columns()
+    except Exception:
+        pass
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for('index'))
+    except Exception:
+        pass
     if request.method == 'POST':
-        email = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '')
-        user = User.query.filter_by(email=email, is_active=True).first()
-        if user and user.check_password(password):
-            if getattr(user, 'onboarding_status', 'active') == 'rejected':
+        email = (request.form.get('email') or '').strip().lower()
+        password = request.form.get('password') or ''
+        user = _find_user_by_email(email)
+        if user is None and email:
+            table_ok = False
+            try:
+                table_ok = _ensure_users_table()
+            except Exception:
+                table_ok = False
+            if not table_ok:
+                detail = ''
+                try:
+                    from sqlalchemy import text as _text
+                    db.session.execute(_text('SELECT 1 FROM users LIMIT 1'))
+                except Exception as _ue:
+                    detail = str(_ue)[:180]
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+                flash(
+                    'Cannot reach the users table. %s '
+                    'Open /db-health on this site for diagnostics. '
+                    'DATABASE_URL should be the private URL (postgres.railway.internal) '
+                    'or set DATABASE_PUBLIC_URL as fallback.'
+                    % (detail or ''),
+                    'danger',
+                )
+                try:
+                    return render_template('login.html')
+                except Exception:
+                    return redirect(url_for('index'))
+            try:
+                from sqlalchemy import text as _text
+                n = db.session.execute(_text('SELECT COUNT(*) FROM users')).scalar() or 0
+            except Exception:
+                n = -1
+            if n == 0:
+                try:
+                    import os as _os
+                    pw = _os.environ.get('ADMIN_PASSWORD') or 'Contra@Admin2026!'
+                    admin_email = (_os.environ.get('ADMIN_EMAIL') or 'knowsoftconsult@gmail.com').strip().lower()
+                    u = User(
+                        email=admin_email,
+                        full_name='General Administrator',
+                        role='general_admin',
+                        is_active=True,
+                        onboarding_status='active',
+                    )
+                    u.set_password(pw)
+                    db.session.add(u)
+                    db.session.commit()
+                    flash(
+                        'First admin was created for this database. Sign in with ADMIN_EMAIL and ADMIN_PASSWORD '
+                        '(defaults: knowsoftconsult@gmail.com / Contra@Admin2026!).',
+                        'warning',
+                    )
+                    try:
+                        return render_template('login.html')
+                    except Exception:
+                        return redirect(url_for('login'))
+                except Exception as e:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
+                    try:
+                        app.logger.exception('bootstrap admin on login: %s', e)
+                    except Exception:
+                        pass
+        active = True
+        if user is not None:
+            try:
+                active = bool(user.is_active)
+            except Exception:
+                active = True
+        if user and active and user.check_password(password):
+            status = getattr(user, 'onboarding_status', None) or 'active'
+            if status == 'rejected':
                 flash('Your account registration was not approved. Contact the administrator.', 'danger')
                 return redirect(url_for('login'))
-            login_user(user, remember=True)
-            user.last_login_at = datetime.utcnow()
-            db.session.commit()
-            log_activity('login', f'role={user.role}', user=user)
-            flash(f'Welcome, {user.full_name} ({user.role_label}).', 'success')
-            if getattr(user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval'):
+            try:
+                login_user(user, remember=True)
+            except Exception as e:
+                try:
+                    app.logger.exception('login_user: %s', e)
+                except Exception:
+                    pass
+                flash('Could not start your session. Please try again.', 'danger')
+                return redirect(url_for('login'))
+            try:
+                user.last_login_at = datetime.utcnow()
+                db.session.commit()
+            except Exception:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+            try:
+                log_activity('login', 'role=%s' % getattr(user, 'role', ''), user=user)
+            except Exception:
+                pass
+            try:
+                label = user.role_label if hasattr(user, 'role_label') else user.role
+                flash('Welcome, %s (%s).' % (user.full_name, label), 'success')
+            except Exception:
+                flash('Welcome.', 'success')
+            if status in ('pending_profile', 'pending_approval'):
                 return redirect(url_for('onboarding'))
-            return redirect(url_for('index'))
+            # Prefer role home; fall back to index
+            try:
+                return redirect(url_for(_home_for_role(user.role)))
+            except Exception:
+                return redirect(url_for('index'))
         flash('Invalid email or password.', 'danger')
-        log_activity('login_failed', email)
-    return render_template('login.html')
+        try:
+            log_activity('login_failed', email)
+        except Exception:
+            pass
+    try:
+        return render_template('login.html')
+    except Exception as e:
+        try:
+            app.logger.exception('login template: %s', e)
+        except Exception:
+            pass
+        return (
+            '<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:420px;margin:3rem auto">'
+            '<h1>Sign in</h1>'
+            '<form method="post">'
+            '<p><label>Email<br><input name="email" type="email" required style="width:100%"></label></p>'
+            '<p><label>Password<br><input name="password" type="password" required style="width:100%"></label></p>'
+            '<button type="submit">Sign in</button></form>'
+            '<p><a href="/">Home</a></p></body></html>',
+            200,
+            {'Content-Type': 'text/html; charset=utf-8'},
+        )
 
 
 @app.route('/logout')
@@ -1094,8 +1480,8 @@ def admin_access():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
-        user = User.query.filter_by(email=email, is_active=True).first()
-        if user and _is_admin_role(user.role) and user.check_password(password):
+        user = User.query.filter_by(email=email).first()
+        if user and bool(getattr(user, 'is_active', True)) and _is_admin_role(user.role) and user.check_password(password):
             login_user(user, remember=False)
             flash(f'Welcome, {user.full_name} ({user.role_label}).', 'success')
             return redirect(url_for(_home_for_role(user.role)))
@@ -1275,7 +1661,15 @@ def admin_dashboard():
 @login_required
 @admin_required
 def admin_facilities():
-    facilities = Facility.query.order_by(Facility.created_at.desc()).all()
+    try:
+        facilities = Facility.query.order_by(Facility.created_at.desc()).all()
+    except Exception as e:
+        try:
+            current_app.logger.exception('admin_facilities: %s', e)
+        except Exception:
+            pass
+        facilities = []
+        flash('Could not load facilities fully. Try creating Main Warehouse from Program items.', 'warning')
     return render_template('admin_facilities.html', facilities=facilities)
 
 
@@ -1306,20 +1700,24 @@ def admin_facility_new():
             target_clients_monthly=target,
             is_active=request.form.get('is_active') == '1',
         )
-        db.session.add(fac)
-        db.session.flush()
-        # Seed zero stock lines for all catalogue products
-        for prod in Product.query.all():
-            db.session.add(StockItem(
-                facility_id=fac.id, product_id=prod.id,
-                quantity_on_hand=0, reorder_level=10,
-            ))
-        db.session.commit()
+        try:
+            db.session.add(fac)
+            db.session.flush()
+            for prod in Product.query.all():
+                db.session.add(StockItem(
+                    facility_id=fac.id, product_id=prod.id,
+                    quantity_on_hand=0, reorder_level=10,
+                ))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Could not create facility: {e}', 'danger')
+            return render_template('admin_facility_form.html', facility=None)
         try:
             log_activity('facility_create', f'{fac.name} ({fac.facility_type})')
         except Exception:
             pass
-        flash(f'Service unit “{fac.name}” created.', 'success')
+        flash(f'Service unit "{fac.name}" created.', 'success')
         return redirect(url_for('admin_facility_detail', fid=fac.id))
     return render_template('admin_facility_form.html', facility=None)
 
@@ -3502,16 +3900,39 @@ def _chart_data():
 @login_required
 def main_dashboard():
     """Illustrative 3D-style executive dashboard for Program, Procurement, Inventory, Finance."""
-    if current_user.role == 'provider':
-        return redirect(url_for('provider_dashboard'))
-    kpis = _dashboard_kpis()
-    chart_methods, chart_proc = _chart_data()
-    return render_template(
-        'main_dashboard.html',
-        kpis=kpis,
-        chart_methods=chart_methods,
-        chart_proc=chart_proc,
-    )
+    try:
+        if current_user.role == 'provider':
+            return redirect(url_for('provider_dashboard'))
+    except Exception:
+        pass
+    try:
+        kpis = _dashboard_kpis()
+    except Exception:
+        kpis = {
+            'facilities': 0, 'products': 0, 'encounters': 0, 'learning_subs': 0,
+            'vendors': 0, 'rfqs': 0, 'pos': 0, 'proc_invoices': 0,
+            'stock_lines': 0, 'open_requests': 0, 'dispatches': 0, 'low_stock': 0,
+            'pending_finance': 0, 'expense_reqs': 0, 'accounts': 0, 'journals': 0,
+        }
+    try:
+        chart_methods, chart_proc = _chart_data()
+    except Exception:
+        chart_methods = {'labels': [], 'data': []}
+        chart_proc = {'labels': [], 'data': []}
+    try:
+        return render_template(
+            'main_dashboard.html',
+            kpis=kpis,
+            chart_methods=chart_methods,
+            chart_proc=chart_proc,
+        )
+    except Exception as e:
+        try:
+            app.logger.exception('main_dashboard: %s', e)
+        except Exception:
+            pass
+        flash('Dashboard is temporarily limited. Use the menu to open Finance or Inventory.', 'warning')
+        return redirect(url_for('index'))
 
 
 @app.route('/dashboard/export/excel')
@@ -4810,6 +5231,72 @@ except Exception as _ops_boot:
     print('Ops upgrade boot:', _ops_boot)
 
 
+
+@app.route('/db-health')
+def db_health():
+    """Safe DB diagnostics for Railway setup (no secrets)."""
+    import os as _os
+    from sqlalchemy import text as _text
+    info = {
+        'has_DATABASE_URL': bool(_os.environ.get('DATABASE_URL')),
+        'has_DATABASE_PUBLIC_URL': bool(_os.environ.get('DATABASE_PUBLIC_URL')),
+        'uri_scheme': '',
+        'uri_host': '',
+        'connect_ok': False,
+        'users_table_ok': False,
+        'users_count': None,
+        'error': '',
+    }
+    try:
+        uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
+        # redact password
+        if '@' in uri:
+            head, tail = uri.split('@', 1)
+            scheme_user = head.split('://', 1)
+            info['uri_scheme'] = (scheme_user[0] + '://***@' + tail.split('/')[0]) if len(scheme_user) == 2 else '***'
+            info['uri_host'] = tail.split('/')[0]
+        else:
+            info['uri_scheme'] = uri[:32]
+    except Exception as e:
+        info['error'] = 'uri parse: %s' % e
+    try:
+        db.session.execute(_text('SELECT 1'))
+        info['connect_ok'] = True
+    except Exception as e:
+        info['error'] = 'connect: %s' % e
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return app.response_class(
+            '\n'.join('%s=%s' % (k, info[k]) for k in info) + '\n',
+            mimetype='text/plain',
+        )
+    try:
+        n = db.session.execute(_text('SELECT COUNT(*) FROM users')).scalar()
+        info['users_table_ok'] = True
+        info['users_count'] = n
+    except Exception as e:
+        info['error'] = 'users: %s' % e
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        # try create
+        try:
+            ok = _ensure_users_table()
+            info['create_attempted'] = ok
+            if ok:
+                n = db.session.execute(_text('SELECT COUNT(*) FROM users')).scalar()
+                info['users_table_ok'] = True
+                info['users_count'] = n
+                info['error'] = ''
+        except Exception as e2:
+            info['error'] = 'users+create: %s | %s' % (e, e2)
+    lines = ['%s=%s' % (k, info[k]) for k in info]
+    return app.response_class('\n'.join(lines) + '\n', mimetype='text/plain')
+
+
 @app.route('/upgrade-status')
 def upgrade_status():
     return (
@@ -4830,11 +5317,22 @@ try:
 except Exception as _wf_boot:
     print('Workflow upgrade boot:', _wf_boot)
 
+try:
+    from logistics_flow import init_logistics
+    init_logistics(app, db)
+    print('Logistics registered (warehouse, GRN, dispatch, uptake)')
+except Exception as _log_boot:
+    print('Logistics boot:', _log_boot)
+
 
 # ---------------------------------------------------------------------------
 # Branded error pages (CONTRAconnect) — never show a bare stack / blank page
 # ---------------------------------------------------------------------------
 def _render_error(code, title, message):
+    try:
+        app.logger.error('HTTP %s: %s — %s', code, title, message)
+    except Exception:
+        pass
     try:
         return render_template(
             'error.html',
