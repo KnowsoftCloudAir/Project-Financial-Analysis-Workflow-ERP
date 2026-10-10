@@ -75,10 +75,18 @@ except ImportError:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'contraconnect-dev-secret-change-me')
 
-# Database URL (Render Postgres uses postgres:// — SQLAlchemy needs postgresql://)
-_db_url = os.environ.get('DATABASE_URL', 'sqlite:////tmp/contraconnect.db')
+# Database URL — prefer private Railway URL; fall back to public proxy URL
+_db_url = (
+    os.environ.get('DATABASE_URL')
+    or os.environ.get('DATABASE_PUBLIC_URL')
+    or 'sqlite:////tmp/contraconnect.db'
+)
+# Normalize schemes for SQLAlchemy
 if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+# Prefer psycopg2 driver when available (Railway-friendly)
+if _db_url.startswith('postgresql://') and '+psycopg' not in _db_url:
+    _db_url = _db_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB uploads
@@ -1323,9 +1331,22 @@ def login():
             except Exception:
                 table_ok = False
             if not table_ok:
+                detail = ''
+                try:
+                    from sqlalchemy import text as _text
+                    db.session.execute(_text('SELECT 1 FROM users LIMIT 1'))
+                except Exception as _ue:
+                    detail = str(_ue)[:180]
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
                 flash(
-                    'Cannot reach the users table. Confirm DATABASE_URL uses the Postgres in this Railway project '
-                    '(postgres.railway.internal) and the web service is linked to that database.',
+                    'Cannot reach the users table. %s '
+                    'Open /db-health on this site for diagnostics. '
+                    'DATABASE_URL should be the private URL (postgres.railway.internal) '
+                    'or set DATABASE_PUBLIC_URL as fallback.'
+                    % (detail or ''),
                     'danger',
                 )
                 try:
@@ -5208,6 +5229,72 @@ try:
     print('Ops upgrade registered (/ops/inventory, /ops/procurement, /ops/bank, /ops/privileges)')
 except Exception as _ops_boot:
     print('Ops upgrade boot:', _ops_boot)
+
+
+
+@app.route('/db-health')
+def db_health():
+    """Safe DB diagnostics for Railway setup (no secrets)."""
+    import os as _os
+    from sqlalchemy import text as _text
+    info = {
+        'has_DATABASE_URL': bool(_os.environ.get('DATABASE_URL')),
+        'has_DATABASE_PUBLIC_URL': bool(_os.environ.get('DATABASE_PUBLIC_URL')),
+        'uri_scheme': '',
+        'uri_host': '',
+        'connect_ok': False,
+        'users_table_ok': False,
+        'users_count': None,
+        'error': '',
+    }
+    try:
+        uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
+        # redact password
+        if '@' in uri:
+            head, tail = uri.split('@', 1)
+            scheme_user = head.split('://', 1)
+            info['uri_scheme'] = (scheme_user[0] + '://***@' + tail.split('/')[0]) if len(scheme_user) == 2 else '***'
+            info['uri_host'] = tail.split('/')[0]
+        else:
+            info['uri_scheme'] = uri[:32]
+    except Exception as e:
+        info['error'] = 'uri parse: %s' % e
+    try:
+        db.session.execute(_text('SELECT 1'))
+        info['connect_ok'] = True
+    except Exception as e:
+        info['error'] = 'connect: %s' % e
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return app.response_class(
+            '\n'.join('%s=%s' % (k, info[k]) for k in info) + '\n',
+            mimetype='text/plain',
+        )
+    try:
+        n = db.session.execute(_text('SELECT COUNT(*) FROM users')).scalar()
+        info['users_table_ok'] = True
+        info['users_count'] = n
+    except Exception as e:
+        info['error'] = 'users: %s' % e
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        # try create
+        try:
+            ok = _ensure_users_table()
+            info['create_attempted'] = ok
+            if ok:
+                n = db.session.execute(_text('SELECT COUNT(*) FROM users')).scalar()
+                info['users_table_ok'] = True
+                info['users_count'] = n
+                info['error'] = ''
+        except Exception as e2:
+            info['error'] = 'users+create: %s | %s' % (e, e2)
+    lines = ['%s=%s' % (k, info[k]) for k in info]
+    return app.response_class('\n'.join(lines) + '\n', mimetype='text/plain')
 
 
 @app.route('/upgrade-status')
