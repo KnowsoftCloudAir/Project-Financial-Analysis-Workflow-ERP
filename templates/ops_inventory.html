@@ -47,7 +47,11 @@
       <h3>Inventory position by service unit</h3>
       <p>Main warehouse receives all procurement. Each outlet has its own sheet. Dispatch from the warehouse produces a downloadable PDF note.</p>
     </div>
-    <button class="btn btn-light btn-sm no-print" onclick="window.print()">Print landscape</button>
+    <div class="d-flex gap-2 no-print">
+      <a class="btn btn-light btn-sm" href="{{ url_for('logistics.inventory_xlsx') }}">Excel</a>
+      <a class="btn btn-light btn-sm" href="{{ url_for('logistics.inventory_pdf') }}">PDF</a>
+      <button class="btn btn-light btn-sm" onclick="window.print()">Print</button>
+    </div>
   </div>
 
   {% if not groups %}
@@ -114,7 +118,7 @@
           </tbody>
         </table>
       </div>
-      {% if can_update %}
+      {% if false and can_update %}
       <form method="post" action="{{ url_for('ops.inventory_usage') }}" class="inv-form row g-2 no-print align-items-end">
         <input type="hidden" name="facility_id" value="{{ block.id }}">
         <div class="col-md-3">
