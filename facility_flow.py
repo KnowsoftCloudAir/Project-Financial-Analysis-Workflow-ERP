@@ -175,7 +175,7 @@ def dispatch_list():
 @_staff_required
 def dispatch_new():
     facilities = _rows("SELECT id, name FROM facilities WHERE name != 'Central warehouse' ORDER BY name")
-    products = _rows('SELECT id, name, unit FROM products WHERE is_active = 1 ORDER BY name')
+    products = _rows('SELECT id, name, unit FROM products WHERE (is_active IS TRUE OR is_active = 1) ORDER BY name')
     if request.method == 'POST':
         if not (user_has(current_user, 'dispatch.create') or _can_approve()):
             flash('Only a dispatch officer or the program manager can raise a dispatch.', 'danger')

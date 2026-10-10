@@ -1,66 +1,205 @@
 {% extends "base.html" %}
-{% block title %}Inventory by service unit{% endblock %}
+{% block title %}Inventory position by service unit{% endblock %}
 {% block extra_css %}
 <style>
-  .unit-sheet { overflow-x: auto; background: #fff; }
-  .unit-sheet table { min-width: 1100px; font-size: .92rem; }
-  .unit-sheet th { background: #0f4c6e; color: #fff; white-space: normal; }
-  .warehouse { border-top: 6px solid #0f766e; }
-  .kiosk { border-top: 6px solid #b45309; }
-  .phc { border-top: 6px solid #1d4ed8; }
+  .inv-hero {
+    background: linear-gradient(135deg, #0f4c6e 0%, #0f766e 100%);
+    color: #fff; border-radius: 1rem; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+  }
+  .inv-hero h3 { margin: 0; font-weight: 700; }
+  .inv-hero p { margin: .35rem 0 0; opacity: .9; font-size: .92rem; }
+  .unit-sheet { overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem; }
+  .unit-sheet table { min-width: 1000px; font-size: .9rem; }
+  .unit-sheet thead th {
+    background: #0f4c6e; color: #fff; white-space: nowrap; font-weight: 600; border: none;
+  }
+  .balance-pos { color: #047857; font-weight: 600; }
+  .balance-neg { color: #b91c1c; font-weight: 600; }
+  .warehouse { border-top: 5px solid #0f766e; }
+  .kiosk { border-top: 5px solid #b45309; }
+  .phc { border-top: 5px solid #1d4ed8; }
+  .other { border-top: 5px solid #64748b; }
+  .kind-badge {
+    display: inline-block; font-size: .72rem; font-weight: 600;
+    padding: .15rem .5rem; border-radius: 999px; background: #f1f5f9; color: #334155;
+  }
+  .warehouse .kind-badge { background: #ccfbf1; color: #0f766e; }
+  .kiosk .kind-badge { background: #ffedd5; color: #b45309; }
+  .phc .kind-badge { background: #dbeafe; color: #1d4ed8; }
+  .inv-form { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 1rem; }
+  .group-title {
+    font-size: 1.05rem; font-weight: 700; color: #0f172a;
+    margin: 1.5rem 0 .65rem; padding-bottom: .35rem; border-bottom: 2px solid #e2e8f0;
+  }
+  .summary-card { border: 1px solid #e2e8f0; border-radius: .75rem; overflow: hidden; }
+  .summary-card thead th { background: #134e4a; color: #fff; font-weight: 600; white-space: nowrap; }
   @media print {
     @page { size: A4 landscape; margin: 10mm; }
-    .no-print { display: none; }
+    .no-print { display: none !important; }
     .unit-sheet { break-after: page; }
   }
 </style>
 {% endblock %}
 {% block content %}
 <div class="container-fluid py-3 wrap-page">
-  <div class="d-flex justify-content-between align-items-center mb-2">
+  <div class="inv-hero d-flex flex-wrap justify-content-between align-items-center gap-2">
     <div>
-      <h3 class="mb-0">Inventory by service unit</h3>
-      <p class="text-muted mb-0">Main warehouse first, then the kiosks and PHCs it supplies. Each outlet is its own landscape sheet.</p>
+      <h3>Inventory position by service unit</h3>
+      <p>Main warehouse receives all procurement. Each outlet has its own sheet. Dispatch from the warehouse produces a downloadable PDF note.</p>
     </div>
-    <button class="btn btn-outline-secondary no-print" onclick="window.print()">Print landscape</button>
+    <button class="btn btn-light btn-sm no-print" onclick="window.print()">Print landscape</button>
   </div>
+
+  {% if not groups %}
+  <div class="alert alert-info">No facilities yet. Create a warehouse facility (name containing “warehouse”) so procurement can be offloaded, then add kiosks and PHCs.</div>
+  {% endif %}
+
   {% for group in groups %}
-    <h4 class="mt-3">{{ group.title }}</h4>
+    <div class="group-title">{{ group.title }}</div>
     {% for block in group.sheets %}
     <div class="card mb-3 unit-sheet {{ block.kind }}">
-      <div class="card-header"><strong>{{ block.name }}</strong> · {{ block.kind_label }}</div>
-      <table class="table mb-0">
-        {% if block.warehouse %}
-        <thead><tr><th>Commodity</th><th>Opening qty</th><th>Qty received</th><th>Qty dispatched</th><th>Outlet dispatched to</th><th>Qty balance</th></tr></thead>
-        {% else %}
-        <thead><tr><th>Commodity</th><th>Received qty</th><th>Administered qty</th><th>Transferred qty</th><th>Outlet transferred to</th><th>Balance qty</th></tr></thead>
-        {% endif %}
-        <tbody>
-          {% for line in block.lines %}
-          <tr>
-            <td>{{ line.product }}</td>
-            {% if block.warehouse %}<td>{{ line.opening }}</td>{% endif %}
-            <td>{{ line.received }}</td>
-            <td>{{ line.dispatched if block.warehouse else line.administered }}</td>
-            {% if not block.warehouse %}<td>{{ line.transferred }}</td>{% endif %}
-            <td>{{ line.destinations or '—' }}</td>
-            <td>{{ line.balance }}</td>
-          </tr>
-          {% else %}<tr><td colspan="6">No commodities recorded for this outlet.</td></tr>{% endfor %}
-        </tbody>
-      </table>
+      <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 bg-white">
+        <div>
+          <strong>{{ block.name }}</strong>
+          <span class="kind-badge ms-2">{{ block.kind_label }}</span>
+        </div>
+        <span class="text-muted small">Facility ID {{ block.id }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          {% if block.warehouse %}
+          <thead>
+            <tr>
+              <th>Commodity</th>
+              <th class="text-end">Opening qty</th>
+              <th class="text-end">Qty received</th>
+              <th class="text-end">Qty dispatched</th>
+              <th>Facility dispatched to</th>
+              <th class="text-end">Qty balance</th>
+            </tr>
+          </thead>
+          {% else %}
+          <thead>
+            <tr>
+              <th>Commodity</th>
+              <th class="text-end">Received qty</th>
+              <th class="text-end">Administered qty</th>
+              <th class="text-end">Transferred qty</th>
+              <th>Facility transferred to</th>
+              <th class="text-end">Balance qty</th>
+            </tr>
+          </thead>
+          {% endif %}
+          <tbody>
+            {% for line in block.lines %}
+            <tr>
+              <td>{{ line.product }}</td>
+              {% if block.warehouse %}
+                <td class="text-end">{{ '%.2f'|format(line.opening) }}</td>
+                <td class="text-end">{{ '%.2f'|format(line.received) }}</td>
+                <td class="text-end">{{ '%.2f'|format(line.dispatched) }}</td>
+                <td>{{ line.destinations }}</td>
+                <td class="text-end {{ 'balance-pos' if line.balance >= 0 else 'balance-neg' }}">{{ '%.2f'|format(line.balance) }}</td>
+              {% else %}
+                <td class="text-end">{{ '%.2f'|format(line.received) }}</td>
+                <td class="text-end">{{ '%.2f'|format(line.administered) }}</td>
+                <td class="text-end">{{ '%.2f'|format(line.transferred) }}</td>
+                <td>{{ line.destinations }}</td>
+                <td class="text-end {{ 'balance-pos' if line.balance >= 0 else 'balance-neg' }}">{{ '%.2f'|format(line.balance) }}</td>
+              {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-muted text-center py-3">No commodities recorded for this outlet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
       {% if can_update %}
-      <form method="post" action="{{ url_for('ops.inventory_usage') }}" class="card-body row g-2 no-print">
+      <form method="post" action="{{ url_for('ops.inventory_usage') }}" class="inv-form row g-2 no-print align-items-end">
         <input type="hidden" name="facility_id" value="{{ block.id }}">
-        <div class="col-md-3"><select class="form-select" name="product_id" required>{% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
-        <div class="col-md-2"><input class="form-control" name="quantity" type="number" min="0.01" step="0.01" placeholder="Qty" required></div>
-        <div class="col-md-2"><select class="form-select" name="kind">{% if block.warehouse %}<option value="receipt">Receive</option><option value="dispatch">Dispatch to outlet</option>{% else %}<option value="administer">Administer</option><option value="transfer">Transfer</option><option value="receipt">Receive</option>{% endif %}</select></div>
-        <div class="col-md-3"><select class="form-select" name="dest_facility_id"><option value="">Outlet</option>{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select></div>
-        <div class="col-md-2"><button class="btn btn-primary">Update sheet</button></div>
+        <div class="col-md-3">
+          <label class="form-label small mb-0">Commodity</label>
+          <select class="form-select form-select-sm" name="product_id" required>
+            {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Quantity</label>
+          <input class="form-control form-control-sm" name="quantity" type="number" min="0.01" step="0.01" placeholder="Qty" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Movement</label>
+          <select class="form-select form-select-sm" name="kind">
+            {% if block.warehouse %}
+              <option value="receipt">Receive (procurement offload)</option>
+              <option value="dispatch">Dispatch to outlet</option>
+            {% else %}
+              <option value="administer">Administer / usage</option>
+              <option value="transfer">Transfer to other outlet</option>
+              <option value="receipt">Receive</option>
+            {% endif %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small mb-0">Destination facility</label>
+          <select class="form-select form-select-sm" name="dest_facility_id">
+            <option value="">— Required for dispatch / transfer —</option>
+            {% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-primary btn-sm w-100">Update sheet</button>
+        </div>
       </form>
       {% endif %}
     </div>
     {% endfor %}
   {% endfor %}
+
+  {# ---- System-wide summary ---- #}
+  <div class="group-title">Summary balance — all facilities</div>
+  <div class="card summary-card mb-4">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Unit</th>
+            <th class="text-end">Quantity (all sites)</th>
+            <th class="text-end">Unit cost</th>
+            <th class="text-end">Total value</th>
+            <th class="text-end">Admin. last month</th>
+            <th class="text-end">Admin. this month</th>
+            <th class="text-end">Projected next month</th>
+            <th class="text-end">Quarterly</th>
+            <th class="text-end">Semi-annual</th>
+            <th class="text-end">Annual</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in summary %}
+          <tr>
+            <td>{{ s.product }}</td>
+            <td>{{ s.unit }}</td>
+            <td class="text-end">{{ '%.2f'|format(s.quantity) }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(s.unit_cost) }}</td>
+            <td class="text-end fw-semibold">{{ '{:,.2f}'.format(s.total_value) }}</td>
+            <td class="text-end">{{ '%.2f'|format(s.admin_last_month) }}</td>
+            <td class="text-end">{{ '%.2f'|format(s.admin_this_month) }}</td>
+            <td class="text-end">{{ '%.2f'|format(s.admin_projected_next) }}</td>
+            <td class="text-end">{{ '%.2f'|format(s.admin_quarterly) }}</td>
+            <td class="text-end">{{ '%.2f'|format(s.admin_semi_annual) }}</td>
+            <td class="text-end">{{ '%.2f'|format(s.admin_annual) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="11" class="text-muted text-center py-3">No commodities in the catalogue yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer small text-muted">
+      Total value uses the unit cost held on each product (set from procurement). Administered quantities are updated by facility officers or approving officers as usage continues. Quarterly / semi-annual / annual are projections from this month’s administered volume.
+    </div>
+  </div>
 </div>
 {% endblock %}

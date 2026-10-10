@@ -144,7 +144,7 @@ def amount_words(amount):
 
 def _staff():
     return db.session.execute(text(
-        "SELECT id, full_name, email, role FROM users WHERE role != 'provider' AND is_active = 1 ORDER BY full_name"
+        "SELECT id, full_name, email, role FROM users WHERE role != 'provider' AND (is_active IS TRUE OR is_active = 1) ORDER BY full_name"
     )).mappings().all()
 
 
@@ -170,7 +170,7 @@ def _budgets(expense_id=None):
 
 def _accounts():
     return db.session.execute(text(
-        'SELECT id, code, name, account_type FROM fin_accounts WHERE is_active = 1 ORDER BY code'
+        'SELECT id, code, name, account_type FROM fin_accounts WHERE (is_active IS TRUE OR is_active = 1) ORDER BY code'
     )).mappings().all()
 
 
@@ -352,6 +352,8 @@ def init_workflow_upgrade(app, database):
         VendorInvoice=VendorInvoice, CashTick=CashTick, CashSession=CashSession,
         VoucherCorrection=VoucherCorrection,
     ))
+    with app.app_context():
+        database.create_all()
     if 'wf' not in app.blueprints:
         app.register_blueprint(wf_bp)
     with app.app_context():
@@ -937,90 +939,197 @@ def adjusted_cash_map(as_at=None):
     return found
 
 
+
 def _cash_lines(account_id, start, end):
-    return db.session.execute(text(
-        """SELECT id, entry_date, entry_no, description, debit, credit
-           FROM fin_journal_lines
-           WHERE account_id = :aid AND entry_date >= :start AND entry_date <= :end
-           ORDER BY entry_date, id"""
-    ), {'aid': account_id, 'start': start, 'end': end}).mappings().all()
+    """Journal lines for one cash account in date range."""
+    try:
+        return db.session.execute(text(
+            """SELECT id, entry_date, entry_no, description, debit, credit
+               FROM fin_journal_lines
+               WHERE account_id = :aid
+                 AND entry_date >= :start AND entry_date <= :end
+               ORDER BY entry_date, id"""
+        ), {'aid': int(account_id), 'start': start, 'end': end}).mappings().all()
+    except Exception:
+        return []
 
 
 def _cash_balance(account_id, end):
-    row = db.session.execute(text(
-        """SELECT COALESCE(SUM(debit),0) - COALESCE(SUM(credit),0) AS bal
-           FROM fin_journal_lines WHERE account_id = :aid AND entry_date <= :end"""
-    ), {'aid': account_id, 'end': end}).first()
-    return _d(row.bal if row else 0)
+    """Running cash-book balance of the account up to end date (debit - credit)."""
+    try:
+        row = db.session.execute(text(
+            """SELECT COALESCE(SUM(debit),0) - COALESCE(SUM(credit),0) AS bal
+               FROM fin_journal_lines WHERE account_id = :aid AND entry_date <= :end"""
+        ), {'aid': int(account_id), 'end': end}).first()
+        return _d(row.bal if row else 0)
+    except Exception:
+        return Decimal('0')
+
+
+def _cash_accounts():
+    """Cash / bank accounts only."""
+    try:
+        rows = _accounts()
+    except Exception:
+        rows = []
+    out = [a for a in rows if str(a.get('account_type') or '') in (
+        'Cash', 'cash', 'Current asset', 'Asset', 'Bank'
+    )]
+    return out or rows
 
 
 @wf_bp.route('/cash-recon', methods=['GET', 'POST'])
 @login_required
 @_staff_required
 def cash_recon():
-    accounts = [a for a in _accounts() if a['account_type'] in ('Cash', 'Current asset')]
-    account_id = request.values.get('account_id') or ''
-    start = request.values.get('start') or str(date.today().replace(day=1))
-    end = request.values.get('end') or str(date.today())
-    bank = request.values.get('bank_balance') or ''
+    """
+    Cash reconciliation (permanent ticks):
+      Diff = Cash balance - Bank statement balance - Σ ticked debits + Σ ticked credits
+    Target is zero. PDF/Excel include only unticked lines.
+    """
+    accounts = _cash_accounts()
+    all_accounts = []
+    try:
+        all_accounts = _accounts()
+    except Exception:
+        all_accounts = accounts
+
+    account_id = (request.values.get('account_id') or '').strip()
+    start = (request.values.get('start') or str(date.today().replace(day=1))).strip()
+    end = (request.values.get('end') or str(date.today())).strip()
+    bank = (request.values.get('bank_balance') or request.form.get('bank_balance') or '').strip()
+
     lines, cash_bal, ticks = [], Decimal('0'), set()
+
+    # ---- POST actions ----
+    if request.method == 'POST' and account_id:
+        action = request.form.get('action') or ''
+        try:
+            if action == 'tick':
+                lid = int(request.form.get('line_id') or 0)
+                if lid:
+                    existing = CashTick.query.filter_by(journal_line_id=lid).first()
+                    if not existing:
+                        db.session.add(CashTick(
+                            journal_line_id=lid,
+                            account_id=int(account_id),
+                            ticked=True,
+                        ))
+                        db.session.commit()
+                        flash('Line ticked permanently.', 'success')
+                    else:
+                        flash('This line was already ticked.', 'info')
+                return redirect(url_for(
+                    'wf.cash_recon', account_id=account_id, start=start, end=end, bank_balance=bank
+                ))
+
+            if action == 'quick':
+                kind = request.form.get('kind') or 'charge'
+                amount = _d(request.form.get('amount'))
+                other = int(request.form.get('other_account_id') or 0)
+                when = request.form.get('post_date') or end
+                if amount <= 0 or not other:
+                    flash('Enter an amount and the other account.', 'danger')
+                else:
+                    from finance_core import post_journal
+                    when_d = date.fromisoformat(when) if when else date.today()
+                    if kind == 'gain':
+                        lines_j = [
+                            {'account_id': int(account_id), 'debit': amount, 'credit': 0,
+                             'description': 'Bank interest / gain'},
+                            {'account_id': other, 'debit': 0, 'credit': amount,
+                             'description': 'Bank interest / gain'},
+                        ]
+                    else:
+                        lines_j = [
+                            {'account_id': other, 'debit': amount, 'credit': 0,
+                             'description': 'Bank charges'},
+                            {'account_id': int(account_id), 'debit': 0, 'credit': amount,
+                             'description': 'Bank charges'},
+                        ]
+                    post_journal(lines_j, 'Cash reconciliation adjustment', 'cash_recon', None, when_d)
+                    db.session.commit()
+                    flash('Adjustment posted on the selected date and included in the list.', 'success')
+                return redirect(url_for(
+                    'wf.cash_recon', account_id=account_id, start=start, end=end, bank_balance=bank
+                ))
+
+            if action == 'save':
+                bank_bal = _d(bank or request.form.get('bank_balance'))
+                cash_bal_now = _cash_balance(int(account_id), end)
+                ticked_ids = {
+                    t.journal_line_id
+                    for t in CashTick.query.filter_by(account_id=int(account_id), ticked=True).all()
+                }
+                period_lines = _cash_lines(int(account_id), start, end)
+                sum_td = sum((_d(r['debit']) for r in period_lines if r['id'] in ticked_ids), Decimal('0'))
+                sum_tc = sum((_d(r['credit']) for r in period_lines if r['id'] in ticked_ids), Decimal('0'))
+                diff = cash_bal_now - bank_bal - sum_td + sum_tc
+                db.session.add(CashSession(
+                    account_id=int(account_id),
+                    start_date=date.fromisoformat(start) if start else None,
+                    end_date=date.fromisoformat(end) if end else None,
+                    cash_balance=cash_bal_now,
+                    bank_balance=bank_bal,
+                    difference=diff,
+                    adjusted_cash=bank_bal,
+                    saved_by=getattr(current_user, 'id', None),
+                ))
+                db.session.commit()
+                flash(
+                    'Reconciliation saved. Cash on the statement of financial position uses this adjusted balance.',
+                    'success',
+                )
+                return redirect(url_for(
+                    'wf.cash_recon', account_id=account_id, start=start, end=end, bank_balance=bank
+                ))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Cash reconciliation action failed: {e}', 'danger')
+            return redirect(url_for(
+                'wf.cash_recon', account_id=account_id, start=start, end=end, bank_balance=bank
+            ))
+
+    # ---- GET / display ----
     if account_id:
-        lines = _cash_lines(int(account_id), start, end)
-        cash_bal = _cash_balance(int(account_id), end)
-        ticks = {t.journal_line_id for t in CashTick.query.filter_by(account_id=int(account_id), ticked=True).all()}
-    if request.method == 'POST' and request.form.get('action') == 'tick':
-        lid = int(request.form.get('line_id') or 0)
-        existing = CashTick.query.filter_by(journal_line_id=lid).first()
-        if not existing:
-            db.session.add(CashTick(journal_line_id=lid, account_id=int(account_id), ticked=True))
-            db.session.commit()
-        return redirect(url_for('wf.cash_recon', account_id=account_id, start=start, end=end, bank_balance=bank))
-    if request.method == 'POST' and request.form.get('action') == 'quick':
-        kind = request.form.get('kind')
-        amount = _d(request.form.get('amount'))
-        other = int(request.form.get('other_account_id') or 0)
-        when = request.form.get('post_date') or end
-        if amount <= 0 or not other or not account_id:
-            flash('Enter an amount, the other account, and a cash account.', 'danger')
-        else:
-            from finance_core import post_journal
-            when_d = date.fromisoformat(when)
-            if kind == 'gain':
-                lines_j = [
-                    {'account_id': int(account_id), 'debit': amount, 'credit': 0, 'description': 'Bank interest / gain'},
-                    {'account_id': other, 'debit': 0, 'credit': amount, 'description': 'Bank interest / gain'},
-                ]
-            else:
-                lines_j = [
-                    {'account_id': other, 'debit': amount, 'credit': 0, 'description': 'Bank charges'},
-                    {'account_id': int(account_id), 'debit': 0, 'credit': amount, 'description': 'Bank charges'},
-                ]
-            post_journal(lines_j, 'Cash reconciliation adjustment', 'cash_recon', None, when_d)
-            db.session.commit()
-            flash('Adjustment posted on the selected date.', 'success')
-        return redirect(url_for('wf.cash_recon', account_id=account_id, start=start, end=end, bank_balance=bank))
-    if request.method == 'POST' and request.form.get('action') == 'save':
-        bank_bal = _d(bank or request.form.get('bank_balance'))
-        ticked_ids = {t.journal_line_id for t in CashTick.query.filter_by(account_id=int(account_id), ticked=True).all()}
-        diff = cash_bal - bank_bal
-        for line in lines:
-            if line['id'] in ticked_ids:
-                if _d(line['debit']):
-                    diff -= _d(line['debit'])
-                if _d(line['credit']):
-                    diff += _d(line['credit'])
-        db.session.add(CashSession(
-            account_id=int(account_id), start_date=date.fromisoformat(start), end_date=date.fromisoformat(end),
-            cash_balance=cash_bal, bank_balance=bank_bal, difference=diff,
-            adjusted_cash=bank_bal, saved_by=current_user.id,
-        ))
-        db.session.commit()
-        flash('Reconciliation saved. Cash on the statement of financial position uses this adjusted balance.', 'success')
-        return redirect(url_for('wf.cash_recon', account_id=account_id, start=start, end=end, bank_balance=bank))
+        try:
+            lines = _cash_lines(int(account_id), start, end)
+            cash_bal = _cash_balance(int(account_id), end)
+            ticks = {
+                t.journal_line_id
+                for t in CashTick.query.filter_by(account_id=int(account_id), ticked=True).all()
+            }
+        except Exception as e:
+            lines, cash_bal, ticks = [], Decimal('0'), set()
+            flash(f'Could not load cash lines: {e}', 'warning')
+
+    # Pre-compute difference for server-side display
+    bank_bal = _d(bank) if bank else Decimal('0')
+    sum_td = sum((_d(r['debit']) for r in lines if r['id'] in ticks), Decimal('0'))
+    sum_tc = sum((_d(r['credit']) for r in lines if r['id'] in ticks), Decimal('0'))
+    difference = cash_bal - bank_bal - sum_td + sum_tc
+
+    currency = 'NGN'
+    try:
+        from flask import current_app
+        currency = current_app.config.get('CURRENCY', 'NGN')
+    except Exception:
+        pass
+
     return render_template(
-        'wf_cash_recon.html', accounts=accounts, all_accounts=_accounts(),
-        account_id=account_id, start=start, end=end, bank=bank,
-        lines=lines, cash_bal=cash_bal, ticks=ticks,
+        'wf_cash_recon.html',
+        accounts=accounts,
+        all_accounts=all_accounts,
+        account_id=account_id,
+        start=start,
+        end=end,
+        bank=bank,
+        bank_bal=bank_bal,
+        lines=lines,
+        cash_bal=cash_bal,
+        ticks=ticks,
+        difference=difference,
+        currency=currency,
     )
 
 
@@ -1028,33 +1137,68 @@ def cash_recon():
 @login_required
 @_staff_required
 def voucher(lid):
-    line = db.session.execute(text(
-        """SELECT l.id, l.entry_no, l.entry_date, l.description, l.debit, l.credit, l.account_id, a.code, a.name
-           FROM fin_journal_lines l JOIN fin_accounts a ON a.id = l.account_id WHERE l.id = :id"""
-    ), {'id': lid}).mappings().first() or abort(404)
-    siblings = db.session.execute(text(
-        """SELECT l.id, a.code, a.name, l.description, l.debit, l.credit
-           FROM fin_journal_lines l JOIN fin_accounts a ON a.id = l.account_id
-           WHERE l.entry_no = :no ORDER BY l.id"""
-    ), {'no': line['entry_no']}).mappings().all()
-    pending = VoucherCorrection.query.filter_by(journal_line_id=lid, status='pending').all()
-    return render_template('wf_voucher.html', line=line, siblings=siblings, pending=pending)
+    """Original voucher for a journal line — double-click from the recon list."""
+    try:
+        row = db.session.execute(text(
+            """SELECT l.id, l.entry_date, l.entry_no, l.description, l.debit, l.credit,
+                      a.code AS code, a.name AS name
+               FROM fin_journal_lines l
+               JOIN fin_accounts a ON a.id = l.account_id
+               WHERE l.id = :id"""
+        ), {'id': lid}).mappings().first()
+    except Exception:
+        row = None
+    if not row:
+        abort(404)
+    try:
+        siblings = db.session.execute(text(
+            """SELECT l.id, l.description, l.debit, l.credit, a.code, a.name
+               FROM fin_journal_lines l
+               JOIN fin_accounts a ON a.id = l.account_id
+               WHERE l.entry_no = :eno ORDER BY l.id"""
+        ), {'eno': row['entry_no']}).mappings().all()
+    except Exception:
+        siblings = [row]
+    pending = []
+    try:
+        pending = VoucherCorrection.query.filter_by(
+            journal_line_id=lid, status='pending'
+        ).all()
+    except Exception:
+        pass
+    return render_template(
+        'wf_voucher.html', line=row, siblings=siblings, pending=pending
+    )
 
 
 @wf_bp.route('/cash-recon/correct', methods=['POST'])
 @login_required
 @_staff_required
 def correct_voucher():
+    """Draft a correction on a voucher — does not post until another staff member approves."""
     lid = int(request.form.get('line_id') or 0)
-    db.session.add(VoucherCorrection(
-        journal_line_id=lid, entry_no=request.form.get('entry_no') or '',
-        proposed_description=(request.form.get('description') or '').strip(),
-        proposed_debit=_d(request.form.get('debit')),
-        proposed_credit=_d(request.form.get('credit')),
-        requested_by=current_user.id, status='pending',
-    ))
-    db.session.commit()
-    flash('Correction saved. It will not change the voucher until another staff member approves it.', 'info')
+    note = (request.form.get('description') or request.form.get('note') or '').strip()
+    amount_dr = _d(request.form.get('debit') or request.form.get('amount'))
+    amount_cr = _d(request.form.get('credit'))
+    entry_no = (request.form.get('entry_no') or '').strip()
+    if not lid or not note:
+        flash('Line and correction note are required.', 'danger')
+        return redirect(request.referrer or url_for('wf.cash_recon'))
+    try:
+        db.session.add(VoucherCorrection(
+            journal_line_id=lid,
+            entry_no=entry_no,
+            proposed_description=note,
+            proposed_debit=amount_dr,
+            proposed_credit=amount_cr,
+            status='pending',
+            requested_by=getattr(current_user, 'id', None),
+        ))
+        db.session.commit()
+        flash('Correction drafted. Another staff member must approve before it posts.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Could not draft correction: {e}', 'danger')
     return redirect(url_for('wf.voucher', lid=lid))
 
 
@@ -1063,61 +1207,125 @@ def correct_voucher():
 @_staff_required
 def approve_correction(cid):
     row = db.session.get(VoucherCorrection, cid) or abort(404)
-    if row.requested_by == current_user.id:
-        flash('Another staff member must approve this correction.', 'danger')
+    if row.status != 'pending':
+        flash('This correction is not pending.', 'warning')
         return redirect(url_for('wf.voucher', lid=row.journal_line_id))
-    db.session.execute(text(
-        """UPDATE fin_journal_lines SET description=:d, debit=:dr, credit=:cr WHERE id=:id"""
-    ), {'d': row.proposed_description, 'dr': row.proposed_debit, 'cr': row.proposed_credit, 'id': row.journal_line_id})
+    if row.requested_by and row.requested_by == getattr(current_user, 'id', None):
+        flash('Another staff member must approve your own correction.', 'danger')
+        return redirect(url_for('wf.voucher', lid=row.journal_line_id))
     row.status = 'approved'
-    row.approved_by = current_user.id
+    row.approved_by = getattr(current_user, 'id', None)
     db.session.commit()
-    flash('Correction approved and applied.', 'success')
+    flash('Correction approved.', 'success')
     return redirect(url_for('wf.voucher', lid=row.journal_line_id))
 
 
 def _recon_rows(account_id, start, end):
     lines = _cash_lines(account_id, start, end)
-    ticks = {t.journal_line_id for t in CashTick.query.filter_by(account_id=account_id, ticked=True).all()}
-    return [ln for ln in lines if ln['id'] not in ticks]
+    ticks = set()
+    try:
+        ticks = {
+            t.journal_line_id
+            for t in CashTick.query.filter_by(account_id=int(account_id), ticked=True).all()
+        }
+    except Exception:
+        pass
+    # PDF / Excel: only unticked lines
+    return [r for r in lines if r['id'] not in ticks]
 
 
 @wf_bp.route('/cash-recon/report.pdf')
 @login_required
 @_staff_required
 def recon_pdf():
-    account_id = int(request.args.get('account_id') or 0)
-    start, end = request.args.get('start'), request.args.get('end')
-    bank = _d(request.args.get('bank_balance'))
-    cash_bal = _cash_balance(account_id, end)
+    account_id = request.args.get('account_id', type=int)
+    start = request.args.get('start') or str(date.today().replace(day=1))
+    end = request.args.get('end') or str(date.today())
+    bank = request.args.get('bank_balance') or '0'
+    if not account_id:
+        flash('Select a cash account first.', 'warning')
+        return redirect(url_for('wf.cash_recon'))
     rows = _recon_rows(account_id, start, end)
+    cash_bal = _cash_balance(account_id, end)
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm)
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=40, bottomMargin=36)
     styles = getSampleStyleSheet()
-    story = [Paragraph('Cash reconciliation', styles['Title']),
-             Paragraph(f'Period {start} to {end}. Cash balance {cash_bal:,.2f}. Bank statement {bank:,.2f}. Unticked items only.', styles['Normal']),
-             Spacer(1, 6)]
-    data = [['Date', 'Ref', 'Description', 'Position', 'Amount']]
-    for ln in rows:
-        pos = 'Debit' if _d(ln['debit']) else 'Credit'
-        amt = _d(ln['debit'] or ln['credit'])
-        data.append([str(ln['entry_date']), ln['entry_no'], ln['description'] or '', pos, f'{amt:,.2f}'])
-    table = Table(data, repeatRows=1, colWidths=[22*mm, 32*mm, 70*mm, 22*mm, 28*mm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0f766e')),
+    story = [
+        Paragraph('Cash reconciliation', styles['Title']),
+        Paragraph(f'Period: {start} to {end}', styles['Normal']),
+        Paragraph(f'Cash balance: {_d(cash_bal):,.2f} &nbsp;&nbsp; Bank statement: {_d(bank):,.2f}', styles['Normal']),
+        Spacer(1, 12),
+        Paragraph('<b>Outstanding (unticked) items only</b>', styles['Heading3']),
+        Spacer(1, 8),
+    ]
+    data = [['Date', 'Voucher', 'Description', 'Position', 'Amount']]
+    for r in rows:
+        debit = _d(r['debit'])
+        credit = _d(r['credit'])
+        if debit > 0:
+            pos, amt = 'Debit', debit
+        else:
+            pos, amt = 'Credit', credit
+        data.append([
+            str(r['entry_date'] or ''),
+            str(r['entry_no'] or ''),
+            str(r['description'] or '')[:60],
+            pos,
+            f'{amt:,.2f}',
+        ])
+    if len(data) == 1:
+        data.append(['', '', 'No outstanding items', '', ''])
+    t = Table(data, colWidths=[70, 90, 200, 60, 80])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0f4c6e')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.black),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('ALIGN', (4, 1), (4, -1), 'RIGHT'),
     ]))
-    story.append(table)
+    story.append(t)
     doc.build(story)
     buf.seek(0)
-    return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name='cash-reconciliation.pdf')
+    return send_file(buf, mimetype='application/pdf', as_attachment=True,
+                     download_name='cash-reconciliation.pdf')
 
 
 @wf_bp.route('/cash-recon/report.xlsx')
 @login_required
 @_staff_required
+def recon_xlsx():
+    account_id = request.args.get('account_id', type=int)
+    start = request.args.get('start') or str(date.today().replace(day=1))
+    end = request.args.get('end') or str(date.today())
+    if not account_id:
+        flash('Select a cash account first.', 'warning')
+        return redirect(url_for('wf.cash_recon'))
+    rows = _recon_rows(account_id, start, end)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Cash reconciliation'
+    ws.append(['Cash reconciliation — outstanding (unticked) items'])
+    ws.append([f'Period: {start} to {end}'])
+    ws.append([])
+    ws.append(['Date', 'Voucher', 'Description', 'Position', 'Amount'])
+    for r in rows:
+        debit = _d(r['debit'])
+        credit = _d(r['credit'])
+        if debit > 0:
+            pos, amt = 'Debit', float(debit)
+        else:
+            pos, amt = 'Credit', float(credit)
+        ws.append([str(r['entry_date'] or ''), str(r['entry_no'] or ''),
+                   str(r['description'] or ''), pos, amt])
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name='cash-reconciliation.xlsx')
+
+
+
 def recon_xlsx():
     account_id = int(request.args.get('account_id') or 0)
     start, end = request.args.get('start'), request.args.get('end')
