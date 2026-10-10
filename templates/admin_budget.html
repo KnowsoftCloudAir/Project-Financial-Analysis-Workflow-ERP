@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Budget template{% endblock %}
+{% block content %}
+<div class="page-hero mb-3">
+  <h2 class="mb-1">Budget template by expense code</h2>
+  <p class="text-muted small mb-0">Set budget amounts, variance narrations, and add new expense codes. Paid expense requests post as actuals.</p>
+</div>
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto"><input name="fy" class="form-control" value="{{ fy }}" placeholder="Fiscal year"></div>
+  <div class="col-auto"><input name="period" class="form-control" value="{{ period }}" placeholder="Period"></div>
+  <div class="col-auto"><button class="btn btn-outline-secondary">Load</button></div>
+  <div class="col-auto"><a class="btn btn-outline-dark" href="{{ url_for('budget_variance_report', fy=fy, period=period) }}">Variance report</a></div>
+  <div class="col-auto"><a class="btn btn-outline-primary" href="{{ url_for('budget_ifrs_pdf', fy=fy, period=period) }}">IFRS-style PDF</a></div>
+</form>
+
+{% if can_edit %}
+<div class="card mb-3">
+  <div class="card-header"><strong>Add expense code</strong></div>
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-md-2"><input form="budget-main" name="new_code" class="form-control form-control-sm" placeholder="Code e.g. EXP-NEW-01"></div>
+      <div class="col-md-2"><input form="budget-main" name="new_category" class="form-control form-control-sm" placeholder="Category"></div>
+      <div class="col-md-4"><input form="budget-main" name="new_description" class="form-control form-control-sm" placeholder="Description"></div>
+      <div class="col-md-4 small text-muted align-self-center">Saved when you click “Save budget template” below.</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<form method="post" id="budget-main">
+  <input type="hidden" name="fiscal_year" value="{{ fy }}">
+  <input type="hidden" name="period_label" value="{{ period }}">
+  <div class="card"><div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr>
+        <th>Code</th><th>Category</th><th>Description</th>
+        <th class="text-end">Budget</th><th class="text-end">Actual (paid)</th><th class="text-end">Variance</th>
+        <th>Variance narration</th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><code>{{ r.code.code }}</code></td>
+        <td class="small">{{ r.code.category }}</td>
+        <td class="small">{{ r.code.description }}</td>
+        <td class="text-end" style="min-width:120px">
+          {% if can_edit %}
+          <input type="number" step="0.01" name="budget_{{ r.code.id }}" class="form-control form-control-sm text-end" value="{{ '%.2f'|format(r.budget) }}">
+          {% else %}{{ '%.2f'|format(r.budget) }}{% endif %}
+        </td>
+        <td class="text-end">{{ '%.2f'|format(r.actual) }}</td>
+        <td class="text-end {% if r.variance < 0 %}text-danger{% else %}text-success{% endif %}">{{ '%.2f'|format(r.variance) }}</td>
+        <td>
+          {% if can_edit %}
+          <input type="text" name="narr_{{ r.code.id }}" class="form-control form-control-sm" value="{{ r.narration or '' }}">
+          {% else %}{{ r.narration or '—' }}{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-muted">No expense codes. Add one above.</td></tr>
+      {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot>
+        <tr class="fw-semibold table-light">
+          <td colspan="3">Totals</td>
+          <td class="text-end">{{ '%.2f'|format(total_budget or 0) }}</td>
+          <td class="text-end">{{ '%.2f'|format(total_actual or 0) }}</td>
+          <td class="text-end">{{ '%.2f'|format((total_budget or 0) - (total_actual or 0)) }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div></div>
+  {% if can_edit %}<button class="btn btn-success mt-3">Save budget template</button>
+  {% else %}<p class="text-muted small mt-2">You do not have edit rights on this budget. Contact Finance or General Admin.</p>{% endif %}
+</form>
+{% endblock %}

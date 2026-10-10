@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block title %}Bank reconciliation{% endblock %}
+{% block extra_css %}
+<style>
+  .bank-hero {
+    background: linear-gradient(135deg, #1e3a5f 0%, #0d6e6e 100%);
+    border-radius: 16px; color: #fff; padding: 1.25rem 1.4rem; margin-bottom: 1.25rem;
+    box-shadow: 0 10px 28px rgba(30,58,95,0.25);
+  }
+  .diff-box {
+    border-radius: 14px; padding: 1rem 1.25rem; font-weight: 700; font-size: 1.15rem;
+    text-align: center; transition: background 0.3s;
+  }
+  .diff-ok { background: #d1fae5; color: #065f46; border: 2px solid #10b981; }
+  .diff-out { background: #fef3c7; color: #92400e; border: 2px solid #f59e0b; }
+  .txn-row { cursor: pointer; }
+  .txn-row:hover { background: #f0fdfa; }
+  .txn-row.ticked { background: #ecfdf5; }
+  .trace-panel {
+    display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 0.85rem; margin-top: 0.5rem; font-size: 0.9rem;
+  }
+  .trace-panel.open { display: block; }
+  .bal-card { border-radius: 12px; padding: 0.85rem 1rem; background: #fff;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
+  .bal-card .lbl { font-size: 0.72rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
+  .bal-card .val { font-size: 1.35rem; font-weight: 800; color: #0f172a; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-fluid py-2">
+  <div class="bank-hero d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <h3 class="mb-0 fw-bold">Bank reconciliation</h3>
+      <p class="mb-0 small opacity-90">{{ company.name }} · {{ company.address }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-light btn-sm" href="{{ url_for('ops.bank_pdf') }}"><i class="bi bi-file-earmark-pdf text-danger"></i> PDF report</a>
+      <a class="btn btn-light btn-sm" href="{{ url_for('ops.bank_excel') }}"><i class="bi bi-file-earmark-excel text-success"></i> Excel</a>
+    </div>
+  </div>
+
+  <form method="post" id="bankForm">
+    <!-- Period + account -->
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Cash account</label>
+        <select name="account_code" id="account_code" class="form-select" onchange="this.form.submit()">
+          <option value="">— Select cash account —</option>
+          {% for a in accounts %}
+          <option value="{{ a.code }}" {% if ws.account_code == a.code %}selected{% endif %}>
+            {{ a.code }} — {{ a.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Start date</label>
+        <input type="date" name="start_date" id="start_date" value="{{ ws.start_date or '' }}" class="form-control" onchange="this.form.submit()">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">End / closing date</label>
+        <input type="date" name="end_date" id="end_date" value="{{ ws.end_date or '' }}" class="form-control" onchange="this.form.submit()">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Closing bank balance</label>
+        <input type="number" step="0.01" name="bank_balance" id="bank_balance" value="{{ ws.bank_balance or 0 }}"
+               class="form-control" oninput="recalcDiff()">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Cash book balance</label>
+        <input class="form-control fw-bold" id="cashbook_display" value="{{ '{:,.2f}'.format(book) }}" readonly>
+      </div>
+    </div>
+
+    <!-- Live balances -->
+    <div class="row g-2 mb-3">
+      <div class="col-md-3">
+        <div class="bal-card">
+          <div class="lbl">Closing bank balance</div>
+          <div class="val" id="disp_bank">{{ '{:,.2f}'.format(ws.bank_balance or 0) }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="bal-card">
+          <div class="lbl">Cash book balance</div>
+          <div class="val text-primary">{{ '{:,.2f}'.format(book) }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="bal-card">
+          <div class="lbl">Uncleared (unticked) net</div>
+          <div class="val" id="disp_uncleared">{{ '{:,.2f}'.format(uncleared_net|default(0)) }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="diff-box {% if difference|default(1) == 0 %}diff-ok{% else %}diff-out{% endif %}" id="diffBox">
+          <div class="small fw-normal opacity-75 mb-1">Difference (bank − adjusted book)</div>
+          <span id="diffVal">{{ '{:,.2f}'.format(difference|default(0)) }}</span>
+          <div class="small fw-normal mt-1" id="diffStatus">
+            {% if difference|default(1) == 0 %}✓ Balanced{% else %}Not yet balanced{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transaction frame -->
+    <div class="card border-0 shadow-sm mb-3" style="border-radius:14px">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold"><i class="bi bi-list-check me-1"></i> Cash book transactions
+          {% if chosen %}— {{ chosen.code }} {{ chosen.name }}{% endif %}
+        </span>
+        <span class="small text-muted">Tick items that appear on the bank statement. Ticks stay permanent when saved.</span>
+      </div>
+      <div class="table-responsive" style="max-height:420px;overflow-y:auto">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="sticky-top bg-light">
+            <tr>
+              <th style="width:48px">Tick</th>
+              <th>Date</th>
+              <th>Voucher</th>
+              <th>Description</th>
+              <th class="text-end">Debit</th>
+              <th class="text-end">Credit</th>
+              <th class="text-end">Running bal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for row in view %}
+            <tr class="txn-row {% if row.tick and row.tick.ticked %}ticked{% endif %}" data-line-id="{{ row.line.id }}"
+                data-debit="{{ row.debit }}" data-credit="{{ row.credit }}"
+                data-ticked="{{ 1 if row.tick and row.tick.ticked else 0 }}">
+              <td>
+                <input type="checkbox" class="form-check-input tick-cb" name="ticked" value="{{ row.line.id }}"
+                       {% if row.tick and row.tick.ticked %}checked{% endif %}
+                       onchange="onTick(this)">
+              </td>
+              <td>{{ row.line.entry_date }}</td>
+              <td>
+                <a href="{{ url_for('fin.ledger') }}?q={{ row.line.entry_no or row.line.id }}" target="_blank" class="text-decoration-none"
+                   title="Trace voucher">{{ row.line.entry_no or row.line.id }}</a>
+              </td>
+              <td>{{ row.line.description or '—' }}</td>
+              <td class="text-end">{{ '{:,.2f}'.format(row.debit) if row.debit else '' }}</td>
+              <td class="text-end">{{ '{:,.2f}'.format(row.credit) if row.credit else '' }}</td>
+              <td class="text-end">{{ '{:,.2f}'.format(row.running) }}</td>
+              <td>
+                <button type="button" class="btn btn-link btn-sm p-0" onclick="toggleTrace({{ row.line.id }})" title="Trace">
+                  <i class="bi bi-search"></i>
+                </button>
+              </td>
+            </tr>
+            <tr id="trace-{{ row.line.id }}" class="trace-panel-row" style="display:none">
+              <td colspan="8">
+                <div class="trace-panel open">
+                  <strong>Trace:</strong> Voucher {{ row.line.entry_no or row.line.id }} ·
+                  Date {{ row.line.entry_date }} · {{ row.line.description or 'No description' }} ·
+                  Debit {{ '{:,.2f}'.format(row.debit) }} / Credit {{ '{:,.2f}'.format(row.credit) }}
+                  {% if row.line.journal_id is defined %}
+                  · Journal #{{ row.line.journal_id }}
+                  {% endif %}
+                  <br><span class="text-muted small">Open the account ledger to correct an error (with approval). Adjusted amounts reappear here after posting.</span>
+                </div>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="8" class="text-muted text-center py-4">Select a cash account and period to load transactions.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Classic ADD / LESS + bank charges voucher -->
+    <div class="row g-3 mb-3">
+      <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100" style="border-radius:12px">
+          <div class="card-header bg-success-subtle fw-semibold">ADD to bank balance</div>
+          <div class="card-body">
+            <label class="form-label small">Cheques issued not yet presented</label>
+            <input name="unpresented" value="{{ ws.unpresented or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+            <label class="form-label small">Direct deposits not in cash book</label>
+            <input name="direct_deposits" value="{{ ws.direct_deposits or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+            <label class="form-label small">Interest credited by bank</label>
+            <input name="interest_credited" value="{{ ws.interest_credited or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+            <label class="form-label small">Cash book errors (add)</label>
+            <input name="cashbook_errors_add" value="{{ ws.cashbook_errors_add or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+            <label class="form-label small">Other additions</label>
+            <input name="other_additions" value="{{ ws.other_additions or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100" style="border-radius:12px">
+          <div class="card-header bg-danger-subtle fw-semibold">LESS from bank balance</div>
+          <div class="card-body">
+            <label class="form-label small">Deposits not yet credited</label>
+            <input name="uncleared_deposits" value="{{ ws.uncleared_deposits or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+            <label class="form-label small">Bank charges &amp; fees</label>
+            <div class="input-group input-group-sm mb-2">
+              <input name="bank_charges" id="bank_charges" value="{{ ws.bank_charges or 0 }}" class="form-control" type="number" step="0.01">
+              <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#chargesModal">
+                <i class="bi bi-receipt"></i> Voucher
+              </button>
+            </div>
+            <label class="form-label small">Standing orders not recorded</label>
+            <input name="standing_orders" value="{{ ws.standing_orders or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+            <label class="form-label small">Dishonoured cheques</label>
+            <input name="dishonoured" value="{{ ws.dishonoured or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+            <label class="form-label small">Cash book errors (less)</label>
+            <input name="cashbook_errors_less" value="{{ ws.cashbook_errors_less or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+            <label class="form-label small">Other deductions</label>
+            <input name="other_deductions" value="{{ ws.other_deductions or 0 }}" class="form-control form-control-sm mb-2" type="number" step="0.01">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Approvals -->
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label small">Prepared by</label>
+        <input name="prepared_by" value="{{ ws.prepared_by or '' }}" class="form-control" placeholder="Name / role">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small">Reviewed by</label>
+        <input name="reviewed_by" value="{{ ws.reviewed_by or '' }}" class="form-control" placeholder="Name / role">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button type="submit" class="btn btn-success w-100">
+          <i class="bi bi-save"></i> Save reconciliation
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Outstanding -->
+  <h5 class="mt-3 fw-bold">Outstanding (unticked) items</h5>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr><th>Date</th><th>Voucher</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th></tr></thead>
+      <tbody>
+      {% for row in outstanding %}
+        <tr>
+          <td>{{ row.line.entry_date }}</td>
+          <td>{{ row.line.entry_no or row.line.id }}</td>
+          <td>{{ row.line.description }}</td>
+          <td class="text-end">{{ '{:,.2f}'.format(row.debit) }}</td>
+          <td class="text-end">{{ '{:,.2f}'.format(row.credit) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted">No outstanding transactions — all ticked or none loaded.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Bank charges voucher modal -->
+<div class="modal fade" id="chargesModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Bank charges voucher</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">Enter bank charges/fees for this period. Amount is copied into the reconciliation “Bank charges” field. Post a full journal via Finance books if you need ledger impact.</p>
+        <label class="form-label">Charge description</label>
+        <input type="text" id="chg_desc" class="form-control mb-2" placeholder="e.g. Monthly account fee">
+        <label class="form-label">Amount</label>
+        <input type="number" step="0.01" id="chg_amt" class="form-control mb-2" value="0">
+        <label class="form-label">Date</label>
+        <input type="date" id="chg_date" class="form-control" value="{{ ws.end_date or '' }}">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="applyCharges()">Apply to reconciliation</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BOOK = {{ book|float|default(0) }};
+
+function fmt(n) {
+  return Number(n).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function recalcDiff() {
+  const bank = parseFloat(document.getElementById('bank_balance').value) || 0;
+  document.getElementById('disp_bank').textContent = fmt(bank);
+
+  // Unticked net = sum(debit - credit) for unticked rows
+  let uncleared = 0;
+  document.querySelectorAll('.txn-row').forEach(tr => {
+    const cb = tr.querySelector('.tick-cb');
+    if (cb && !cb.checked) {
+      const d = parseFloat(tr.dataset.debit) || 0;
+      const c = parseFloat(tr.dataset.credit) || 0;
+      uncleared += (d - c);
+    }
+  });
+  document.getElementById('disp_uncleared').textContent = fmt(uncleared);
+
+  // Difference: bank - (book - uncleared)  ≈  when all matching items ticked, difference → 0
+  // Adjusted book = book - uncleared (unticked items not yet on statement)
+  const adjustedBook = BOOK - uncleared;
+  const diff = bank - adjustedBook;
+  const el = document.getElementById('diffVal');
+  const box = document.getElementById('diffBox');
+  const st = document.getElementById('diffStatus');
+  el.textContent = fmt(diff);
+  const balanced = Math.abs(diff) < 0.005;
+  box.classList.toggle('diff-ok', balanced);
+  box.classList.toggle('diff-out', !balanced);
+  st.textContent = balanced ? '✓ Balanced' : 'Not yet balanced';
+}
+
+function onTick(cb) {
+  const tr = cb.closest('tr');
+  if (tr) tr.classList.toggle('ticked', cb.checked);
+  recalcDiff();
+}
+
+function toggleTrace(id) {
+  const row = document.getElementById('trace-' + id);
+  if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
+
+function applyCharges() {
+  const amt = parseFloat(document.getElementById('chg_amt').value) || 0;
+  const cur = parseFloat(document.getElementById('bank_charges').value) || 0;
+  document.getElementById('bank_charges').value = (cur + amt).toFixed(2);
+  const modal = bootstrap.Modal.getInstance(document.getElementById('chargesModal'));
+  if (modal) modal.hide();
+}
+
+document.addEventListener('DOMContentLoaded', recalcDiff);
+</script>
+{% endblock %}

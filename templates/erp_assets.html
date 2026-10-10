@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Fixed Assets{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Fixed Assets</h3>
+  <div class="card"><table class="table mb-0">
+    <thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Cost</th><th>NBV</th><th>Location</th></tr></thead>
+    <tbody>
+    {% for a in assets %}
+      <tr>
+        <td>{{ a.asset_code }}</td>
+        <td>{{ a.name }}</td>
+        <td>{{ a.category }}</td>
+        <td>{{ '{:,.0f}'.format(a.purchase_cost or 0) }}</td>
+        <td>{{ '{:,.0f}'.format(a.nbv or 0) }}</td>
+        <td>{{ a.location }}</td>
+      </tr>
+    {% else %}<tr><td colspan="6" class="text-muted">None</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

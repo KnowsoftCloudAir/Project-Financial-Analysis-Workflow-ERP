@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Ledger{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Account ledger</h3>
+  <p class="text-muted">Pick one account for its own ledger. Leave it blank for the general ledger.</p>
+  <form class="row g-2 mb-3">
+    <div class="col-md-6">
+      <select name="account_id" class="form-select" onchange="this.form.submit()">
+        <option value="">General ledger — all accounts</option>
+        {% for a in accounts %}<option value="{{ a.id }}" {% if account_id == a.id %}selected{% endif %}>{{ a.code }} {{ a.name }} ({{ a.account_type }})</option>{% endfor %}
+      </select>
+    </div>
+  </form>
+  <div class="card"><table class="table mb-0">
+    <thead><tr><th>Date</th><th>Entry</th><th>Account</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr></thead>
+    <tbody>
+    {% for line, bal in lines %}
+      <tr>
+        <td>{{ line.entry_date }}</td>
+        <td>{{ line.entry_no }}</td>
+        <td>{{ line.account.code if line.account else '' }}</td>
+        <td>{{ line.description }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(line.debit or 0) }}</td>
+        <td class="text-end">{{ '{:,.2f}'.format(line.credit or 0) }}</td>
+        <td class="text-end">{% if selected %}{{ '{:,.2f}'.format(bal) }}{% else %}—{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="text-muted">Nothing posted yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}
