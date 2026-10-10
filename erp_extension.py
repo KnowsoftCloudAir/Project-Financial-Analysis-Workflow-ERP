@@ -883,13 +883,7 @@ def invoice_to_finance(iid):
 def coa_list():
     return redirect(url_for('fin.coa'))
     rows = ChartOfAccount.query.order_by(ChartOfAccount.code).all()
-    balances = {}
-    try:
-        from fmss_align import account_balances
-        balances = account_balances()
-    except Exception:
-        balances = {}
-    return render_template('erp_coa.html', accounts=rows, balances=balances)
+    return render_template('erp_coa.html', accounts=rows)
 
 
 @erp_bp.route('/assets')

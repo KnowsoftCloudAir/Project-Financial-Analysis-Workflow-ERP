@@ -30,7 +30,7 @@ def bind(database, note, line, transfer, story):
 
 def _warehouse_id():
     row = db.session.execute(text(
-        "SELECT id FROM facilities WHERE name = 'Central warehouse'"
+        "SELECT id FROM facilities WHERE name IN ('Main Warehouse', 'Central warehouse')"
     )).first()
     if row:
         return row[0]
@@ -39,7 +39,7 @@ def _warehouse_id():
            VALUES ('Central warehouse', 'other', 'Central store', 'Pilot City', 'Store officer', '', 0, 1, :now)"""
     ), {'now': datetime.utcnow()})
     db.session.commit()
-    return db.session.execute(text("SELECT id FROM facilities WHERE name = 'Central warehouse'")).scalar()
+    return db.session.execute(text("SELECT id FROM facilities WHERE name IN ('Main Warehouse', 'Central warehouse')")).scalar()
 
 
 def _can_approve():
@@ -151,14 +151,15 @@ def section_program_core():
 @login_required
 @_staff_required
 def section_program_items():
-    return render_template('ops_section.html', title='Program items', intro='Facilities, products, dispatch and stock requests. Dispatch moves stock from the central warehouse to a facility. It is not an outflow.', links=[
+    return render_template('ops_section.html', title='Program items', intro='Main Warehouse receives GRN stock. Dispatch moves to kiosks/PHCs. Uptake administers commodities. Inventory is view-only with Excel/PDF export.', links=[
         ('Facilities', 'admin_facilities'),
-        ('Products', 'admin_products'),
-        ('Dispatch note', 'ops.dispatch_new'),
-        ('Dispatch register', 'ops.dispatch_list'),
-        ('Stock requests', 'admin_requests'),
+        ('Product catalogue', 'logistics.catalogue'),
+        ('Products (manage)', 'admin_products'),
+        ('Goods received note', 'logistics.grn_new'),
+        ('Dispatch from warehouse', 'logistics.dispatch_move'),
         ('Inventory position', 'ops.inventory_home'),
-        ('Transfer approvals', 'ops.transfer_queue'),
+        ('Uptake Administration', 'logistics.uptake_home'),
+        ('Stock requests', 'admin_requests'),
     ])
 
 
@@ -174,6 +175,8 @@ def dispatch_list():
 @login_required
 @_staff_required
 def dispatch_new():
+    if DispatchNote is None:
+        return redirect(url_for("logistics.dispatch_move"))
     facilities = _rows("SELECT id, name FROM facilities WHERE name != 'Central warehouse' ORDER BY name")
     products = _rows('SELECT id, name, unit FROM products WHERE (is_active IS TRUE OR is_active = 1) ORDER BY name')
     if request.method == 'POST':

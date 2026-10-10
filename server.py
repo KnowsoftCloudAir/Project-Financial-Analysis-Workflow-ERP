@@ -3975,53 +3975,14 @@ def main_dashboard():
             chart_proc=chart_proc,
         )
     except Exception as e:
-        # CRITICAL: never redirect to index here — index sends admins back to
-        # main_dashboard and creates ERR_TOO_MANY_REDIRECTS after login.
+        # Never redirect to index (that caused ERR_TOO_MANY_REDIRECTS).
+        # Templates now use static paths so the real dashboard should render;
+        # if it still fails, send the user to the normal staff workspace.
         try:
             app.logger.exception('main_dashboard: %s', e)
         except Exception:
             pass
-        try:
-            flash(
-                'Dashboard is temporarily limited. Use the links below or the menu.',
-                'warning',
-            )
-        except Exception:
-            pass
-        try:
-            return render_template(
-                'error.html',
-                code=200,
-                title='Workspace',
-                message=(
-                    'The executive dashboard could not fully load. '
-                    'Open Finance, Inventory, or Procurement from the menu or these paths: '
-                    '/ops/inventory · /ops/sections/finance · /ops/sections/procurement · /finance/'
-                ),
-            )
-        except Exception:
-            pass
-        return (
-            '<!DOCTYPE html><html><head><meta charset="utf-8">'
-            '<title>Workspace</title>'
-            '<style>body{font-family:system-ui;max-width:640px;margin:3rem auto;padding:1rem}'
-            'a{display:inline-block;margin:.4rem .6rem .4rem 0;padding:.55rem 1rem;'
-            'background:#0d6e6e;color:#fff;border-radius:8px;text-decoration:none}</style>'
-            '</head><body>'
-            '<h1>Project Financial Management Workflow</h1>'
-            '<p>Dashboard is temporarily limited. Continue here:</p>'
-            '<p>'
-            '<a href="/ops/inventory">Inventory</a>'
-            '<a href="/ops/sections/finance">Finance</a>'
-            '<a href="/ops/sections/procurement">Procurement</a>'
-            '<a href="/ops/sections/program-items">Program</a>'
-            '<a href="/finance/">Finance books</a>'
-            '<a href="/erp/">ERP</a>'
-            '<a href="/logout">Sign out</a>'
-            '</p></body></html>',
-            200,
-            {'Content-Type': 'text/html; charset=utf-8'},
-        )
+        return redirect('/staff')
 
 
 @app.route('/dashboard/export/excel')
@@ -5389,14 +5350,14 @@ def db_health():
 @app.route('/upgrade-status')
 def upgrade_status():
     return (
-        'UPGRADE-2026-10-10-login-redirect-fix\n'
+        'UPGRADE-2026-10-10-dashboard-render-fix\n'
         'finance-setup=/ops/sections/finance-setup\n'
         'financial-reports=/ops/sections/financial-reports\n'
         'rfq=/ops/rfq\n'
         'inventory-sheet=/ops/inventory\n'
         'cash-recon=/ops/cash-recon\n'
         'dashboard=/dashboard\n'
-        'fix=no-redirect-loop-after-login\n',
+        'fix=real-dashboard-no-temp-shell\n',
         200,
         {'Content-Type': 'text/plain; charset=utf-8'},
     )
