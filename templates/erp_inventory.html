@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Inventory dashboard{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <div>
+      <h2 class="mb-0">Inventory dashboard</h2>
+      <p class="text-muted small mb-0">
+        Central stock is an <strong>asset</strong>. Dispatch to kiosks tracks movement.
+        Use / consumption posts <strong>cost of use</strong> (expense). Methods: FIFO, LIFO, FEFO (expiry-first).
+      </p>
+    </div>
+    <div class="btn-group">
+      <a class="btn btn-sm btn-outline-success" href="{{ url_for('erp.report_inventory_xlsx') }}">Excel</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('erp.erp_home') }}">ERP home</a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header"><strong>Central store — receive / balance</strong></div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>Commodity</th><th class="text-end">On hand</th><th class="text-end">Asset value</th></tr></thead>
+            <tbody>
+            {% for p in by_product %}
+              <tr>
+                <td>{{ p.name }}</td>
+                <td class="text-end">{{ '%.2f'|format(p.on_hand) }}</td>
+                <td class="text-end">{{ '{:,.2f}'.format(p.value) }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="text-muted">No batches — accept a GRN or seed demo</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header"><strong>Kiosks / outlets — received, issued, balance</strong></div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>Outlet</th><th>Commodity</th><th class="text-end">Recv</th><th class="text-end">Issued</th><th class="text-end">Bal</th></tr></thead>
+            <tbody>
+            {% for r in facility_balances %}
+              <tr>
+                <td>{{ r.facility }}</td>
+                <td>{{ r.product }}</td>
+                <td class="text-end">{{ '%.1f'|format(r.recv) }}</td>
+                <td class="text-end">{{ '%.1f'|format(r.issue) }}</td>
+                <td class="text-end fw-semibold">{{ '%.1f'|format(r.balance) }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5" class="text-muted">No dispatch/use movements yet</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header"><strong>Dispatch to kiosk</strong> <span class="text-muted small">(asset → outlet)</span></div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('erp.inventory_dispatch') }}" class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small">Facility</label>
+              <select name="facility_id" class="form-select form-select-sm" required>
+                {% for f in facilities %}<option value="{{ f.id }}">{{ f.name }} ({{ f.facility_type }})</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Product</label>
+              <select name="product_id" class="form-select form-select-sm">
+                <option value="">Any / first available batch</option>
+                {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Quantity</label>
+              <input type="number" step="0.01" name="quantity" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Costing</label>
+              <select name="costing_method" class="form-select form-select-sm">
+                <option value="FEFO">FEFO (expiry first)</option>
+                <option value="FIFO">FIFO</option>
+                <option value="LIFO">LIFO</option>
+                <option value="WAC">Weighted average</option>
+              </select>
+            </div>
+            <div class="col-md-4 align-self-end">
+              <button class="btn btn-primary btn-sm w-100">Dispatch</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header"><strong>Record use / consumption</strong> <span class="text-muted small">(final expense)</span></div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('erp.inventory_issue_use') }}" class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small">Facility</label>
+              <select name="facility_id" class="form-select form-select-sm" required>
+                {% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Product</label>
+              <select name="product_id" class="form-select form-select-sm" required>
+                {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Quantity used</label>
+              <input type="number" step="0.01" name="quantity" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Costing</label>
+              <select name="costing_method" class="form-select form-select-sm">
+                <option value="FEFO">FEFO</option>
+                <option value="FIFO">FIFO</option>
+                <option value="LIFO">LIFO</option>
+              </select>
+            </div>
+            <div class="col-md-4 align-self-end">
+              <button class="btn btn-warning btn-sm w-100">Post use cost</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header"><strong>Batches (central)</strong></div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Product</th><th>Batch</th><th>Expiry</th><th class="text-end">Remaining</th><th class="text-end">Unit cost</th></tr></thead>
+        <tbody>
+        {% for b in batches %}
+          <tr>
+            <td>{{ b.product_name }}</td>
+            <td>{{ b.batch_no }}</td>
+            <td>{{ b.expiry_date or '—' }}</td>
+            <td class="text-end">{{ b.qty_remaining }}</td>
+            <td class="text-end">{{ b.unit_cost }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="text-muted">No batches</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><strong>Recent movements</strong></div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>When</th><th>Type</th><th>Product</th><th>Facility</th><th class="text-end">Qty</th><th class="text-end">Cost</th><th>Method</th></tr></thead>
+        <tbody>
+        {% for m in movements %}
+          <tr>
+            <td class="small">{{ m.created_at.strftime('%Y-%m-%d %H:%M') if m.created_at else '—' }}</td>
+            <td><span class="badge bg-secondary">{{ m.movement_type }}</span></td>
+            <td>{{ m.product_name }}</td>
+            <td>{{ m.facility_name or 'Central' }}</td>
+            <td class="text-end">{{ m.quantity }}</td>
+            <td class="text-end">{{ m.total_cost }}</td>
+            <td>{{ m.costing_method }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="text-muted">No movements</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
