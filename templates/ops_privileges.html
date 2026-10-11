@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Staff privileges{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Staff privileges</h3>
+  <p class="text-muted">Assign inventory, procurement, finance, budget, bank, dispatch and user-admin rights. General admin always has every privilege. Unticked cells are denied even if the role default would allow them, once the matrix is saved.</p>
+  <form method="post">
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered">
+        <thead><tr><th>Staff</th><th>Role</th>{% for code, label in privileges %}<th title="{{ code }}">{{ label }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for u in users %}
+          <tr>
+            <td>{{ u.full_name }}<div class="small text-muted">{{ u.email }}</div></td>
+            <td>{{ u.role }}</td>
+            {% for code, label in privileges %}
+              {% set saved = current.get((u.id, code)) %}
+              {% set checked = saved if saved is not none else (code in role_privs.get(u.role, [])) %}
+              <td class="text-center"><input type="checkbox" name="p-{{ u.id }}-{{ code }}" value="1" {% if checked %}checked{% endif %}></td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button class="btn btn-primary">Save privileges</button>
+  </form>
+</div>
+{% endblock %}
