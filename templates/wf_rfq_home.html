@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Procurement{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page">
+  <div class="p-3 mb-3 text-white" style="background:#1a6b9a;border-radius:12px">
+    <h3 class="mb-1">Procurement</h3>
+    <p class="mb-0">Same desk as FMSS: committee first, then purchase orders, then the RFQ. Technical below 50% does not move to financial scoring. Award goes to the programme manager, then to the winning vendor only.</p>
+  </div>
+  <div class="card mb-3"><div class="card-body">
+    <h4>Procurement committee</h4>
+    <p class="text-muted">Open an RFQ and commit staff as Chair, Member or Secretary. Each person receives a unique scoring link.</p>
+    {% if mine %}<div class="alert alert-warning">{{ mine|length }} RFQ(s) are waiting for your review.</div>{% endif %}
+  </div></div>
+  <div class="card mb-3"><div class="card-body">
+    <h4>Purchase orders and active contracts</h4>
+    <div class="table-responsive"><table class="table mb-0">
+      <thead><tr><th>RFQ</th><th>Vendor</th><th>Amount</th><th>Status</th><th>Progress</th></tr></thead>
+      <tbody>{% for a in active %}<tr>
+        <td><a href="{{ url_for('wf.rfq_detail', rid=a.rfq_id) }}">{{ a.rfq.rfq_no }}</a></td>
+        <td>{{ a.submission.vendor_name }}</td>
+        <td>{{ '{:,.2f}'.format(a.submission.total_amount) }}</td>
+        <td>{{ a.status }}</td>
+        <td>{{ a.progress }}%</td>
+      </tr>{% else %}<tr><td colspan="5">No purchase order yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div></div>
+  <div class="card mb-3"><div class="card-body">
+    <h4>New RFQ</h4>
+    <a class="btn btn-primary" href="{{ url_for('wf.rfq_new') }}">Raise RFQ</a>
+  </div></div>
+  <div class="card"><div class="card-body">
+    <h4>RFQs</h4>
+    <div class="table-responsive"><table class="table mb-0">
+      <thead><tr><th>RFQ</th><th>Title</th><th>Lot</th><th>Debit</th><th>Credit</th><th>Status</th><th></th></tr></thead>
+      <tbody>{% for r in rows %}<tr>
+        <td>{{ r.rfq_no }}</td><td>{{ r.title }}</td><td>{{ r.lot or '' }}</td>
+        <td>{{ r.debit_account_id or '—' }}</td><td>{{ r.credit_account_id or '—' }}</td>
+        <td>{{ r.status }}</td>
+        <td><a href="{{ url_for('wf.rfq_detail', rid=r.id) }}">Quotes</a></td>
+      </tr>{% else %}<tr><td colspan="7">No RFQ yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div></div>
+</div>
+{% endblock %}

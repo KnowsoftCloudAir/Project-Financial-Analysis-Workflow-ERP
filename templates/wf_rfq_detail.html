@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{{ rfq.rfq_no }}{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page">
+  <h3>{{ rfq.rfq_no }} — {{ rfq.title }}</h3>
+  <p>{{ rfq.description }}</p>
+  <p class="text-muted">Status {{ rfq.status.replace('_',' ') }} · closes {{ rfq.closing_at }} · {{ rfq.project_code }} / {{ rfq.expense_code }} / {{ rfq.budget_code }}</p>
+  <p><a href="{{ url_for('wf.rfq_file', rel=rfq.tor_path) }}">Download terms of reference</a>
+     · <a href="{{ url_for('wf.committee_pdf', rid=rfq.id) }}">Committee report PDF</a></p>
+  {% if rfq.status == 'pending_review' and (rfq.reviewer_id == current_user.id) %}
+  <form method="post" action="{{ url_for('wf.rfq_review', rid=rfq.id) }}" class="card card-body mb-3">
+    <label class="form-label">Review note</label>
+    <textarea class="form-control mb-2" name="note"></textarea>
+    <button class="btn btn-success me-2" name="action" value="approve">Approve</button>
+    <button class="btn btn-outline-danger" name="action" value="return">Return</button>
+  </form>
+  {% endif %}
+  {% if rfq.status in ['approved','open','evaluation','announced','active','pending_award_approval'] %}
+  <form method="post" action="{{ url_for('wf.vendor_link', rid=rfq.id) }}" class="mb-3">
+    <button class="btn btn-primary">Create vendor link</button>
+  </form>
+  {% if vendor_link %}<div class="alert alert-info wrap-page">Share this one link: {{ vendor_link }}</div>{% endif %}
+  {% endif %}
+  <h5>Submissions</h5>
+  <div class="card mb-3"><div class="table-responsive"><table class="table mb-0">
+    <thead><tr><th>Time</th><th>Date</th><th>Vendor</th><th>RFQ number</th><th>RFQ description</th><th>Amount quoted</th><th></th></tr></thead>
+    <tbody>
+    {% for s in subs %}
+      <tr>
+        <td>{{ s.submitted_at.strftime('%H:%M') }}</td>
+        <td>{{ s.submitted_at.strftime('%Y-%m-%d') }}</td>
+        <td>{{ s.vendor_name }}</td>
+        <td>{{ rfq.rfq_no }}</td>
+        <td>{{ rfq.title }}</td>
+        <td>{{ '{:,.2f}'.format(s.total_amount) }}</td>
+        <td><a href="{{ url_for('wf.submission_open', sid=s.id) }}">Open</a></td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="text-muted">No submission yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div></div>
+  <h5>Committee</h5>
+  <form method="post" action="{{ url_for('wf.commit_committee', rid=rfq.id) }}" class="card card-body mb-3">
+    <div class="row">
+      {% for s in staff %}
+      <div class="col-md-6"><label class="form-check"><input class="form-check-input" type="checkbox" name="member_id" value="{{ s.id }}"> {{ s.full_name }}</label>
+        <select class="form-select form-select-sm" name="role_{{ s.id }}"><option>Member</option><option>Chair</option><option>Secretary</option></select></div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-outline-primary mt-2">Commit committee members</button>
+  </form>
+  {% for m in members %}
+    <div class="small wrap-page">{{ m.member_name }}: {{ url_for('wf.committee_form', token=m.token, _external=True) }}</div>
+  {% endfor %}
+  <h5 class="mt-3">Aggregate scores</h5>
+  <div class="card mb-3"><div class="table-responsive"><table class="table mb-0">
+    <thead><tr><th>Vendor</th><th>Technical</th><th>Financial</th><th>Can award</th><th></th></tr></thead>
+    <tbody>
+    {% for row in agg %}
+      <tr>
+        <td>{{ row.sub.vendor_name }}</td>
+        <td>{{ '%.2f'|format(row.tech) }}</td>
+        <td>{{ '' if row.fin is none else '%.2f'|format(row.fin) }}</td>
+        <td>{{ 'Yes' if row.eligible else 'No' }}</td>
+        <td>{% if row.eligible %}<form method="post" action="{{ url_for('wf.award_vendor', rid=rfq.id) }}"><input type="hidden" name="submission_id" value="{{ row.sub.id }}"><button class="btn btn-sm btn-success">Award highest financial</button></form>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div></div>
+  {% if award %}
+  <div class="card card-body mb-3">
+    <div>Award status: {{ award.status }} · progress {{ award.progress }}% · {{ award.submission.vendor_name }} · {{ '{:,.2f}'.format(award.submission.total_amount) }}</div>
+    {% if award.status == 'pending_pm' %}
+    <form method="post" action="{{ url_for('wf.pm_award', rid=rfq.id) }}" class="mt-2">
+      <textarea class="form-control mb-2" name="note" placeholder="Programme manager note"></textarea>
+      <button class="btn btn-success" name="action" value="approve">Approve award</button>
+      <button class="btn btn-outline-danger" name="action" value="reject">Return</button>
+    </form>
+    {% endif %}
+    {% if award.award_token and award.status in ['announced','accepted','active'] %}
+      <div class="wrap-page mt-2">Winner link: {{ url_for('wf.vendor_award', token=award.award_token, _external=True) }}</div>
+    {% endif %}
+    {% for inv in invoices %}
+      <div class="border rounded p-2 mt-2">
+        Invoice {{ inv.status }} · {{ '{:,.2f}'.format(inv.amount) }}
+        <a href="{{ url_for('wf.rfq_file', rel=inv.invoice_path) }}">Invoice PDF</a>
+        <a href="{{ url_for('wf.rfq_file', rel=inv.delivery_path) }}">Delivery note</a>
+        {% if inv.status == 'submitted' %}
+        <form method="post" action="{{ url_for('wf.certify_invoice', iid=inv.id) }}" class="mt-2">
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="qty_ok" required> Quantities OK</label>
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="pack_ok" required> Package integrity OK</label>
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="shelf_ok" required> Shelf-life OK</label>
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="reg_ok" required> Regulatory documents OK</label>
+          <label class="form-check"><input class="form-check-input" type="checkbox" name="store_ok" required> Storage guidance received</label>
+          <button class="btn btn-sm btn-primary">Certify goods receipt and send to finance</button>
+        </form>
+        {% endif %}
+        {% if inv.status == 'finance_review' %}
+        <form method="post" action="{{ url_for('wf.finance_invoice', iid=inv.id) }}" class="row g-2 mt-1">
+          <div class="col-md-3"><select class="form-select" name="debit_account_id" required><option value="">Debit account</option>{% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} {{ a.name }}</option>{% endfor %}</select></div>
+          <div class="col-md-3"><select class="form-select" name="credit_account_id" required><option value="">Credit cash</option>{% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} {{ a.name }}</option>{% endfor %}</select></div>
+          <div class="col-md-3"><select class="form-select" name="payable_account_id"><option value="">Payable (part payment)</option>{% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} {{ a.name }}</option>{% endfor %}</select></div>
+          <div class="col-md-3"><select class="form-select" name="pay_mode"><option value="full">Full payment</option><option value="part">Part payment</option></select></div>
+          <div class="col-md-3"><input class="form-control" name="pay_amount" placeholder="Cash amount if part"></div>
+          <div class="col-md-6"><input class="form-control" name="note" placeholder="Finance note"></div>
+          <div class="col-md-3"><button class="btn btn-primary">Submit for programme approval</button></div>
+        </form>
+        {% endif %}
+        {% if inv.status == 'pm_approval' %}
+        <form method="post" action="{{ url_for('wf.pm_invoice', iid=inv.id) }}"><button class="btn btn-success">Approve and post to ledgers</button></form>
+        {% endif %}
+        {% if inv.journal_no %}<div>Journal {{ inv.journal_no }}</div>{% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

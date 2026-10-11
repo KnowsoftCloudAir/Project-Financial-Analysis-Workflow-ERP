@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Voucher {{ line.entry_no }}{% endblock %}
+{% block content %}
+<div class="container py-3 wrap-page">
+  <h3>Voucher {{ line.entry_no }}</h3>
+  <p>{{ line.entry_date }} · {{ line.code }} {{ line.name }}</p>
+  <p>{{ line.description }} · Debit {{ '{:,.2f}'.format(line.debit or 0) }} · Credit {{ '{:,.2f}'.format(line.credit or 0) }}</p>
+  <table class="table"><thead><tr><th>Account</th><th>Description</th><th>Debit</th><th>Credit</th></tr></thead>
+  <tbody>{% for s in siblings %}<tr><td>{{ s.code }} {{ s.name }}</td><td>{{ s.description }}</td><td>{{ '{:,.2f}'.format(s.debit or 0) }}</td><td>{{ '{:,.2f}'.format(s.credit or 0) }}</td></tr>{% endfor %}</tbody></table>
+  <form method="post" action="{{ url_for('wf.correct_voucher') }}" class="card card-body">
+    <input type="hidden" name="line_id" value="{{ line.id }}">
+    <input type="hidden" name="entry_no" value="{{ line.entry_no }}">
+    <h6>Propose a correction (needs another staff member)</h6>
+    <input class="form-control mb-2" name="description" value="{{ line.description }}">
+    <div class="row g-2"><div class="col"><input class="form-control" name="debit" value="{{ line.debit or 0 }}"></div><div class="col"><input class="form-control" name="credit" value="{{ line.credit or 0 }}"></div></div>
+    <button class="btn btn-warning mt-2">Save correction for approval</button>
+  </form>
+  {% for p in pending %}
+  <form method="post" action="{{ url_for('wf.approve_correction', cid=p.id) }}" class="mt-2">
+    <div>Pending: {{ p.proposed_description }} Dr {{ p.proposed_debit }} Cr {{ p.proposed_credit }}</div>
+    <button class="btn btn-success btn-sm">Approve correction</button>
+  </form>
+  {% endfor %}
+  <button class="btn btn-outline-secondary mt-3" onclick="window.close()">Close</button>
+</div>
+{% endblock %}
