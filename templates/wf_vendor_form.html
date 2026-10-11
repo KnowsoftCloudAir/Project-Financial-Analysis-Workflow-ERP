@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Vendor quotation – {{ rfq.rfq_no }}{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:800px">
+  <div class="card shadow">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0">Quotation for {{ rfq.rfq_no }} — {{ rfq.title }}</h5>
+    </div>
+    <div class="card-body">
+      <p class="small text-muted">Special number will be assigned on submit. Fill unit prices and attach invoice PDF.</p>
+      {% if rfq.conditions %}<p><strong>Conditions:</strong> {{ rfq.conditions }}</p>{% endif %}
+      <form method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label class="form-label">Your organisation / vendor name</label>
+          <input class="form-control" name="vendor_name" value="{{ link.vendor_name or '' }}" required>
+        </div>
+        <table class="table table-sm">
+          <thead><tr><th>Item</th><th>Unit</th><th class="text-end">Qty</th><th class="text-end">Unit price</th></tr></thead>
+          <tbody>
+            {% for ln in lines %}
+            <tr>
+              <td>{{ ln.product_name }}</td>
+              <td>{{ ln.unit }}</td>
+              <td class="text-end">{{ ln.quantity }}</td>
+              <td class="text-end" style="width:140px">
+                <input type="number" step="any" class="form-control form-control-sm text-end" name="price_{{ ln.id }}" required>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div class="mb-3">
+          <label class="form-label">Notes</label>
+          <textarea class="form-control" name="notes" rows="2"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Upload invoice / quotation PDF</label>
+          <input type="file" class="form-control" name="invoice_file" accept=".pdf" required>
+        </div>
+        <button type="submit" class="btn btn-success">Submit quotation</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

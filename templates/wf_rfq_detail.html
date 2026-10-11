@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}RFQ {{ rfq.rfq_no }}{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <a href="{{ url_for('wf.rfq_home') }}" class="btn btn-sm btn-outline-secondary mb-2">← RFQs</a>
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <h3 class="mb-1">{{ rfq.rfq_no }} — {{ rfq.title }}</h3>
+      <span class="badge bg-primary">{{ rfq.status }}</span>
+      {% if rfq.approved_at %}<span class="small text-muted ms-2">Approved {{ rfq.approved_at }}</span>{% endif %}
+    </div>
+    {% if is_pm and rfq.status == 'pending_approval' %}
+    <form method="post" action="{{ url_for('wf.rfq_approve', rid=rfq.id) }}">
+      <button class="btn btn-success">Approve RFQ</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if rfq.description %}<p>{{ rfq.description }}</p>{% endif %}
+  {% if rfq.conditions %}<p class="small"><strong>Conditions:</strong> {{ rfq.conditions }}</p>{% endif %}
+  {% if rfq.tor_file %}<p class="small">TOR: {{ rfq.tor_file }}</p>{% endif %}
+
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">Line items</div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Commodity</th><th>Unit</th><th class="text-end">Qty</th><th class="text-end">Est. price</th><th>Notes</th></tr></thead>
+        <tbody>
+          {% for ln in lines %}
+          <tr>
+            <td>{{ ln.product_name }}</td>
+            <td>{{ ln.unit }}</td>
+            <td class="text-end">{{ ln.quantity }}</td>
+            <td class="text-end">{% if ln.unit_price is not none %}{{ '%.2f'|format(ln.unit_price) }}{% else %}—{% endif %}</td>
+            <td class="small">{{ ln.line_notes or '' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted">No lines</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if rfq.status in ('approved','quoting','awarded','accepted','invoice_received') %}
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">Vendor links</div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('wf.rfq_vendor_link', rid=rfq.id) }}" class="row g-2 align-items-end mb-3">
+        <div class="col-md-4">
+          <label class="form-label small">Vendor</label>
+          <select class="form-select form-select-sm" name="vendor_id">
+            <option value="">— select vendor —</option>
+            {% for v in vendors %}
+            <option value="{{ v.id }}">{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small">Or name</label>
+          <input class="form-control form-control-sm" name="vendor_name" placeholder="Vendor name">
+        </div>
+        <div class="col-md-2 form-check mt-4">
+          <input class="form-check-input" type="checkbox" name="is_general" value="1" id="gen">
+          <label class="form-check-label small" for="gen">General link</label>
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-primary btn-sm">Create link</button>
+        </div>
+      </form>
+      <ul class="list-group list-group-flush">
+        {% for L in links %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>{{ L.vendor_name }} <code class="ms-2">{{ L.special_number }}</code>
+            {% if L.is_general %}<span class="badge bg-info">general</span>{% endif %}
+          </span>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wf.vendor_form', token=L.token, _external=True) }}" target="_blank">Open link</a>
+        </li>
+        {% else %}
+        <li class="list-group-item text-muted">No links yet</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">Submitted quotes</div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Vendor</th><th>Special #</th><th class="text-end">Total</th>
+            <th class="text-end">Tech</th><th class="text-end">Finance</th><th class="text-end">Aggregate</th>
+            <th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in quotes %}
+          <tr>
+            <td>{{ q.vendor_name }}</td>
+            <td><code>{{ q.special_number }}</code></td>
+            <td class="text-end">{{ '%.2f'|format(q.total_amount or 0) }}</td>
+            <td class="text-end">{{ '%.1f'|format(q.technical_score or 0) }}</td>
+            <td class="text-end">{{ '%.1f'|format(q.finance_score or 0) }}</td>
+            <td class="text-end fw-bold">{{ '%.1f'|format(q.aggregate_score or 0) }}</td>
+            <td>{{ q.award_status }} / {{ q.vendor_response }}</td>
+            <td>
+              {% if is_pm and rfq.status in ('quoting','approved') and q.award_status != 'awarded' %}
+              <form method="post" action="{{ url_for('wf.rfq_award', rid=rfq.id, qid=q.id) }}" class="d-inline"
+                    onsubmit="return confirm('Award to {{ q.vendor_name }}?')">
+                <button class="btn btn-sm btn-success">Award</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-muted">No quotes yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if quotes %}
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">Committee scoring links</div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('wf.rfq_committee_link', rid=rfq.id) }}" class="row g-2 align-items-end mb-3">
+        <div class="col-md-4"><input class="form-control form-control-sm" name="member_name" placeholder="Member name" required></div>
+        <div class="col-md-4"><input class="form-control form-control-sm" name="member_email" placeholder="Email (optional)"></div>
+        <div class="col-md-4"><button class="btn btn-outline-primary btn-sm">Create committee link</button></div>
+      </form>
+      <ul class="list-group list-group-flush">
+        {% for c in committee %}
+        <li class="list-group-item d-flex justify-content-between">
+          <span>{{ c.member_name }}</span>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('wf.committee_score', token=c.token, _external=True) }}" target="_blank">Open</a>
+        </li>
+        {% else %}
+        <li class="list-group-item text-muted">No committee links</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Cash reconciliation{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3 class="mb-3">Cash / Bank Reconciliation</h3>
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-md-4">
+      <label class="form-label">Cash / Bank account</label>
+      <select class="form-select" name="account" onchange="this.form.submit()">
+        {% for a in accounts %}
+        <option value="{{ a.code }}" {% if a.code == selected %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Statement date</label>
+      <input type="date" class="form-control" name="date" value="{{ stmt_date }}">
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-outline-primary">Load</button>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card p-3">
+        <div class="small text-muted text-uppercase">Book balance</div>
+        <div class="fs-4 fw-bold">{{ '%.2f'|format(book_balance) }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3">
+        <div class="small text-muted text-uppercase">Statement balance</div>
+        <div class="fs-4 fw-bold">{% if stmt_bal %}{{ stmt_bal }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 {% if difference is not none and difference|abs < 0.01 %}border-success{% elif difference is not none %}border-warning{% endif %}">
+        <div class="small text-muted text-uppercase">Difference</div>
+        <div class="fs-4 fw-bold">{% if difference is not none %}{{ '%.2f'|format(difference) }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+  </div>
+
+  <form method="post">
+    <input type="hidden" name="account_code" value="{{ selected }}">
+    <input type="hidden" name="statement_date" value="{{ stmt_date }}">
+    <div class="row g-2 mb-3">
+      <div class="col-md-3">
+        <label class="form-label">Statement balance</label>
+        <input type="number" step="any" class="form-control" name="statement_balance" value="{{ stmt_bal or '' }}" required>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label">Notes</label>
+        <input class="form-control" name="notes" value="{{ notes }}">
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" name="save" value="1" class="btn btn-success w-100">Save reconciliation</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Cash book lines — tick matched items</div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width:40px"></th>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Reference</th>
+              <th class="text-end">Debit</th>
+              <th class="text-end">Credit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ln in book_lines %}
+            <tr>
+              <td><input type="checkbox" name="ticked" value="{{ ln.id }}"></td>
+              <td class="small">{{ ln.entry_date }}</td>
+              <td>{{ ln.description }}</td>
+              <td class="small">{{ ln.reference or '' }}</td>
+              <td class="text-end">{{ '%.2f'|format(ln.debit or 0) }}</td>
+              <td class="text-end">{{ '%.2f'|format(ln.credit or 0) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-muted text-center py-3">No lines for this account (or ledger tables not seeded yet).</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </form>
+
+  {% if history %}
+  <h5 class="mt-4">Recent reconciliations</h5>
+  <table class="table table-sm">
+    <thead><tr><th>Date</th><th>Account</th><th class="text-end">Stmt</th><th class="text-end">Book</th><th class="text-end">Diff</th></tr></thead>
+    <tbody>
+      {% for h in history %}
+      <tr>
+        <td>{{ h.statement_date }}</td>
+        <td>{{ h.account_code }}</td>
+        <td class="text-end">{{ '%.2f'|format(h.statement_balance or 0) }}</td>
+        <td class="text-end">{{ '%.2f'|format(h.book_balance or 0) }}</td>
+        <td class="text-end">{{ '%.2f'|format(h.difference or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

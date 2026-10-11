@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Goods received note{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <h2>Goods received note</h2>
+  <p class="text-muted">Receiving into <strong>{{ warehouse_name }}</strong>. Updates catalogue unit cost and shelf life. Posts Dr Commodity stock / Cr Cash.</p>
+  <form method="post" class="card card-body shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Commodity</th><th>Qty</th><th>Unit cost</th><th>Shelf life (days)</th><th>Description</th></tr></thead>
+        <tbody>
+        {% for i in range(8) %}
+          <tr>
+            <td><select name="product_{{ i }}" class="form-select form-select-sm">
+              <option value="">—</option>
+              {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+            </select></td>
+            <td><input class="form-control form-control-sm" name="qty_{{ i }}" type="number" step="0.01" min="0"></td>
+            <td><input class="form-control form-control-sm" name="unit_cost_{{ i }}" type="number" step="0.01" min="0"></td>
+            <td><input class="form-control form-control-sm" name="shelf_{{ i }}" type="number" value="365"></td>
+            <td><input class="form-control form-control-sm" name="desc_{{ i }}" placeholder="Batch / notes"></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button class="btn btn-primary">Post GRN — receive into {{ warehouse_name }}</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('logistics.catalogue') }}">Catalogue</a>
+  </form>
+</div>
+{% endblock %}
