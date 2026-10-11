@@ -446,6 +446,7 @@ def inventory_home():
                 'dispatched': 0.0,
                 'administered': 0.0,
                 'transferred': 0.0,
+                'returned': 0.0,
                 'destinations': [],
                 'balance': 0.0,
             }
@@ -465,6 +466,8 @@ def inventory_home():
                 slot['dispatched'] += qty
             elif ttype in ('issue', 'administer', 'administered', 'uptake'):
                 slot['administered'] += qty
+            elif ttype in ('return', 'returned'):
+                slot['returned'] += qty
             elif ttype in ('transfer',):
                 if signed < 0 or 'dispatch' in note.lower() or 'to ' in note.lower() or 'transfer to' in note.lower():
                     if warehouse:
@@ -486,9 +489,16 @@ def inventory_home():
                     slot['destinations'].append(part[:80])
         for slot in lines.values():
             if warehouse:
-                slot['balance'] = slot['opening'] + slot['received'] - slot['dispatched'] - slot['administered']
+                # Central: opening + received - dispatched + returned - administered
+                slot['balance'] = (
+                    slot['opening'] + slot['received'] - slot['dispatched']
+                    + slot['returned'] - slot['administered']
+                )
             else:
-                slot['balance'] = slot['received'] - slot['administered'] - slot['transferred']
+                # Facility: received - administered - transferred - returned_to_central
+                slot['balance'] = (
+                    slot['received'] - slot['administered'] - slot['transferred'] - slot['returned']
+                )
             slot['destinations'] = ', '.join(dict.fromkeys(slot['destinations'])) or '—'
             slot['value'] = slot['balance'] * slot['unit_cost']
         sheets.append({
