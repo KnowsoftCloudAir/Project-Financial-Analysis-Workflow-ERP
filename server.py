@@ -1142,6 +1142,35 @@ def debug_home():
     return app.response_class('\n'.join(lines) + '\n', mimetype='text/plain')
 
 
+@app.route('/debug-routes')
+def debug_routes():
+    """List blueprints and critical endpoint presence (no login required)."""
+    lines = ['build=UPGRADE-2026-10-11', 'blueprints=%s' % sorted(app.blueprints.keys())]
+    needed = [
+        'main_dashboard', 'staff_dashboard', 'learning_hub', 'ops.inventory_home',
+        'ops.section_finance_setup', 'ops.section_finance_reports', 'wf.rfq_home',
+        'wf.cash_recon', 'logistics.uptake_home', 'logistics.uptake_clients',
+        'erp.erp_home', 'erp.rfqs_list',
+    ]
+    for name in needed:
+        try:
+            url_for(name)
+            lines.append('endpoint_ok=%s' % name)
+        except Exception as e:
+            lines.append('endpoint_MISSING=%s err=%s' % (name, e))
+    mods = [
+        'facility_flow', 'finance_core', 'erp_extension', 'learning_data',
+        'ops_upgrade', 'workflow_upgrade', 'logistics_flow', 'auth_mail',
+    ]
+    for m in mods:
+        try:
+            __import__(m)
+            lines.append('import_ok=%s' % m)
+        except Exception as e:
+            lines.append('import_FAIL=%s err=%s' % (m, e))
+    return app.response_class('\n'.join(lines) + '\n', mimetype='text/plain')
+
+
 def homepage_content():
     """Editable public homepage fields (defaults for Benin City Mayor Challenge)."""
     import json as _json
@@ -5494,16 +5523,21 @@ def error_405(e):
 
 @app.errorhandler(500)
 def error_500(e):
+    detail = '%s: %s' % (type(e).__name__, str(e)[:180]) if e else 'Unknown'
+    try:
+        current_app.logger.exception('HTTP 500: %s', detail)
+    except Exception:
+        pass
     return _render_error(
         500,
         'Unexpected error',
-        'Something went wrong while processing your request. Your data is safe — go back and try again, or contact your administrator if it continues.',
+        'Something went wrong (%s). Your data is safe — go back and try again, or contact your administrator.' % detail,
     )
 
 
 @app.errorhandler(Exception)
 def error_unhandled(e):
-    # Log-friendly; still show branded page in production
+    # Log-friendly; still show branded page in production (include short error type for diagnosis)
     try:
         current_app.logger.exception('Unhandled error: %s', e)
     except Exception:
@@ -5513,10 +5547,11 @@ def error_unhandled(e):
         return error_403(e)
     if code == 404:
         return error_404(e)
+    detail = '%s: %s' % (type(e).__name__, str(e)[:180])
     return _render_error(
         500,
         'Unexpected error',
-        'Something went wrong while processing your request. Please go back and try again.',
+        'Something went wrong (%s). Please go back and try again.' % detail,
     )
 
 
