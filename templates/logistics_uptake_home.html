@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Uptake Administration{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <h2 class="mb-1">Uptake Administration</h2>
+  <p class="text-muted">Administer commodities, transfer stock, receive transfers, and review client assignments.</p>
+  <div class="row g-3 mt-2">
+    <div class="col-md-3"><a class="card card-body text-decoration-none h-100 shadow-sm" href="{{ url_for('logistics.uptake_administer') }}"><h5>Uptake form</h5><p class="small mb-0 text-muted">Administer commodities at a service point (updates inventory + expense ledger).</p></a></div>
+    <div class="col-md-3"><a class="card card-body text-decoration-none h-100 shadow-sm" href="{{ url_for('logistics.uptake_transfer') }}"><h5>Transfer form</h5><p class="small mb-0 text-muted">Request transfer between outlets or back to Main Warehouse (PM/Admin approval).</p></a></div>
+    <div class="col-md-3"><a class="card card-body text-decoration-none h-100 shadow-sm" href="{{ url_for('logistics.uptake_transfer_list') }}"><h5>Transfers &amp; receipts</h5><p class="small mb-0 text-muted">Approve, accept or reject transfers. Download certificates after accept.</p></a></div>
+    <div class="col-md-3"><a class="card card-body text-decoration-none h-100 shadow-sm" href="{{ url_for('logistics.uptake_clients') }}"><h5>Client assigned list</h5><p class="small mb-0 text-muted">Open client requests and contact / service details.</p></a></div>
+  </div>
+</div>
+{% endblock %}
