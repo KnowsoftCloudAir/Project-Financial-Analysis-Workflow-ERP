@@ -8,6 +8,8 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 from functools import wraps
 from io import BytesIO
+def _rows(sql, **params):
+    return db.session.execute(text(sql), params).mappings().all()
 
 from flask import (
     Blueprint, render_template, request, redirect, url_for, flash,
