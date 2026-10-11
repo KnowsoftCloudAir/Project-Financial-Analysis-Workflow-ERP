@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Assign LQ templates – PM{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:900px">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('learning_hub') }}">Learning Data</a></li>
+      <li class="breadcrumb-item active">Assign staff</li>
+    </ol>
+  </nav>
+
+  <h1 class="h4 mb-3"><i class="bi bi-person-gear me-2"></i>Assign staff to Learning Question templates</h1>
+  <p class="text-muted small">Only Project Managers (and General / Program Admins) can assign who may fill each LQ template. Assigned staff then see “Fill template” on the hub.</p>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white">New assignment</div>
+    <div class="card-body">
+      <form method="post" class="row g-3">
+        <input type="hidden" name="action" value="assign">
+        <div class="col-md-4">
+          <label class="form-label">Learning question</label>
+          <select name="lq_code" class="form-select" required>
+            <option value="">— Select —</option>
+            {% for code, q in questions.items() %}
+            <option value="{{ code }}">{{ code }} – {{ q.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Staff member</label>
+          <select name="staff_user_id" class="form-select" required>
+            <option value="">— Select —</option>
+            {% for u in staff_users %}
+            <option value="{{ u.id }}">{{ u.full_name }} ({{ u.role_label }}) – {{ u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Notes (optional)</label>
+          <input type="text" name="notes" class="form-control" placeholder="e.g. primary collector for Benin City">
+        </div>
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check2"></i> Assign</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <h2 class="h6">Active assignments</h2>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>LQ</th>
+          <th>Staff</th>
+          <th>Email</th>
+          <th>Assigned by</th>
+          <th>Since</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in assignments %}
+        <tr>
+          <td><span class="badge bg-secondary">{{ a.lq_code }}</span></td>
+          <td>{{ a.staff.full_name if a.staff else '—' }}</td>
+          <td class="small">{{ a.staff.email if a.staff else '—' }}</td>
+          <td class="small">{{ a.assigned_by.full_name if a.assigned_by else '—' }}</td>
+          <td class="small">{{ a.created_at.strftime('%Y-%m-%d') if a.created_at else '—' }}</td>
+          <td class="small">{{ a.notes or '' }}</td>
+          <td>
+            <form method="post" class="d-inline" onsubmit="return confirm('Revoke this assignment?');">
+              <input type="hidden" name="action" value="revoke">
+              <input type="hidden" name="assignment_id" value="{{ a.id }}">
+              <button type="submit" class="btn btn-outline-danger btn-sm">Revoke</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-muted text-center py-3">No active assignments yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
