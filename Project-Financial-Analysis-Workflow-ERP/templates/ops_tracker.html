@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Service tracker{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Vendor service tracker</h3>
+  <p>{{ award.invite.vendor_name if award.invite else '' }} · {{ award.event.ref_no if award.event else '' }} · {{ award.status }}
+    {% if award.invoice_doc_no %} · Invoice {{ award.invoice_doc_no }}{% endif %}</p>
+  <div class="mb-2">Delivery progress</div>
+  <div class="progress mb-3" style="height:28px"><div class="progress-bar" style="width:{{ pct }}%">{{ pct }}%</div></div>
+  <table class="table card">
+    <thead><tr><th>Activity / commodity</th><th>Due</th><th>Qty</th><th>Delivered</th><th>Amount</th><th></th></tr></thead>
+    <tbody>
+    {% for a in activities %}
+      <tr>
+        <td>{{ a.activity }}{% if a.commodity %}<div class="small text-muted">{{ a.commodity }}</div>{% endif %}</td>
+        <td>{{ a.due_date }}</td>
+        <td>{{ a.qty }}</td>
+        <td>
+          <form method="post" class="d-flex gap-2">
+            <input type="hidden" name="activity_id" value="{{ a.id }}">
+            <input name="delivered_qty" value="{{ a.delivered_qty }}" class="form-control form-control-sm" style="width:90px">
+            <button class="btn btn-sm btn-outline-primary">Update</button>
+          </form>
+        </td>
+        <td>{{ '{:,.2f}'.format(a.amount or 0) }}</td>
+        <td></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="row g-3">
+    <form method="post" action="{{ url_for('ops.tracker_add', aid=award.id) }}" class="col-lg-8 card card-body">
+      <h5>Add activity</h5>
+      <div class="row g-2">
+        <div class="col-md-4"><input name="activity" class="form-control" placeholder="Activity" required></div>
+        <div class="col-md-3"><input name="commodity" class="form-control" placeholder="Commodity"></div>
+        <div class="col-md-2"><input name="due_date" type="date" class="form-control"></div>
+        <div class="col-md-1"><input name="qty" class="form-control" placeholder="Qty" value="1"></div>
+        <div class="col-md-2"><input name="amount" class="form-control" placeholder="Amount"></div>
+      </div>
+      <button class="btn btn-secondary mt-2">Add line</button>
+    </form>
+    <form method="post" action="{{ url_for('ops.tracker_invoice', aid=award.id) }}" class="col-lg-4 card card-body">
+      <h5>Raise invoice</h5>
+      <p class="small">Creates a finance payment document for the delivered percentage.</p>
+      <button class="btn btn-success">Raise invoice for payment</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

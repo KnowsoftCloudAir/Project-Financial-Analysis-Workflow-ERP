@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} · {{ rfq.rfq_no }}{% endblock %}
+{% block content %}
+<div class="p-3 text-white text-center" style="background:#1a6b9a"><h1 class="h4 mb-0">Vendor quotation portal</h1><p class="mb-0">{{ rfq.rfq_no }} · {{ code }}</p></div><div class="container py-3 wrap-page">
+  <h3>{{ rfq.rfq_no }} · {{ code }}</h3>
+  <p>{{ rfq.title }}</p>
+  <p>Closing date: {{ rfq.closing_at.strftime('%Y-%m-%d %H:%M') }}</p>
+  <p><a href="{{ url_for('wf.rfq_file', rel=rfq.tor_path) }}">Download terms of reference</a></p>
+  <p class="border rounded p-2">{{ rfq.description }}</p>
+  <form method="post" enctype="multipart/form-data" class="card card-body" id="quote">
+    <input type="hidden" name="submission_code" value="{{ code }}">
+    <div class="row g-2">
+      <div class="col-md-4"><label class="form-label">Name</label><input class="form-control" name="vendor_name" required></div>
+      <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" type="email" name="email" required></div>
+      <div class="col-md-4"><label class="form-label">Contact</label><input class="form-control" name="phone" required></div>
+      <div class="col-md-4"><label class="form-label">Years of experience</label><input class="form-control" type="number" min="0" name="years_experience" required></div>
+      <div class="col-md-8"><label class="form-label">Qualification</label><input class="form-control" name="qualification" required></div>
+      <div class="col-md-4"><label class="form-label">CAC (PDF, 2 MB)</label><input class="form-control" type="file" name="cac" accept="application/pdf" required></div>
+      <div class="col-md-4"><label class="form-label">Bank (PDF, 2 MB)</label><input class="form-control" type="file" name="bank" accept="application/pdf" required></div>
+      <div class="col-md-4"><label class="form-label">Tax clearance (PDF, 2 MB)</label><input class="form-control" type="file" name="tax" accept="application/pdf" required></div>
+      <div class="col-md-4"><label class="form-label">Audited statement (PDF, 2 MB)</label><input class="form-control" type="file" name="audit" accept="application/pdf" required></div>
+      <div class="col-md-4"><label class="form-label">Other certification (PDF, 2 MB)</label><input class="form-control" type="file" name="cert" accept="application/pdf"></div>
+      <div class="col-md-4"><label class="form-label">Evidence of similar jobs (PDF, 2 MB)</label><input class="form-control" type="file" name="jobs" accept="application/pdf" required></div>
+      <div class="col-md-6"><label class="form-label">Letter-headed invoice (PDF, 2 MB)</label><input class="form-control" type="file" name="invoice" accept="application/pdf" required></div>
+      <div class="col-md-6"><label class="form-label">Technical proposal (PDF, 2 MB)</label><input class="form-control" type="file" name="proposal" accept="application/pdf" required></div>
+      <div class="col-md-4"><label class="form-label">Date of submission</label><input class="form-control" type="date" name="submission_date" required></div>
+    </div>
+    <h5 class="mt-3">Items to supply</h5>
+    {% for item in rfq.items %}
+    <div class="row g-2 align-items-center mb-1">
+      <div class="col-md-1"><input type="checkbox" name="sel_{{ item.id }}" value="1" class="sel"></div>
+      <div class="col-md-6">{{ item.description }} · qty {{ item.quantity }} {{ item.unit }}</div>
+      <div class="col-md-5"><input class="form-control amt" name="amt_{{ item.id }}" type="number" min="0" step="0.01" placeholder="Amount"></div>
+    </div>
+    {% endfor %}
+    <div class="mt-2"><strong>Total figures:</strong> <span id="figures">0.00</span></div>
+    <div><strong>Total words:</strong> <span id="words">Zero Naira Only</span></div>
+    <label class="form-check mt-3"><input class="form-check-input" type="checkbox" name="consent" value="1" required> I confirm that all stated and uploaded documents are true and genuine.</label>
+    <button class="btn btn-primary mt-2">Submit quotation</button>
+  </form>
+</div>
+<script>
+function words(n) {
+  n = Math.round(Number(n || 0) * 100) / 100;
+  const whole = Math.floor(n);
+  const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+  const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+  function u(num){ if(num<20) return ones[num]; if(num<100) return tens[Math.floor(num/10)] + (num%10? ' '+ones[num%10]:''); const r=u(num%100); return ones[Math.floor(num/100)]+' hundred'+(r?' and '+r:''); }
+  function w(num){ if(!num) return 'zero'; let p=[]; [[1000000000,'billion'],[1000000,'million'],[1000,'thousand']].forEach(function(pair){ if(num>=pair[0]){ p.push(u(Math.floor(num/pair[0]))+' '+pair[1]); num%=pair[0]; }}); if(num) p.push(u(num)); return p.join(' '); }
+  return (w(whole)+' naira only').replace(/\b\w/g, function(m){ return m.toUpperCase(); });
+}
+function recalc(){
+  let t=0; document.querySelectorAll('.sel').forEach(function(box){ if(box.checked){ const amt=box.closest('.row').querySelector('.amt'); t += Number(amt.value||0); }});
+  document.getElementById('figures').textContent = t.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('words').textContent = words(t);
+}
+document.getElementById('quote').addEventListener('input', recalc);
+</script>
+{% endblock %}

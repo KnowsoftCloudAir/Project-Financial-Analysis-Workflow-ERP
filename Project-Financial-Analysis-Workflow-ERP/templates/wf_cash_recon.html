@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Cash reconciliation{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page">
+  <h3>Cash reconciliation</h3>
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-md-4"><label class="form-label">Cash account</label>
+      <select class="form-select" name="account_id">{% for a in accounts %}<option value="{{ a.id }}" {% if account_id|string == a.id|string %}selected{% endif %}>{{ a.code }} {{ a.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label class="form-label">Start date</label><input class="form-control" type="date" name="start" value="{{ start }}"></div>
+    <div class="col-md-2"><label class="form-label">End date</label><input class="form-control" type="date" name="end" value="{{ end }}"></div>
+    <div class="col-md-2"><label class="form-label">Bank statement balance</label><input class="form-control" name="bank_balance" id="bank" value="{{ bank }}"></div>
+    <div class="col-md-2"><button class="btn btn-primary">Load</button></div>
+  </form>
+  <div class="d-flex flex-wrap gap-3 mb-2">
+    <div class="card card-body py-2">Cash balance at {{ end }}: <strong id="cash" data-value="{{ cash_bal }}">NGN {{ '{:,.2f}'.format(cash_bal) }}</strong></div>
+    <div class="card card-body py-2">Bank statement: <strong id="bankFmt">NGN 0.00</strong></div>
+  </div>
+  <div class="table-responsive card">
+    <table class="table mb-0">
+      <thead><tr><th></th><th>Date</th><th>Ref</th><th>Description</th><th>Position</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>
+      {% for ln in lines %}
+        {% set debit = ln.debit or 0 %}
+        {% set credit = ln.credit or 0 %}
+        <tr>
+          <td>
+            {% if ln.id in ticks %}<input type="checkbox" class="tick" checked disabled data-debit="{{ debit }}" data-credit="{{ credit }}">{% else %}
+            <form method="post"><input type="hidden" name="action" value="tick"><input type="hidden" name="account_id" value="{{ account_id }}"><input type="hidden" name="start" value="{{ start }}"><input type="hidden" name="end" value="{{ end }}"><input type="hidden" name="bank_balance" value="{{ bank }}"><input type="hidden" name="line_id" value="{{ ln.id }}"><input type="checkbox" class="tick" data-debit="{{ debit }}" data-credit="{{ credit }}" onchange="this.form.submit()"></form>
+            {% endif %}
+          </td>
+          <td>{{ ln.entry_date }}</td>
+          <td><a href="{{ url_for('wf.voucher', lid=ln.id) }}" ondblclick="event.preventDefault(); window.open(this.href, 'voucher', 'width=720,height=640'); return false;">{{ ln.entry_no }}</a></td>
+          <td>{{ ln.description }}</td>
+          <td>{{ 'Debit' if debit else 'Credit' }}</td>
+          <td class="text-end">{{ '{:,.2f}'.format(debit if debit else credit) }}</td>
+        </tr>
+      {% else %}<tr><td colspan="6" class="text-muted">Select a cash account and period.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="alert alert-secondary mt-3">Computed Rec Difference: <strong id="diff">0.00</strong></div>
+  <form method="post" class="card card-body mb-3">
+    <input type="hidden" name="action" value="quick">
+    <input type="hidden" name="account_id" value="{{ account_id }}">
+    <input type="hidden" name="start" value="{{ start }}">
+    <input type="hidden" name="end" value="{{ end }}">
+    <input type="hidden" name="bank_balance" value="{{ bank }}">
+    <h6>Quick bank charge or gain</h6>
+    <div class="row g-2">
+      <div class="col-md-2"><select class="form-select" name="kind"><option value="charge">Bank charge</option><option value="gain">Gain</option></select></div>
+      <div class="col-md-2"><input class="form-control" name="amount" placeholder="Amount"></div>
+      <div class="col-md-3"><input class="form-control" type="date" name="post_date" value="{{ end }}"></div>
+      <div class="col-md-3"><select class="form-select" name="other_account_id"><option value="">Other account</option>{% for a in all_accounts %}<option value="{{ a.id }}">{{ a.code }} {{ a.name }}</option>{% endfor %}</select></div>
+      <div class="col-md-2"><button class="btn btn-outline-primary">Post</button></div>
+    </div>
+  </form>
+  <form method="post" class="d-flex flex-wrap gap-2">
+    <input type="hidden" name="action" value="save">
+    <input type="hidden" name="account_id" value="{{ account_id }}">
+    <input type="hidden" name="start" value="{{ start }}">
+    <input type="hidden" name="end" value="{{ end }}">
+    <input type="hidden" name="bank_balance" id="bankSave" value="{{ bank }}">
+    <button class="btn btn-success">Save reconciliation</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('wf.recon_pdf', account_id=account_id, start=start, end=end, bank_balance=bank) }}">PDF</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('wf.recon_xlsx', account_id=account_id, start=start, end=end) }}">Excel</a>
+  </form>
+</div>
+<script>
+function money(n){
+  const v = Number(n||0);
+  const abs = Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+  return (v<0 ? '('+abs+')' : abs);
+}
+function recalc(){
+  const cash = Number(document.getElementById('cash').dataset.value||0);
+  const bank = Number(document.getElementById('bank').value||0);
+  document.getElementById('bankFmt').textContent = 'NGN ' + money(bank);
+  document.getElementById('bankSave').value = bank;
+  let diff = cash - bank;
+  document.querySelectorAll('.tick').forEach(function(box){
+    if (box.checked || box.disabled) {
+      diff -= Number(box.dataset.debit||0);
+      diff += Number(box.dataset.credit||0);
+    }
+  });
+  document.querySelectorAll('input[type=checkbox][disabled]').forEach(function(box){
+    const row = box.closest('tr');
+    if (!row) return;
+  });
+  document.getElementById('diff').textContent = 'NGN ' + money(diff);
+}
+document.getElementById('bank').addEventListener('input', recalc);
+recalc();
+</script>
+{% endblock %}
