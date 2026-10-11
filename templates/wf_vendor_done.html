@@ -1,14 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Quotation submitted{% endblock %}
+{% block title %}Submission{% endblock %}
 {% block content %}
-<div class="container py-5 text-center" style="max-width:560px">
-  <div class="card shadow border-success">
-    <div class="card-body py-5">
-      <h3 class="text-success mb-3">Thank you</h3>
-      <p>Your quotation has been submitted.</p>
-      <p>Special number: <code class="fs-5">{{ special }}</code></p>
-      <p class="mb-0">Total amount: <strong>{{ '%.2f'|format(total) }}</strong></p>
-    </div>
+<div class="container py-4 wrap-page">
+  <div class="card card-body">
+    <h4>{{ message }}</h4>
+    {% if rfq %}<p class="text-muted mb-0">{{ rfq.rfq_no }} · closing {{ rfq.closing_at }}</p>{% endif %}
   </div>
 </div>
 {% endblock %}

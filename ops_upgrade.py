@@ -492,12 +492,13 @@ def inventory_home():
                 # Central: opening + received - dispatched + returned - administered
                 slot['balance'] = (
                     slot['opening'] + slot['received'] - slot['dispatched']
-                    + slot['returned'] - slot['administered']
+                    + slot.get('returned', 0) - slot['administered']
                 )
             else:
-                # Facility: received - administered - transferred - returned_to_central
+                # Facility: received - administered - transferred - returned to central
                 slot['balance'] = (
-                    slot['received'] - slot['administered'] - slot['transferred'] - slot['returned']
+                    slot['received'] - slot['administered'] - slot['transferred']
+                    - slot.get('returned', 0)
                 )
             slot['destinations'] = ', '.join(dict.fromkeys(slot['destinations'])) or '—'
             slot['value'] = slot['balance'] * slot['unit_cost']

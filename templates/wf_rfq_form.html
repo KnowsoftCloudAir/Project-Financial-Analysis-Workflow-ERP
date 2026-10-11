@@ -1,110 +1,119 @@
 {% extends "base.html" %}
-{% block title %}New RFQ{% endblock %}
-{% block extra_css %}
-<style>
-  .line-row { background: #f8fafc; border-radius: .5rem; padding: .75rem; margin-bottom: .5rem; border: 1px solid #e2e8f0; }
-  .line-row .remove-line { color: #b91c1c; cursor: pointer; }
-</style>
-{% endblock %}
+{% block title %}Raise RFQ{% endblock %}
 {% block content %}
-<div class="container py-3" style="max-width:960px">
-  <h3 class="mb-3">New Procurement Requisition (RFQ)</h3>
-  <form method="post" enctype="multipart/form-data" id="rfqForm">
-    <div class="card shadow-sm mb-3">
-      <div class="card-body row g-3">
-        <div class="col-md-4">
-          <label class="form-label">RFQ Number (optional)</label>
-          <input class="form-control" name="rfq_no" placeholder="Auto if blank">
-        </div>
-        <div class="col-md-8">
-          <label class="form-label">Title <span class="text-danger">*</span></label>
-          <input class="form-control" name="title" required>
-        </div>
-        <div class="col-12">
-          <label class="form-label">Description</label>
-          <textarea class="form-control" name="description" rows="2"></textarea>
-        </div>
-        <div class="col-12">
-          <label class="form-label">Conditions / requirements</label>
-          <textarea class="form-control" name="conditions" rows="2" placeholder="Delivery terms, shelf life, packaging…"></textarea>
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Upload TOR (PDF)</label>
-          <input type="file" class="form-control" name="tor_file" accept=".pdf,.doc,.docx">
-        </div>
-      </div>
+<div class="container-fluid py-3 wrap-page">
+  <h3>Raise RFQ</h3>
+  <p class="text-muted">Line items are selected from the <strong>Product / service catalogue</strong> only. Register commodities under Products before raising an RFQ.</p>
+  <form method="post" enctype="multipart/form-data" class="card card-body shadow-sm">
+    <div class="row g-3">
+      <div class="col-md-8"><label class="form-label">Title</label><input class="form-control" name="title" required></div>
+      <div class="col-md-4"><label class="form-label">Closing date &amp; time</label><input class="form-control" type="datetime-local" name="closing_at" required></div>
+      <div class="col-12"><label class="form-label">Description</label><textarea class="form-control" name="description" rows="2" required></textarea></div>
+      <div class="col-12"><label class="form-label">How the service must be provided</label><textarea class="form-control" name="service_terms" rows="2" required></textarea></div>
+      <div class="col-md-4"><label class="form-label">Project code</label>
+        <select class="form-select" name="project_id" required>
+          <option value="">Select project</option>
+          {% for p in projects %}<option value="{{ p.id }}">{{ p.code }} — {{ p.name }}</option>{% endfor %}
+        </select></div>
+      <div class="col-md-4"><label class="form-label">Expense code</label>
+        <select class="form-select" name="expense_code_id" required>
+          <option value="">Select expense</option>
+          {% for e in expenses %}<option value="{{ e.id }}">{{ e.code }} — {{ e.description or e.name or '' }}</option>{% endfor %}
+        </select></div>
+      <div class="col-md-4"><label class="form-label">Budget code</label>
+        <select class="form-select" name="budget_code_id" required>
+          <option value="">Select budget</option>
+          {% for b in budgets %}<option value="{{ b.id }}">{{ b.code }} — {{ b.description or '' }}</option>{% endfor %}
+        </select></div>
+      <div class="col-md-6"><label class="form-label">Reviewer</label>
+        <select class="form-select" name="reviewer_id" required>
+          {% for s in staff %}<option value="{{ s.id }}">{{ s.full_name }} ({{ s.role }})</option>{% endfor %}
+        </select></div>
+      <div class="col-md-6"><label class="form-label">Terms of reference (PDF)</label>
+        <input class="form-control" type="file" name="tor" accept="application/pdf" required></div>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <h5 class="mb-0">Line items (from commodity catalog)</h5>
-      <button type="button" class="btn btn-outline-primary btn-sm" id="addLine"><i class="bi bi-plus"></i> Add line</button>
-    </div>
-    <div id="lines">
-      {% for i in range(1, 11) %}
-      <div class="line-row row g-2 align-items-end" data-idx="{{ i }}">
-        <div class="col-md-4">
-          <label class="form-label small">Commodity</label>
-          <select class="form-select form-select-sm" name="product_id_{{ i }}">
-            <option value="">— select —</option>
+    <h5 class="mt-4">Items from Product Catalogue</h5>
+    {% if not products %}
+    <div class="alert alert-warning">No products in the catalogue. <a href="{{ url_for('admin_products') }}">Register products</a> first, then return here.</div>
+    {% endif %}
+    <div id="items">
+      {% for n in range(1,5) %}
+      <div class="row g-2 mb-2 item-row align-items-end">
+        <div class="col-md-7">
+          <label class="form-label small mb-0">Commodity / service</label>
+          <select class="form-select product-select" name="item_product_id" {% if n <= 1 %}required{% endif %}>
+            <option value="">— Select from catalogue —</option>
             {% for p in products %}
-            <option value="{{ p.id }}" data-unit="{{ p.unit or 'piece' }}">{{ p.name }}</option>
+            <option value="{{ p.id }}"
+                    data-unit="{{ p.unit or 'unit' }}"
+                    data-cost="{{ p.unit_cost or 0 }}">
+              {{ p.name }}{% if p.method_code %} ({{ p.method_code }}){% endif %}
+              — {{ p.unit or 'unit' }} · cost {{ '%.2f'|format(p.unit_cost or 0) }}
+            </option>
             {% endfor %}
           </select>
         </div>
         <div class="col-md-2">
-          <label class="form-label small">Unit</label>
-          <input class="form-control form-control-sm" name="unit_{{ i }}" value="piece">
+          <label class="form-label small mb-0">Quantity</label>
+          <input class="form-control" name="item_qty" type="number" min="0.01" step="0.01" placeholder="Qty" {% if n <= 1 %}required{% endif %}>
         </div>
         <div class="col-md-2">
-          <label class="form-label small">Qty</label>
-          <input type="number" step="any" class="form-control form-control-sm" name="qty_{{ i }}" value="1" min="0">
+          <label class="form-label small mb-0">Unit</label>
+          <input class="form-control unit-field" name="item_unit" placeholder="Unit" value="unit" readonly>
         </div>
-        <div class="col-md-2">
-          <label class="form-label small">Unit price (optional)</label>
-          <input type="number" step="any" class="form-control form-control-sm" name="price_{{ i }}" placeholder="Vendor fills">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small">Notes</label>
-          <input class="form-control form-control-sm" name="notes_{{ i }}">
+        <div class="col-md-1">
+          <label class="form-label small mb-0">&nbsp;</label>
+          <button type="button" class="btn btn-outline-danger btn-sm w-100 remove-item" title="Remove">&times;</button>
         </div>
       </div>
       {% endfor %}
     </div>
-    <p class="small text-muted">Up to 10 lines shown; use “Add line” for more. Price can be left empty until vendor responds.</p>
-
-    <div class="mt-3 d-flex gap-2">
-      <button type="submit" class="btn btn-primary">Request / Submit for approval</button>
-      <a href="{{ url_for('wf.rfq_home') }}" class="btn btn-link">Cancel</a>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="addItem">Add catalogue line</button>
+    <p class="small text-muted mt-2 mb-0">Unit is taken from the catalogue. Unit cost is stored on the RFQ line for later GRN / award reference.</p>
+    <div class="mt-3"><button class="btn btn-primary" {% if not products %}disabled{% endif %}>Create RFQ and send for review</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('wf.rfq_home') }}">Cancel</a>
     </div>
   </form>
 </div>
 <script>
-(function(){
-  let next = 11;
-  document.getElementById('addLine').addEventListener('click', function(){
-    if(next > 30){ alert('Maximum 30 lines'); return; }
-    const tpl = document.querySelector('.line-row').cloneNode(true);
-    tpl.dataset.idx = next;
-    tpl.querySelectorAll('select,input').forEach(el=>{
-      const n = el.getAttribute('name');
-      if(n) el.setAttribute('name', n.replace(/_\d+$/, '_'+next));
-      if(el.tagName==='INPUT') el.value = el.type==='number' && n && n.startsWith('qty') ? '1' : '';
-      if(el.tagName==='SELECT') el.selectedIndex = 0;
-    });
-    document.getElementById('lines').appendChild(tpl);
-    next++;
+function bindProductSelect(sel) {
+  sel.addEventListener('change', function () {
+    const opt = this.options[this.selectedIndex];
+    const row = this.closest('.item-row');
+    if (!row) return;
+    const unit = row.querySelector('.unit-field');
+    if (unit) unit.value = opt.dataset.unit || 'unit';
   });
-  document.getElementById('lines').addEventListener('change', function(e){
-    if(e.target.tagName==='SELECT' && e.target.name.startsWith('product_id_')){
-      const opt = e.target.selectedOptions[0];
-      const unit = opt && opt.dataset.unit;
-      if(unit){
-        const idx = e.target.name.split('_').pop();
-        const u = document.querySelector('[name="unit_'+idx+'"]');
-        if(u) u.value = unit;
-      }
-    }
-  });
-})();
+}
+document.querySelectorAll('.product-select').forEach(bindProductSelect);
+
+document.getElementById('addItem').addEventListener('click', function () {
+  const box = document.getElementById('items');
+  if (box.querySelectorAll('.item-row').length >= 20) return;
+  const first = box.querySelector('.product-select');
+  const opts = first ? first.innerHTML : '<option value="">— Select from catalogue —</option>';
+  const row = document.createElement('div');
+  row.className = 'row g-2 mb-2 item-row align-items-end';
+  row.innerHTML =
+    '<div class="col-md-7"><label class="form-label small mb-0">Commodity / service</label>' +
+    '<select class="form-select product-select" name="item_product_id">' + opts + '</select></div>' +
+    '<div class="col-md-2"><label class="form-label small mb-0">Quantity</label>' +
+    '<input class="form-control" name="item_qty" type="number" min="0.01" step="0.01" placeholder="Qty"></div>' +
+    '<div class="col-md-2"><label class="form-label small mb-0">Unit</label>' +
+    '<input class="form-control unit-field" name="item_unit" placeholder="Unit" value="unit" readonly></div>' +
+    '<div class="col-md-1"><label class="form-label small mb-0">&nbsp;</label>' +
+    '<button type="button" class="btn btn-outline-danger btn-sm w-100 remove-item" title="Remove">&times;</button></div>';
+  box.appendChild(row);
+  bindProductSelect(row.querySelector('.product-select'));
+});
+
+document.getElementById('items').addEventListener('click', function (e) {
+  if (e.target.classList.contains('remove-item')) {
+    const rows = document.querySelectorAll('.item-row');
+    if (rows.length <= 1) return;
+    e.target.closest('.item-row').remove();
+  }
+});
 </script>
 {% endblock %}

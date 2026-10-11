@@ -1044,18 +1044,28 @@ def get_refusal_reasons(start_date=None, end_date=None):
 def index():
     """Public marketing home; authenticated users go to their workspace."""
     try:
-        if current_user.is_authenticated:
-            if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
-                return redirect(url_for('onboarding'))
-            if current_user.role == 'provider':
-                return redirect(url_for('provider_dashboard'))
-            if _is_admin_role(current_user.role):
-                # Prefer dashboard, but never create a loop if it fails to render.
-                # ?stay=1 keeps authenticated staff on the public home shell.
-                if request.args.get('stay') in ('1', 'true', 'yes'):
-                    content = homepage_content()
-                    return render_template('public_home.html', content=content)
-                return redirect(url_for(_home_for_role(current_user.role)))
+        # Guard current_user access — broken sessions / schema drift must not 500 the public home
+        authed = False
+        try:
+            authed = bool(current_user.is_authenticated)
+        except Exception:
+            authed = False
+        if authed:
+            try:
+                if getattr(current_user, 'onboarding_status', 'active') in ('pending_profile', 'pending_approval', 'rejected'):
+                    return redirect(url_for('onboarding'))
+                if getattr(current_user, 'role', '') == 'provider':
+                    return redirect(url_for('provider_dashboard'))
+                if _is_admin_role(getattr(current_user, 'role', '')):
+                    if request.args.get('stay') in ('1', 'true', 'yes'):
+                        content = homepage_content()
+                        return render_template('public_home.html', content=content)
+                    return redirect(url_for(_home_for_role(current_user.role)))
+            except Exception as e_auth:
+                try:
+                    app.logger.exception('index auth branch: %s', e_auth)
+                except Exception:
+                    pass
         content = homepage_content()
         return render_template('public_home.html', content=content)
     except Exception as e:
@@ -1063,15 +1073,20 @@ def index():
             app.logger.exception('index failed: %s', e)
         except Exception:
             pass
+        # Last-resort plain HTML so the site never shows a bare Railway 404/blank page
         try:
             return render_template(
                 'error.html', code=500, title='Temporary problem',
-                message='The home page could not load fully. Please try Sign in or refresh in a moment.',
+                message='The home page could not load fully (%s). Please try Sign in or refresh.' % type(e).__name__,
             ), 500
         except Exception:
             return (
+                '<!DOCTYPE html><html><head><title>Home</title></head><body style="font-family:system-ui;padding:2rem">'
                 '<h1>Project Financial Management Workflow</h1>'
-                '<p>Home is temporarily unavailable. <a href="/login">Sign in</a></p>',
+                '<p>Home is temporarily unavailable.</p>'
+                '<p><a href="/login">Sign in</a> · <a href="/about">About</a></p>'
+                '<p style="color:#666;font-size:0.85rem">Error: %s</p>'
+                '</body></html>' % (type(e).__name__,),
                 500,
                 {'Content-Type': 'text/html; charset=utf-8'},
             )
@@ -1079,8 +1094,52 @@ def index():
 
 @app.route('/about')
 def about():
-    content = homepage_content()
-    return render_template('public_about.html', content=content)
+    try:
+        content = homepage_content()
+        return render_template('public_about.html', content=content)
+    except Exception as e:
+        try:
+            app.logger.exception('about failed: %s', e)
+        except Exception:
+            pass
+        return (
+            '<!DOCTYPE html><html><head><title>About</title></head><body style="font-family:system-ui;padding:2rem">'
+            '<h1>About</h1><p>Page temporarily unavailable.</p>'
+            '<p><a href="/">Home</a> · <a href="/login">Sign in</a></p>'
+            '<p style="color:#666;font-size:0.85rem">Error: %s</p></body></html>' % type(e).__name__,
+            500,
+            {'Content-Type': 'text/html; charset=utf-8'},
+        )
+
+
+@app.route('/debug-home')
+def debug_home():
+    """Temporary diagnostic — remove after home page is stable."""
+    import traceback as _tb
+    lines = []
+    try:
+        lines.append('authenticated=%s' % bool(getattr(current_user, 'is_authenticated', False)))
+    except Exception as e:
+        lines.append('authenticated_error=%s' % e)
+    try:
+        c = homepage_content()
+        lines.append('homepage_keys=%s' % sorted(c.keys()))
+    except Exception as e:
+        lines.append('homepage_content_error=%s' % e)
+        lines.append(_tb.format_exc())
+    try:
+        render_template('public_home.html', content=homepage_content())
+        lines.append('render_public_home=OK')
+    except Exception as e:
+        lines.append('render_public_home_error=%s' % e)
+        lines.append(_tb.format_exc())
+    try:
+        render_template('public_about.html', content=homepage_content())
+        lines.append('render_public_about=OK')
+    except Exception as e:
+        lines.append('render_public_about_error=%s' % e)
+        lines.append(_tb.format_exc())
+    return app.response_class('\n'.join(lines) + '\n', mimetype='text/plain')
 
 
 def homepage_content():
@@ -5350,14 +5409,16 @@ def db_health():
 @app.route('/upgrade-status')
 def upgrade_status():
     return (
-        'UPGRADE-2026-10-10-dashboard-render-fix\n'
+        'UPGRADE-2026-10-11-inventory-rfq-cash-clients\n'
         'finance-setup=/ops/sections/finance-setup\n'
         'financial-reports=/ops/sections/financial-reports\n'
         'rfq=/ops/rfq\n'
         'inventory-sheet=/ops/inventory\n'
         'cash-recon=/ops/cash-recon\n'
         'dashboard=/dashboard\n'
-        'fix=real-dashboard-no-temp-shell\n',
+        'learning=/learning\n'
+        'uptake-clients=/ops/uptake/clients\n'
+        'fix=inventory-returned-cols-client-filter-rfq-cash\n',
         200,
         {'Content-Type': 'text/plain; charset=utf-8'},
     )

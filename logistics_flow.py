@@ -738,7 +738,7 @@ def uptake_clients():
         flash('Not authorised.', 'danger')
         return redirect(url_for('logistics.uptake_home'))
     try:
-        # Managers / admins see all; facility staff see only clients assigned to their facility
+        # Managers see all; facility staff see only clients assigned to their facility
         fac_id = getattr(current_user, 'facility_id', None)
         if _is_admin_pm() or not fac_id:
             rows = _rows(
