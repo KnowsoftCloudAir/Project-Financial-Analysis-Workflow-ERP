@@ -1,34 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Project budget template{% endblock %}
+{% block title %}Project budget template — Benin PLAN{% endblock %}
 {% block extra_css %}
 <style>
   .bud-hero {
     background: linear-gradient(135deg, #1e3a5f 0%, #0f766e 100%);
-    color: #fff;
-    border-radius: 1rem;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.25rem;
+    color: #fff; border-radius: 1rem; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
   }
   .bud-hero h3 { margin: 0; font-weight: 700; }
   .bud-hero p { margin: .35rem 0 0; opacity: .9; font-size: .92rem; }
-  .bud-table thead th {
-    background: #0f4c6e;
-    color: #fff;
-    font-weight: 600;
-    white-space: nowrap;
-    border: none;
+  .plan-table { font-size: .82rem; }
+  .plan-table thead th {
+    background: #0f4c6e; color: #fff; font-weight: 600; white-space: nowrap;
+    vertical-align: middle; border: none; position: sticky; top: 0; z-index: 2;
   }
-  .var-ok { color: #047857; font-weight: 600; }
-  .var-over { color: #b91c1c; font-weight: 600; }
-  .status-pill {
-    display: inline-block;
-    font-size: .75rem;
-    font-weight: 600;
-    padding: .2rem .55rem;
-    border-radius: 999px;
-  }
-  .status-ok { background: #d1fae5; color: #065f46; }
-  .status-over { background: #fee2e2; color: #991b1b; }
+  .plan-table tbody tr.cat-row { background: #e8f4f4; font-weight: 700; }
+  .plan-table tbody tr.subtotal-row { background: #f0f4f8; font-weight: 700; }
+  .plan-table tbody tr.total-row { background: #0f4c6e; color: #fff; font-weight: 700; }
+  .plan-table td { vertical-align: top; }
+  .comments-cell { max-width: 280px; white-space: normal; font-size: .75rem; color: #444; }
 </style>
 {% endblock %}
 {% block content %}
@@ -36,12 +25,17 @@
   <div class="bud-hero d-flex flex-wrap justify-content-between align-items-center gap-2">
     <div>
       <h3>Project budget template</h3>
-      <p>Budget ID, project, expense code, period, budget, actual, variance and status — ready for print and Excel export.</p>
+      <p>Aligned to Benin PLAN format — Category, operation title, pilot / full-scale periods, total, comments, procurement fields.</p>
     </div>
-    <a class="btn btn-light btn-sm" href="{{ url_for('ops.budget_template_xlsx', project_id=project_id) }}">Download Excel</a>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-light btn-sm" href="{{ url_for('ops.budget_template_xlsx', project_id=project_id) }}">
+        <i class="bi bi-download"></i> Download Excel (Benin PLAN)
+      </a>
+      <a class="btn btn-outline-light btn-sm" href="{{ url_for('fin.budget_codes') }}">Manage budget codes</a>
+    </div>
   </div>
 
-  <form class="row g-2 mb-3 align-items-end">
+  <form class="row g-2 mb-3 align-items-end" method="get">
     <div class="col-md-5">
       <label class="form-label small mb-0">Filter by project</label>
       <select name="project_id" class="form-select" onchange="this.form.submit()">
@@ -54,48 +48,64 @@
   </form>
 
   <div class="card shadow-sm border-0">
-    <div class="table-responsive">
-      <table class="table table-sm table-hover bud-table mb-0">
+    <div class="table-responsive" style="max-height: 70vh;">
+      <table class="table table-bordered table-sm plan-table mb-0">
         <thead>
           <tr>
-            <th>Budget ID</th>
-            <th>Project</th>
-            <th>Expense code</th>
-            <th>Description</th>
-            <th>Start</th>
-            <th>End</th>
-            <th class="text-end">Budget</th>
-            <th class="text-end">Actual</th>
-            <th class="text-end">Variance</th>
-            <th>Status</th>
+            <th>Category</th>
+            <th>Title of Operation / Procurement Action</th>
+            <th>Local currency</th>
+            <th class="text-end">April 2026 – April 2027<br><span class="fw-normal">(pilot)</span></th>
+            <th class="text-end">April 2027 – April 2028<br><span class="fw-normal">(12 month full scale)</span></th>
+            <th class="text-end">TOTAL</th>
+            <th>Comments</th>
+            <th>Feasibility</th>
+            <th>PO Number</th>
+            <th>Supplier</th>
+            <th>Email</th>
+            <th>Starting date</th>
+            <th>End date</th>
+            <th>Payment status</th>
+            <th>Procurement packaging</th>
           </tr>
         </thead>
         <tbody>
         {% for r in rows %}
-          <tr>
-            <td><code>{{ r.budget.code }}</code></td>
-            <td>{{ r.budget.project.code if r.budget.project else '—' }}</td>
-            <td>{{ r.budget.expense_code.code if r.budget.expense_code else '—' }}</td>
-            <td>{{ r.budget.description or '—' }}</td>
-            <td>{{ r.budget.start_date or '—' }}</td>
-            <td>{{ r.budget.end_date or '—' }}</td>
-            <td class="text-end">{{ '{:,.2f}'.format(r.budget.amount or 0) }}</td>
-            <td class="text-end">{{ '{:,.2f}'.format(r.spent) }}</td>
-            <td class="text-end {{ 'var-ok' if r.variance >= 0 else 'var-over' }}">{{ '{:,.2f}'.format(r.variance) }}</td>
-            <td>
-              {% if r.variance >= 0 %}
-              <span class="status-pill status-ok">Within budget</span>
-              {% else %}
-              <span class="status-pill status-over">Over budget</span>
-              {% endif %}
-            </td>
+          <tr class="{% if r.row_kind == 'category' %}cat-row{% elif r.row_kind == 'subtotal' %}subtotal-row{% elif r.row_kind == 'total' %}total-row{% endif %}">
+            <td>{{ r.category }}</td>
+            <td>{{ r.title }}</td>
+            <td>{{ r.local_currency or '' }}</td>
+            <td class="text-end">{% if r.pilot is not none %}{{ '{:,.2f}'.format(r.pilot) }}{% endif %}</td>
+            <td class="text-end">{% if r.full_scale is not none %}{{ '{:,.2f}'.format(r.full_scale) }}{% endif %}</td>
+            <td class="text-end">{% if r.total is not none %}{{ '{:,.2f}'.format(r.total) }}{% endif %}</td>
+            <td class="comments-cell">{{ r.comments or '' }}</td>
+            <td>{{ r.feasibility or '' }}</td>
+            <td>{{ r.po_number or '' }}</td>
+            <td>{{ r.supplier or '' }}</td>
+            <td>{{ r.email or '' }}</td>
+            <td>{{ r.start_date or '' }}</td>
+            <td>{{ r.end_date or '' }}</td>
+            <td>{{ r.payment_status or '' }}</td>
+            <td>{{ r.packaging or '' }}</td>
           </tr>
         {% else %}
-          <tr><td colspan="10" class="text-muted text-center py-4">No budget lines for this project. Set up budget codes under Finance setup first.</td></tr>
+          <tr>
+            <td colspan="15" class="text-muted text-center py-4">
+              No budget lines yet. Add budget codes under
+              <a href="{{ url_for('fin.budget_codes') }}">Finance → Budget codes</a>
+              (use codes like <code>3.1.1</code>, descriptions as operation titles).
+              Pilot vs full-scale can be stored in the description as
+              <code>PILOT: amount | SCALE: amount | …</code> or amounts will show under TOTAL.
+            </td>
+          </tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
+  <p class="small text-muted mt-2">
+    Format matches the Benin PLAN workbook (Category · Operation title · Pilot · Full scale · Total · Comments · PO · Supplier · Dates · Payment · Packaging).
+    Download exports the same columns.
+  </p>
 </div>
 {% endblock %}

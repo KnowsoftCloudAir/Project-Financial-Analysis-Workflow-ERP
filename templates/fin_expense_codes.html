@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Expense codes{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Expense codes</h3>
+  <p class="text-muted small">Each expense code links a project and an account. Edit anytime; delete only if unused (otherwise deactivated).</p>
+  <div class="table-responsive card mb-3">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr><th>Code</th><th>Description</th><th>Project</th><th>Account</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="fw-semibold">{{ r.code }}</td>
+          <td>{{ r.description }}</td>
+          <td>{{ r.project.code if r.project else '—' }}</td>
+          <td>{{ r.account.code if r.account else '—' }}</td>
+          <td class="text-nowrap">
+            {% if can_edit %}
+            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#ee{{ r.id }}">Edit</button>
+            <form method="post" action="{{ url_for('fin.expense_code_delete', eid=r.id) }}" class="d-inline" onsubmit="return confirm('Delete or deactivate {{ r.code }}?')">
+              <button class="btn btn-sm btn-outline-danger">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% if can_edit %}
+        <tr class="collapse" id="ee{{ r.id }}"><td colspan="5">
+          <form method="post" class="row g-2 p-2">
+            <input type="hidden" name="edit_id" value="{{ r.id }}">
+            <div class="col-md-2"><input name="code" class="form-control form-control-sm" value="{{ r.code }}" required></div>
+            <div class="col-md-3"><input name="description" class="form-control form-control-sm" value="{{ r.description }}" required></div>
+            <div class="col-md-3">
+              <select name="project_id" class="form-select form-select-sm" required>
+                {% for p in projects %}<option value="{{ p.id }}" {% if r.project_id==p.id %}selected{% endif %}>{{ p.code }} — {{ p.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <select name="account_id" class="form-select form-select-sm" required>
+                {% for a in accounts %}<option value="{{ a.id }}" {% if r.account_id==a.id %}selected{% endif %}>{{ a.code }} — {{ a.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-1"><button class="btn btn-sm btn-primary w-100">Save</button></div>
+          </form>
+        </td></tr>
+        {% endif %}
+      {% else %}
+        <tr><td colspan="5" class="text-muted">No expense codes yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if can_edit %}
+  <form method="post" class="card card-body shadow-sm">
+    <h5>Add expense code</h5>
+    <div class="row g-2">
+      <div class="col-md-2"><input name="code" class="form-control" placeholder="EXP-…" required></div>
+      <div class="col-md-3"><input name="description" class="form-control" placeholder="Description" required></div>
+      <div class="col-md-3">
+        <select name="project_id" class="form-select" required>
+          <option value="">Project</option>
+          {% for p in projects %}<option value="{{ p.id }}">{{ p.code }} — {{ p.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select name="account_id" class="form-select" required>
+          <option value="">Account</option>
+          {% for a in accounts %}<option value="{{ a.id }}">{{ a.code }} — {{ a.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1"><button class="btn btn-success w-100">Add</button></div>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
