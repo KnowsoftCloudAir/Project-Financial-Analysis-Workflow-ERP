@@ -12,7 +12,7 @@ def _rows(sql, **params):
     return db.session.execute(text(sql), params).mappings().all()
 
 from flask import (
-    Blueprint, render_template, request, redirect, url_for, flash,
+    Blueprint, render_template, request, redirect, url_for, flash, current_app,
     abort, send_file, current_app, jsonify,
 )
 from flask_login import login_required, current_user
@@ -144,47 +144,84 @@ def amount_words(amount):
     return text.strip().title() + ' Only'
 
 
+def _safe_map_rows(sql, params=None):
+    try:
+        rows = db.session.execute(text(sql), params or {}).mappings().all()
+        return [dict(r) for r in rows]
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return []
+
+
 def _staff():
-    return db.session.execute(text(
-        "SELECT id, full_name, email, role FROM users WHERE role != 'provider' AND (is_active IS TRUE OR is_active = 1) ORDER BY full_name"
-    )).mappings().all()
+    rows = _safe_map_rows(
+        "SELECT id, full_name, email, role FROM users WHERE role != 'provider' "
+        "AND (is_active IS TRUE OR is_active = 1 OR is_active IS NULL) ORDER BY full_name"
+    )
+    if not rows:
+        rows = _safe_map_rows("SELECT id, full_name, email, role FROM users ORDER BY full_name")
+    return rows
 
 
 def _projects():
-    return db.session.execute(text('SELECT id, code, name FROM fin_projects ORDER BY code')).mappings().all()
+    return _safe_map_rows('SELECT id, code, name FROM fin_projects ORDER BY code')
 
 
 def _expenses(project_id=None):
-    sql = 'SELECT id, code, description, project_id, account_id FROM fin_expense_codes'
     if project_id:
-        sql += ' WHERE project_id = :pid'
-    sql += ' ORDER BY code'
-    return db.session.execute(text(sql), {'pid': project_id} if project_id else {}).mappings().all()
+        return _safe_map_rows(
+            'SELECT id, code, description, project_id, account_id FROM fin_expense_codes WHERE project_id = :pid ORDER BY code',
+            {'pid': project_id},
+        )
+    return _safe_map_rows('SELECT id, code, description, project_id, account_id FROM fin_expense_codes ORDER BY code')
 
 
 def _budgets(expense_id=None):
-    sql = 'SELECT id, code, description, project_id, expense_code_id, amount FROM fin_budget_codes'
     if expense_id:
-        sql += ' WHERE expense_code_id = :eid'
-    sql += ' ORDER BY code'
-    return db.session.execute(text(sql), {'eid': expense_id} if expense_id else {}).mappings().all()
+        return _safe_map_rows(
+            'SELECT id, code, description, project_id, expense_code_id, amount FROM fin_budget_codes WHERE expense_code_id = :eid ORDER BY code',
+            {'eid': expense_id},
+        )
+    return _safe_map_rows('SELECT id, code, description, project_id, expense_code_id, amount FROM fin_budget_codes ORDER BY code')
 
 
 def _accounts():
-    return db.session.execute(text(
-        'SELECT id, code, name, account_type FROM fin_accounts WHERE (is_active IS TRUE OR is_active = 1) ORDER BY code'
-    )).mappings().all()
+    return _safe_map_rows(
+        'SELECT id, code, name, account_type FROM fin_accounts WHERE (is_active IS TRUE OR is_active = 1 OR is_active IS NULL) ORDER BY code'
+    )
 
 
 def _catalogue_products():
-    """Active products/services from the Product Catalogue for RFQ lines."""
+    """Active products/services from the Product Catalogue (same as /admin/products)."""
+    for sql in (
+        "SELECT id, name, method_code, unit, unit_cost, description FROM products WHERE COALESCE(is_active, true) = true ORDER BY name",
+        "SELECT id, name, method_code, unit, unit_cost, description FROM products WHERE is_active IS TRUE OR is_active = 1 ORDER BY name",
+        "SELECT id, name, method_code, unit, unit_cost, description FROM products ORDER BY name",
+        "SELECT id, name, unit, unit_cost FROM products ORDER BY name",
+    ):
+        rows = _safe_map_rows(sql)
+        if rows:
+            return rows
+    # ORM fallback
     try:
-        return _rows(
-            "SELECT id, name, method_code, unit, unit_cost, description "
-            "FROM products WHERE (is_active IS TRUE OR is_active = 1) ORDER BY name"
-        )
+        for m in db.Model.registry.mappers:
+            cls = m.class_
+            if getattr(cls, '__tablename__', None) == 'products':
+                prods = cls.query.order_by(cls.name).all()
+                return [{
+                    'id': int(p.id),
+                    'name': p.name or '',
+                    'method_code': getattr(p, 'method_code', '') or '',
+                    'unit': getattr(p, 'unit', None) or 'unit',
+                    'unit_cost': float(getattr(p, 'unit_cost', 0) or 0),
+                    'description': getattr(p, 'description', '') or '',
+                } for p in prods]
     except Exception:
-        return _rows("SELECT id, name, method_code, unit, unit_cost, description FROM products ORDER BY name")
+        pass
+    return []
 
 
 def _product_map():
@@ -417,16 +454,49 @@ def _codes(rfq):
 @login_required
 @_staff_required
 def rfq_home():
-    rows = Rfq.query.order_by(Rfq.id.desc()).all()
-    mine = [r for r in rows if r.reviewer_id == current_user.id and r.status == 'pending_review']
-    active = Award.query.filter(Award.status.in_(['accepted', 'active'])).order_by(Award.id.desc()).all()
-    return render_template('wf_rfq_home.html', rows=rows, mine=mine, active=active)
+    """RFQs awaiting approval + all RFQs (workflow + ERP)."""
+    rows = []
+    try:
+        rows = list(Rfq.query.order_by(Rfq.id.desc()).all())
+    except Exception:
+        rows = []
+    # Merge ERP RFQs so the shared form's records appear here for approval
+    try:
+        from erp_extension import ProcurementRFQ
+        if ProcurementRFQ is not None:
+            for er in ProcurementRFQ.query.order_by(ProcurementRFQ.id.desc()).all():
+                # Adapt to template fields
+                class _E:
+                    pass
+                e = _E()
+                e.id = er.id
+                e.rfq_no = er.rfq_no
+                e.title = er.title
+                e.status = er.status or 'open'
+                e.closing_at = getattr(er, 'created_at', None)
+                e._erp = True
+                e._erp_id = er.id
+                rows.append(e)
+    except Exception:
+        pass
+    pending = [r for r in rows if getattr(r, 'status', '') in ('pending_review', 'pending')]
+    mine = [r for r in pending if getattr(r, 'reviewer_id', None) == getattr(current_user, 'id', None) or _is_pm()]
+    try:
+        active = Award.query.filter(Award.status.in_(['accepted', 'active'])).order_by(Award.id.desc()).all()
+    except Exception:
+        active = []
+    return render_template(
+        'wf_rfq_home.html', rows=rows, mine=mine or pending, active=active, pending=pending,
+    )
 
 
 @wf_bp.route('/rfq/new', methods=['GET', 'POST'])
 @login_required
 @_staff_required
 def rfq_new():
+    """Same form as /erp/rfqs/new — keep one UI for both entry points."""
+    if request.method == 'GET':
+        return redirect(url_for('erp.rfq_new'))
     if request.method == 'POST':
         errors = []
         title = (request.form.get('title') or '').strip()
@@ -548,12 +618,39 @@ def rfq_new():
         db.session.commit()
         flash(f'{rfq.rfq_no} submitted to Program Manager for approval ({len(items)} line(s)).', 'success')
         return redirect(url_for('wf.rfq_detail', rid=rfq.id))
-    products = _catalogue_products()
-    return render_template(
-        'wf_rfq_form.html', staff=_staff(), projects=_projects(),
-        expenses=_expenses(), budgets=_budgets(),
-        products=products,
-    )
+    try:
+        products = _catalogue_products()
+        staff = _staff()
+        projects = _projects()
+        expenses = _expenses()
+        budgets = _budgets()
+    except Exception as e:
+        try:
+            current_app.logger.exception('rfq_new GET: %s', e)
+        except Exception:
+            pass
+        products, staff, projects, expenses, budgets = [], [], [], [], []
+        flash('RFQ form loaded with limited lookups (%s).' % type(e).__name__, 'warning')
+    if not products:
+        flash('No products in catalogue. Register them under Admin → Products.', 'warning')
+    try:
+        return render_template(
+            'wf_rfq_form.html', staff=staff, projects=projects,
+            expenses=expenses, budgets=budgets, products=products,
+            next_rfq_no=_next_rfq_no(),
+        )
+    except Exception as e:
+        try:
+            current_app.logger.exception('rfq_new render: %s', e)
+        except Exception:
+            pass
+        return (
+            '<div class="container py-4"><h3>Raise RFQ</h3>'
+            '<p class="text-danger">Form could not render (%s). '
+            '<a href="/erp/rfqs/new">Use ERP RFQ form</a> or '
+            '<a href="/admin/products">check products</a>.</p></div>' % type(e).__name__,
+            200, {'Content-Type': 'text/html; charset=utf-8'},
+        )
 
 
 @wf_bp.route('/rfq/<int:rid>')
@@ -789,38 +886,94 @@ def award_vendor(rid):
 @login_required
 @_staff_required
 def committee_pdf(rid):
+    """Standard procurement committee evaluation report (downloadable PDF)."""
     rfq = db.session.get(Rfq, rid) or abort(404)
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm)
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm,
+                            topMargin=16 * mm, bottomMargin=16 * mm)
     styles = getSampleStyleSheet()
-    story = [
-        Paragraph(f'Procurement committee report — {rfq.rfq_no}', styles['Title']),
-        Paragraph(rfq.title, styles['Heading2']),
-        Paragraph(rfq.description or '', styles['Normal']),
-        Spacer(1, 8),
-    ]
-    data = [['Vendor', 'Technical', 'Financial', 'Eligible', 'Amount']]
-    for row in _agg(rid):
+    story = []
+    story.append(Paragraph('PROCUREMENT COMMITTEE EVALUATION REPORT', styles['Title']))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(f'<b>RFQ / Reference:</b> {rfq.rfq_no}', styles['Normal']))
+    story.append(Paragraph(f'<b>Title:</b> {rfq.title}', styles['Normal']))
+    story.append(Paragraph(
+        f'<b>Project / Expense / Budget:</b> {rfq.project_code or "—"} / '
+        f'{rfq.expense_code or "—"} / {rfq.budget_code or "—"}', styles['Normal']))
+    story.append(Paragraph(
+        f'<b>Closing date:</b> {rfq.closing_at}', styles['Normal']))
+    story.append(Paragraph(
+        f'<b>Report date:</b> {datetime.utcnow().strftime("%Y-%m-%d %H:%M")} UTC', styles['Normal']))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph('<b>1. Purpose</b>', styles['Heading3']))
+    story.append(Paragraph(
+        'This report records the evaluation of quotations received against the RFQ terms of reference, '
+        'technical requirements and financial offers, for recommendation of award.',
+        styles['Normal']))
+    story.append(Paragraph('<b>2. Scope / description</b>', styles['Heading3']))
+    story.append(Paragraph(rfq.description or '—', styles['Normal']))
+    if rfq.service_terms:
+        story.append(Paragraph('<b>3. Conditions of service</b>', styles['Heading3']))
+        story.append(Paragraph(rfq.service_terms, styles['Normal']))
+    story.append(Paragraph('<b>4. Evaluation summary</b>', styles['Heading3']))
+    data = [['Vendor', 'Tech (avg)', 'Fin (avg)', 'Eligible (≥50 tech)', 'Quoted amount']]
+    rows = _agg(rid)
+    for row in rows:
         data.append([
             row['sub'].vendor_name,
             f"{row['tech']:.2f}",
-            '' if row['fin'] is None else f"{row['fin']:.2f}",
+            '—' if row['fin'] is None else f"{row['fin']:.2f}",
             'Yes' if row['eligible'] else 'No',
             f"{_d(row['sub'].total_amount):,.2f}",
         ])
-    table = Table(data, repeatRows=1)
+    if len(data) == 1:
+        data.append(['—', '—', '—', '—', 'No submissions scored yet'])
+    table = Table(data, repeatRows=1, colWidths=[45*mm, 25*mm, 25*mm, 35*mm, 35*mm])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1d4ed8')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6e6e')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f7f7')]),
     ]))
     story.append(table)
-    story.append(Spacer(1, 8))
-    story.append(Paragraph(f'Service must be provided as follows: {rfq.service_terms}', styles['Normal']))
+    story.append(Spacer(1, 10))
+    # Recommendation: highest eligible financial or lowest price among eligible
+    eligible = [r for r in rows if r['eligible']]
+    story.append(Paragraph('<b>5. Recommendation</b>', styles['Heading3']))
+    if eligible:
+        # Prefer lowest financial score rank if financial is average score; else lowest amount
+        try:
+            best = min(eligible, key=lambda r: (_d(r['sub'].total_amount), -(r['tech'] or 0)))
+            story.append(Paragraph(
+                f'Recommended vendor: <b>{best["sub"].vendor_name}</b> '
+                f'(quoted {_d(best["sub"].total_amount):,.2f}; technical {best["tech"]:.1f}).',
+                styles['Normal']))
+        except Exception:
+            story.append(Paragraph('Committee to confirm recommended vendor from eligible bids.', styles['Normal']))
+    else:
+        story.append(Paragraph('No eligible bidder yet (technical average must be ≥ 50).', styles['Normal']))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph('<b>6. Committee members</b>', styles['Heading3']))
+    members = CommitteeMember.query.filter_by(rfq_id=rid).all()
+    if members:
+        for m in members:
+            story.append(Paragraph(f'• {m.member_name}', styles['Normal']))
+    else:
+        story.append(Paragraph('No committee members recorded.', styles['Normal']))
+    story.append(Spacer(1, 16))
+    story.append(Paragraph(
+        'This report is generated from the Project Financial Management Workflow system for internal '
+        'procurement governance. Signatures may be appended offline as required by organisational policy.',
+        styles['Normal']))
+    story.append(Spacer(1, 20))
+    story.append(Paragraph('_________________________          _________________________', styles['Normal']))
+    story.append(Paragraph('Chairperson / Lead                              Date', styles['Normal']))
     doc.build(story)
     buf.seek(0)
-    return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=f'{rfq.rfq_no}-committee.pdf')
+    return send_file(buf, mimetype='application/pdf', as_attachment=True,
+                     download_name=f'{rfq.rfq_no}-committee-report.pdf')
 
 
 @wf_bp.route('/rfq/<int:rid>/pm', methods=['POST'])

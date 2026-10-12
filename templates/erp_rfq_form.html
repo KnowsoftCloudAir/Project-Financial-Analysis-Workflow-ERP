@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}New RFQ / Procurement{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page" style="max-width:1100px">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h3 class="mb-0"><i class="bi bi-file-earmark-text text-primary"></i> New RFQ / LTA</h3>
+      <p class="text-muted small mb-0">Catalogue lines · budget codes · TOR · unit cost optional (vendor fills on quote)</p>
+    </div>
+    <a href="{{ url_for('erp.rfqs_list') }}" class="btn btn-outline-secondary btn-sm">← RFQ list</a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">RFQ number</label>
+          <input class="form-control form-control-lg" name="rfq_no" value="{{ next_rfq_no }}" readonly>
+          <div class="form-text">Assigned automatically</div>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+          <input class="form-control form-control-lg" name="title" required placeholder="e.g. FP commodities – Q1 LTA call-off">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Project code</label>
+          <select class="form-select" name="project_code">
+            <option value="">— select —</option>
+            {% for p in projects %}
+            <option value="{{ p.code }}">{{ p.code }} — {{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Expense code</label>
+          <select class="form-select" name="expense_code">
+            <option value="">— select —</option>
+            {% for e in expenses %}
+            <option value="{{ e.code }}">{{ e.code }} — {{ e.description or e.name or '' }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Budget code</label>
+          <select class="form-select" name="budget_code">
+            <option value="">— select —</option>
+            {% for b in budgets %}
+            <option value="{{ b.code }}">{{ b.code }} — {{ b.description or '' }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Lot</label>
+          <select name="lot" class="form-select">
+            <option value="Lot 1 FP Commodities">Lot 1 FP Commodities</option>
+            <option value="Lot 2 Medical Consumables">Lot 2 Medical Consumables</option>
+            <option value="">Other</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Upload TOR (PDF) <span class="text-danger">*</span></label>
+          <input class="form-control" type="file" name="tor" accept=".pdf,application/pdf" required>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Description / scope</label>
+          <textarea class="form-control" name="description" rows="2" placeholder="Brief scope"></textarea>
+        </div>
+      </div>
+
+      <h5 class="mt-4 mb-2">Commodities (from catalogue)</h5>
+      {% if not products %}
+      <div class="alert alert-warning">No products in the catalogue. Register products first.</div>
+      {% endif %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="width:3%">#</th>
+              <th>Description (catalogue)</th>
+              <th style="width:12%">Qty</th>
+              <th style="width:10%">Unit</th>
+              <th style="width:14%">Unit cost <span class="text-muted fw-normal">(optional)</span></th>
+              <th style="width:14%">Total</th>
+              <th style="width:4%"></th>
+            </tr>
+          </thead>
+          <tbody id="items">
+            {% for n in range(1, 11) %}
+            <tr class="item-row">
+              <td class="text-muted line-no">{{ n }}</td>
+              <td>
+                <select class="form-select form-select-sm product-select" name="item_product_id" {% if n==1 %}required{% endif %}>
+                  <option value="">— Select commodity —</option>
+                  {% for p in products %}
+                  <option value="{{ p.id }}" data-unit="{{ p.unit or 'unit' }}" data-cost="{{ p.unit_cost or '' }}">
+                    {{ p.name }}{% if p.method_code %} ({{ p.method_code }}){% endif %}
+                  </option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td><input class="form-control form-control-sm qty-field" name="item_qty" type="number" min="0" step="any" value="{% if n==1 %}1{% endif %}" {% if n==1 %}required{% endif %}></td>
+              <td><input class="form-control form-control-sm unit-field" name="item_unit" value="unit" readonly></td>
+              <td><input class="form-control form-control-sm price-field" name="item_unit_cost" type="number" min="0" step="any" placeholder="Vendor fills"></td>
+              <td><input class="form-control form-control-sm total-field" name="item_total" type="number" step="any" readonly placeholder="—"></td>
+              <td><button type="button" class="btn btn-outline-danger btn-sm remove-item">&times;</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="table-light">
+              <td colspan="5" class="text-end fw-semibold">Grand total</td>
+              <td><input class="form-control form-control-sm fw-bold" id="grandTotal" readonly placeholder="—"></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="addItem">+ Add line (max 10)</button>
+      <p class="small text-muted mt-2">Unit cost and totals may be left blank; the vendor completes them on quotation. After award and goods receipt, lines post to Main Warehouse and a payment request can be raised.</p>
+
+      <div class="mt-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-lg px-4" {% if not products %}disabled{% endif %}>
+          <i class="bi bi-send"></i> Submit RFQ
+        </button>
+        <a href="{{ url_for('erp.rfqs_list') }}" class="btn btn-link">Cancel</a>
+      </div>
+    </div>
+  </form>
+</div>
+<script>
+(function(){
+  function recalc(row){
+    var q=parseFloat(row.querySelector('.qty-field').value)||0;
+    var p=parseFloat(row.querySelector('.price-field').value);
+    var t=row.querySelector('.total-field');
+    if(!isNaN(p)&&p>=0) t.value=(q*p).toFixed(2); else t.value='';
+    var g=0, any=false;
+    document.querySelectorAll('.item-row').forEach(function(r){
+      var v=parseFloat(r.querySelector('.total-field').value);
+      if(!isNaN(v)){ g+=v; any=true; }
+    });
+    document.getElementById('grandTotal').value = any ? g.toFixed(2) : '';
+  }
+  function bind(row){
+    var sel=row.querySelector('.product-select');
+    sel.addEventListener('change', function(){
+      var o=sel.selectedOptions[0];
+      if(o){ row.querySelector('.unit-field').value=o.dataset.unit||'unit';
+        if(o.dataset.cost) row.querySelector('.price-field').value=o.dataset.cost; }
+      recalc(row);
+    });
+    row.querySelector('.qty-field').addEventListener('input', function(){recalc(row);});
+    row.querySelector('.price-field').addEventListener('input', function(){recalc(row);});
+  }
+  document.querySelectorAll('.item-row').forEach(bind);
+  function renumber(){ document.querySelectorAll('.item-row').forEach(function(r,i){ r.querySelector('.line-no').textContent=i+1; }); }
+  document.getElementById('addItem').addEventListener('click', function(){
+    var rows=document.querySelectorAll('.item-row');
+    if(rows.length>=10){ alert('Maximum 10 lines'); return; }
+    var tpl=rows[0].cloneNode(true);
+    tpl.querySelectorAll('input').forEach(function(el){
+      if(el.classList.contains('qty-field')) el.value='1';
+      else if(el.classList.contains('unit-field')) el.value='unit';
+      else el.value='';
+    });
+    tpl.querySelector('select').selectedIndex=0;
+    tpl.querySelector('select').required=false;
+    document.getElementById('items').appendChild(tpl);
+    bind(tpl); renumber();
+  });
+  document.getElementById('items').addEventListener('click', function(e){
+    if(e.target.classList.contains('remove-item')){
+      if(document.querySelectorAll('.item-row').length<=1) return;
+      e.target.closest('.item-row').remove(); renumber();
+      document.querySelectorAll('.item-row').forEach(recalc);
+    }
+  });
+})();
+</script>
+{% endblock %}
