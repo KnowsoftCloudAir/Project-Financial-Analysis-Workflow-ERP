@@ -4,7 +4,102 @@
 <div class="container-fluid py-3">
   <h3>Procurement — vendor REF links</h3>
   <p class="text-muted">Each vendor receives a private link. After the deadline, committee links open for scoring. Inventory and finance stay in their own sections.</p>
-  <div class="row g-3">
+  
+  {% if created_link %}
+  <div class="alert alert-success d-flex flex-wrap align-items-center gap-2">
+    <span class="fw-semibold">Link ready{% if created_rfq %} for {{ created_rfq }}{% endif %}:</span>
+    <input type="text" class="form-control form-control-sm" style="max-width:420px" id="createdLinkBox" value="{{ created_link }}" readonly>
+    <button type="button" class="btn btn-sm btn-outline-success" onclick="navigator.clipboard.writeText(document.getElementById('createdLinkBox').value); this.textContent='Copied!';">Copy link</button>
+  </div>
+  {% endif %}
+
+  {% if approved_rfqs is defined and approved_rfqs %}
+  <div class="card mb-3 border-success shadow-sm">
+    <div class="card-header bg-success-subtle fw-semibold">
+      Approved RFQs — create / share bidder links
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 align-middle">
+        <thead><tr><th>RFQ</th><th>Title</th><th>Status</th><th style="min-width:280px"></th></tr></thead>
+        <tbody>
+        {% for r in approved_rfqs %}
+          <tr>
+            <td class="fw-semibold">{{ r.rfq_no }}</td>
+            <td>{{ r.title }}</td>
+            <td><span class="badge text-bg-success">{{ r.status }}</span></td>
+            <td class="text-nowrap">
+              {% if r._erp is defined and r._erp %}
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('erp.rfq_detail', rid=r.id) }}">Open ERP RFQ</a>
+              <button type="button" class="btn btn-sm btn-primary"
+                      data-bs-toggle="modal" data-bs-target="#vendorLinkModal"
+                      data-rid="{{ r.id }}" data-rfq="{{ r.rfq_no }}" data-title="{{ r.title|e }}">
+                Create vendor link
+              </button>
+              {% else %}
+              <a class="btn btn-sm btn-primary" href="{{ url_for('wf.rfq_detail', rid=r.id) }}">Open / vendor link</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="modal fade" id="vendorLinkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form method="post" class="modal-content" id="vendorLinkForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Create bidder link</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">RFQ: <strong id="vlRfqNo"></strong> — <span id="vlTitle"></span></p>
+          <div class="mb-3">
+            <label class="form-label">Link type</label>
+            <select class="form-select" name="mode" id="vlMode">
+              <option value="general">General link (any vendor — name entered on form)</option>
+              <option value="vendor">Specific registered vendor</option>
+            </select>
+          </div>
+          <div class="mb-3" id="vlVendorWrap" style="display:none">
+            <label class="form-label">Vendor</label>
+            <select class="form-select" name="vendor_id" id="vlVendor">
+              <option value="">— select vendor —</option>
+              {% for v in vendors or [] %}
+              <option value="{{ v.id }}">{{ v.name }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Register vendors under ERP → Vendors, or use General link.</div>
+          </div>
+          <p class="small text-muted mb-0">After create, use <strong>Copy link</strong> at the top of this page to share.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var modal = document.getElementById('vendorLinkModal');
+    if (!modal) return;
+    modal.addEventListener('show.bs.modal', function (ev) {
+      var btn = ev.relatedTarget;
+      if (!btn) return;
+      var rid = btn.getAttribute('data-rid');
+      document.getElementById('vlRfqNo').textContent = btn.getAttribute('data-rfq') || '';
+      document.getElementById('vlTitle').textContent = btn.getAttribute('data-title') || '';
+      document.getElementById('vendorLinkForm').action = '/erp/rfqs/' + rid + '/vendor-link';
+    });
+    document.getElementById('vlMode').addEventListener('change', function(){
+      document.getElementById('vlVendorWrap').style.display = this.value === 'vendor' ? 'block' : 'none';
+    });
+  })();
+  </script>
+  {% endif %}
+<div class="row g-3">
     <div class="col-lg-7">
       <table class="table card">
         <thead><tr><th>REF</th><th>Title</th><th>Deadline</th><th>Status</th></tr></thead>

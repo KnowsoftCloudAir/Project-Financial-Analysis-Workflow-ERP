@@ -1,23 +1,30 @@
 {% extends "base.html" %}
-{% block title %}Client assigned list{% endblock %}
+{% block title %}Clients assigned{% endblock %}
 {% block content %}
-<div class="container py-3">
-  <h2>Client assigned list</h2>
+<div class="container-fluid py-3">
+  <h2>Clients assigned</h2>
+  <p class="text-muted small">Facility staff see only their facility; managers see all.</p>
   <div class="table-responsive card shadow-sm">
-    <table class="table table-sm table-hover mb-0">
-      <thead><tr><th>Date</th><th>Facility</th><th>Client code</th><th>Method</th><th>Outcome</th><th></th></tr></thead>
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr><th>Date</th><th>Facility</th><th>Ref</th><th>Name</th><th>Phone</th><th>Sex</th><th>Age</th><th>Method</th><th>Outcome</th><th></th></tr>
+      </thead>
       <tbody>
       {% for r in rows %}
         <tr>
           <td>{{ r.encounter_date or r.created_at }}</td>
           <td>{{ fac_names.get(r.facility_id, r.facility_id) }}</td>
-          <td>{{ r.client_code or '—' }}</td>
+          <td class="fw-semibold">{{ r.client_code or '—' }}</td>
+          <td>{{ r['client_name'] if 'client_name' in r.keys() else '—' }}</td>
+          <td>{{ r['client_phone'] if 'client_phone' in r.keys() else '—' }}</td>
+          <td>{{ r['client_sex'] if 'client_sex' in r.keys() else '—' }}</td>
+          <td>{{ r['client_age'] if 'client_age' in r.keys() else '—' }}</td>
           <td>{{ r.method_accepted or '—' }}</td>
           <td>{{ r.outcome or '—' }}</td>
-          <td><a href="{{ url_for('logistics.uptake_client_detail', cid=r.id) }}">Open</a></td>
+          <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('logistics.uptake_client_detail', cid=r.id) }}">Open</a></td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="text-muted text-center py-4">No client records yet.</td></tr>
+        <tr><td colspan="10" class="text-muted text-center py-4">No client records yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>
