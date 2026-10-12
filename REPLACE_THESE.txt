@@ -1,0 +1,20 @@
+REPLACE THESE FILES IN THE GITHUB REPO ROOT, THEN REDEPLOY.
+The live GitHub server.py does not contain the upgrade. Uploading templates only will not change Railway.
+
+Must replace:
+server.py
+ops_upgrade.py
+facility_flow.py
+finance_core.py
+workflow_upgrade.py
+fmss_align.py
+ifrs_reports.py
+templates/ops_inventory.html
+templates/ops_section.html
+templates/fin_coa.html
+templates/fin_statements.html
+templates/expense_detail.html
+templates/login.html
+templates/staff_dashboard.html
+
+After deploy, https://financeerp.knowsoft.org.uk/upgrade-status must show UPGRADE-2026-10-09.
