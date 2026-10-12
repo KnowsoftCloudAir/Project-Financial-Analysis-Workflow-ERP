@@ -1,28 +1,12 @@
-RFQ + Learning + Client feedback fix — 11 Oct 2026
+FIX: Program Core menu + RFQ products from admin/products
 
-Upload to GitHub ROOT (overwrite):
+1. templates/base.html
+   - Removed "Client feedback" under Program Core sidebar
+   - Program Core now only: Learning, reports, homepage
 
-  workflow_upgrade.py
-  learning_data.py
-  server.py (if you have latest)
-  templates/wf_rfq_form.html
-  templates/wf_rfq_detail.html
-  templates/learning_hub.html
-  templates/client_feedback_hub.html
-  templates/client_feedback_dashboard.html
+2. erp_extension.py
+   - RFQ commodity dropdown loads from same products table as /admin/products
+   - Uses Product ORM first, then SQL fallbacks
+   - Warns if catalogue is empty
 
-RFQ flow after deploy:
-  1. /ops/rfq/new — up to 10 catalogue lines (qty, unit, optional price/total), TOR PDF
-  2. Submits → Program Manager approval (pending_review)
-  3. PM Approves → status approved
-  4. Procurement: Create vendor share link on RFQ detail page
-
-Learning:
-  - Report dashboard access fixed for admins
-  - Client feedback icon on Learning hub → /learning/feedback (share link + list + ambassadors)
-
-Verify:
-  /ops/rfq/new
-  /learning
-  /learning/feedback
-  /learning/report
+Upload both files to GitHub ROOT (overwrite), push main, redeploy Railway.
