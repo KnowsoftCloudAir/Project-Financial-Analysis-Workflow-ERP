@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}User Manual — How everything works{% endblock %}
+{% block extra_css %}
+<style>
+  .manual-hero {
+    background: linear-gradient(135deg, #0d6e6e 0%, #0a4f4f 55%, #1a9a8a 100%);
+    color: #fff; border-radius: 1.1rem; padding: 1.75rem 1.5rem; margin-bottom: 1.5rem;
+    box-shadow: 0 12px 32px rgba(13,110,110,.25);
+  }
+  .manual-toc a { text-decoration: none; }
+  .manual-toc .list-group-item { border-left: 3px solid #0d6e6e; }
+  .frame {
+    border: 1px solid rgba(13,110,110,.15);
+    border-radius: 14px; background: #fff;
+    box-shadow: 0 6px 18px rgba(15,60,60,.08);
+    margin-bottom: 1.5rem; overflow: hidden;
+  }
+  .frame-h {
+    background: linear-gradient(90deg, #f0faf9, #fff);
+    border-bottom: 1px solid rgba(13,110,110,.12);
+    padding: .85rem 1.15rem; font-weight: 700; color: #0a4f4f;
+  }
+  .frame-b { padding: 1.15rem 1.25rem; }
+  .flow-box {
+    background: #f8fbfb; border: 1px dashed #9ec5c3; border-radius: 12px;
+    padding: 1rem; margin: 1rem 0; overflow-x: auto;
+  }
+  .step-pill {
+    display: inline-block; background: #0d6e6e; color: #fff;
+    border-radius: 999px; padding: .15rem .65rem; font-size: .75rem; font-weight: 600;
+  }
+  .role-chip {
+    display: inline-block; background: #e8f4f4; color: #0a4f4f;
+    border-radius: 8px; padding: .2rem .55rem; font-size: .8rem; margin: .15rem;
+  }
+  .mermaid { text-align: center; }
+  h2.sec { scroll-margin-top: 5rem; color: #0a4f4f; margin-top: 2rem; }
+  .legend span { margin-right: .75rem; font-size: .85rem; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page" style="max-width:1100px">
+
+  <div class="manual-hero">
+    <h1 class="h3 mb-1"><i class="bi bi-book"></i> User Manual</h1>
+    <p class="mb-0 opacity-90">Project Financial Management Workflow (CONTRAconnect ERP) — how modules connect, who does what, and end-to-end flows.</p>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-3">
+      <div class="list-group manual-toc sticky-top" style="top:1rem">
+        <a class="list-group-item list-group-item-action" href="#overview">1. Overview</a>
+        <a class="list-group-item list-group-item-action" href="#roles">2. Roles & access</a>
+        <a class="list-group-item list-group-item-action" href="#big-picture">3. System map</a>
+        <a class="list-group-item list-group-item-action" href="#finance-setup">4. Finance setup</a>
+        <a class="list-group-item list-group-item-action" href="#budget-plan">5. Budget (Benin PLAN)</a>
+        <a class="list-group-item list-group-item-action" href="#procurement">6. Procurement / RFQ</a>
+        <a class="list-group-item list-group-item-action" href="#inventory">7. Inventory & uptake</a>
+        <a class="list-group-item list-group-item-action" href="#learning">8. Learning & feedback</a>
+        <a class="list-group-item list-group-item-action" href="#cash">9. Cash & statements</a>
+        <a class="list-group-item list-group-item-action" href="#dashboard">10. Dashboards</a>
+        <a class="list-group-item list-group-item-action" href="#checklist">11. Quick checklist</a>
+      </div>
+    </div>
+
+    <div class="col-lg-9">
+
+      <!-- 1 -->
+      <h2 class="sec" id="overview">1. Overview</h2>
+      <div class="frame">
+        <div class="frame-h">What this application is for</div>
+        <div class="frame-b">
+          <p>The system supports the Benin City contraceptive service programme: <strong>planning budget</strong>, <strong>buying goods/services</strong>, <strong>receiving stock</strong>, <strong>dispatching to kiosks/PHCs</strong>, <strong>recording uptake</strong>, <strong>learning data</strong>, and <strong>financial control</strong> (codes, expenses, cash reconciliation, statements).</p>
+          <p class="mb-0">Data flows one way where possible: <em>Budget → RFQ → Award → GRN → Warehouse → Dispatch → Facility → Uptake</em>, with accounting entries posted at key hand-offs.</p>
+        </div>
+      </div>
+
+      <!-- 2 -->
+      <h2 class="sec" id="roles">2. Roles & access</h2>
+      <div class="frame">
+        <div class="frame-h">Who uses which parts</div>
+        <div class="frame-b">
+          <p>
+            <span class="role-chip">General Admin</span>
+            <span class="role-chip">Project Manager (PM)</span>
+            <span class="role-chip">Finance Admin / Analyst</span>
+            <span class="role-chip">Programme / Logistics</span>
+            <span class="role-chip">Committee member</span>
+            <span class="role-chip">Vendor (public links only)</span>
+            <span class="role-chip">Facility provider</span>
+          </p>
+          <ul class="mb-0">
+            <li><strong>PM</strong> — approves RFQs, awards contracts, final expense approval, learning oversight.</li>
+            <li><strong>Finance</strong> — chart of accounts, project/expense/budget codes, expenses review, cash recon, statements.</li>
+            <li><strong>Procurement / logistics</strong> — raise RFQ, vendor links, GRN, dispatch, inventory sheets.</li>
+            <li><strong>Vendors</strong> — open private link only (no app menu); submit quote or accept award.</li>
+            <li><strong>Facility staff</strong> — uptake, assigned clients, limited inventory view.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 3 -->
+      <h2 class="sec" id="big-picture">3. System map</h2>
+      <div class="frame">
+        <div class="frame-h">How modules connect</div>
+        <div class="frame-b">
+          <div class="flow-box">
+            <pre class="mermaid">
+flowchart TB
+  subgraph SETUP["Finance setup"]
+    COA[Chart of accounts]
+    PRJ[Project codes]
+    EXP[Expense codes]
+    BUD[Budget codes / Benin PLAN]
+  end
+  subgraph PROC["Procurement"]
+    RFQ[Raise RFQ]
+    PMA[PM approval]
+    VL[Vendor links]
+    BID[Bids / Quotes]
+    COM[Committee scores]
+    AWD[Award + Share]
+    PO[Purchase order]
+  end
+  subgraph STOCK["Inventory"]
+    GRN[Goods received note]
+    WH[Central warehouse]
+    DIS[Dispatch to kiosk/PHC]
+    INV[Inventory sheets]
+    UPT[Uptake administration]
+  end
+  subgraph LEARN["Program core"]
+    LQ[Learning H / LQ1–LQ11]
+    FB[Client feedback icon]
+    AMB[Ambassador referrals]
+  end
+  subgraph FIN["Books"]
+    EXPENSE[Expense claims]
+    CASH[Cash reconciliation]
+    STMT[Financial statements]
+    DASH[Executive dashboard]
+  end
+  COA --> EXP
+  PRJ --> EXP --> BUD
+  BUD --> RFQ
+  RFQ --> PMA --> VL --> BID --> COM --> AWD --> PO --> GRN --> WH --> DIS --> INV --> UPT
+  AWD --> EXPENSE
+  GRN --> STMT
+  CASH --> STMT
+  LQ --> DASH
+  UPT --> DASH
+  EXPENSE --> CASH
+            </pre>
+          </div>
+          <p class="small text-muted mb-0">Solid path = operational hand-off. Finance statements and the dashboard read live counts from these tables.</p>
+        </div>
+      </div>
+
+      <!-- 4 -->
+      <h2 class="sec" id="finance-setup">4. Finance setup</h2>
+      <div class="frame">
+        <div class="frame-h">Codes (create → edit → use)</div>
+        <div class="frame-b">
+          <ol>
+            <li><span class="step-pill">1</span> <strong>Chart of accounts</strong> — <code>/finance/coa</code> — account codes (Asset, Expense, Cash, etc.).</li>
+            <li><span class="step-pill">2</span> <strong>Project codes</strong> — <code>/finance/projects</code> — e.g. PRJ-FP.</li>
+            <li><span class="step-pill">3</span> <strong>Expense codes</strong> — <code>/finance/expense-codes</code> — each links <em>one project + one account</em>.</li>
+            <li><span class="step-pill">4</span> <strong>Budget codes</strong> — <code>/finance/budget-codes</code> — each links an expense code (project follows) + amount and dates.</li>
+          </ol>
+          <p><strong>Rule:</strong> new codes can always be added. Codes can be <em>edited</em> anytime. <em>Delete</em> only if unused; if linked to transactions, the system <strong>deactivates</strong> instead of hard-delete.</p>
+          <div class="flow-box">
+            <pre class="mermaid">
+flowchart LR
+  A[COA account] --> B[Expense code]
+  C[Project code] --> B
+  B --> D[Budget code]
+  D --> E[RFQ / payments / PLAN template]
+            </pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5 -->
+      <h2 class="sec" id="budget-plan">5. Budget template (Benin PLAN)</h2>
+      <div class="frame">
+        <div class="frame-h">Path: <code>/ops/budget-template</code></div>
+        <div class="frame-b">
+          <p>Shows budget lines in the <strong>Benin PLAN</strong> layout: Category, Operation title, Pilot (Apr 2026–27), Full scale (Apr 2027–28), TOTAL, Comments, PO, Supplier, Email, dates, Payment status, Packaging.</p>
+          <ul>
+            <li>Lines come from <strong>Finance → Budget codes</strong> (codes like <code>3.1.1</code> group under Staff, Consultants, Services, Goods…).</li>
+            <li><strong>Edit</strong> pilot / scale / total / comments / procurement fields → <strong>Save all edits</strong>.</li>
+            <li><strong>Download Excel</strong> exports the same columns as the PLAN workbook.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 6 -->
+      <h2 class="sec" id="procurement">6. Procurement / RFQ end-to-end</h2>
+      <div class="frame">
+        <div class="frame-h">Raise → Approve → Vendor link → Bid → Evaluate → Award → Share → Accept → GRN</div>
+        <div class="frame-b">
+          <div class="flow-box">
+            <pre class="mermaid">
+sequenceDiagram
+  participant PO as Procurement officer
+  participant PM as Program Manager
+  participant V as Vendor
+  participant CM as Committee
+  participant WH as Warehouse
+  PO->>PO: Raise RFQ (catalogue lines + TOR)
+  PO->>PM: Status pending_review
+  PM->>PM: Approve on RFQ desk / ERP detail
+  PO->>V: Create vendor link (general or named)
+  V->>PO: Submit quotation PDF
+  PO->>CM: Bids appear under ERP RFQs
+  CM->>CM: Score technical / financial
+  PO->>PM: Recommend for award
+  PM->>PM: PM Award + PO created
+  PO->>V: Share accept/reject link
+  V->>V: Accept + invoice + download contract
+  PO->>WH: GRN from winning lines → Main Warehouse
+            </pre>
+          </div>
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>Step</th><th>Where</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>Raise RFQ</td><td><code>/erp/rfqs/new</code> or <code>/ops/rfq/new</code></td><td>Lines from product catalogue; TOR PDF; codes</td></tr>
+              <tr><td>PM approval</td><td><code>/ops/rfq</code> or My workspace pending list</td><td>Status <em>approved</em></td></tr>
+              <tr><td>Vendor link</td><td><code>/ops/procurement</code> → Create vendor link</td><td>Public form, no app menu</td></tr>
+              <tr><td>Bids</td><td><code>/erp/rfqs</code> → open RFQ → Bids / Quotes</td><td>Submitted quotes listed</td></tr>
+              <tr><td>Evaluate / Recommend</td><td>RFQ detail actions</td><td>Recommended → PM Award → Share</td></tr>
+              <tr><td>GRN / PO</td><td><code>/erp/pos</code> + logistics GRN</td><td>Stock into central warehouse</td></tr>
+            </tbody>
+          </table>
+          <p class="mb-0 small text-muted">Vendor pages use a standalone portal (no Executive Dashboard / sidebar).</p>
+        </div>
+      </div>
+
+      <!-- 7 -->
+      <h2 class="sec" id="inventory">7. Inventory, dispatch & uptake</h2>
+      <div class="frame">
+        <div class="frame-h">Warehouse first, then facilities</div>
+        <div class="frame-b">
+          <div class="flow-box">
+            <pre class="mermaid">
+flowchart LR
+  GRN[GRN / procurement receipt] --> WH[Main Warehouse sheet]
+  WH --> DIS[Dispatch]
+  DIS --> K[Kiosk inventory]
+  DIS --> P[PHC inventory]
+  K --> U[Uptake / administered]
+  P --> U
+  K <--> T[Transfer]
+  P <--> T
+  T --> WH
+            </pre>
+          </div>
+          <ul>
+            <li><strong>Inventory position</strong> <code>/ops/inventory</code> — opening, received, dispatched, returned, administered, balance; warehouse listed first.</li>
+            <li><strong>Product catalogue</strong> — master commodities (same source as RFQ dropdown and Admin → Products).</li>
+            <li><strong>Uptake</strong> <code>/ops/uptake</code> — icon hub: record uptake, clients assigned, transfers, inventory, catalogue.</li>
+            <li>Accounting intent: receipt Dr Inventory / Cr AP or Cash; administer Dr expense / Cr inventory.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 8 -->
+      <h2 class="sec" id="learning">8. Learning & client feedback</h2>
+      <div class="frame">
+        <div class="frame-h">Program Core</div>
+        <div class="frame-b">
+          <ul>
+            <li><strong>Learning data</strong> — forms H and LQ1–LQ11; staff see assigned parts, admin sees all.</li>
+            <li><strong>Client feedback</strong> — icon on the Learning dashboard (not a second menu under Program Core): share link, received feedback list, ambassador referral scores.</li>
+            <li><strong>Learning report</strong> — aggregated view for PM / admin.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 9 -->
+      <h2 class="sec" id="cash">9. Expenses, cash reconciliation & statements</h2>
+      <div class="frame">
+        <div class="frame-h">Money out and books</div>
+        <div class="frame-b">
+          <div class="flow-box">
+            <pre class="mermaid">
+flowchart TB
+  E[Expense claim /invoice] --> F[Finance review]
+  F --> PM[PM approval]
+  PM --> PAY[Mark paid / post]
+  PAY --> CASH[Cash reconciliation]
+  CASH --> ST[Statements / trial balance]
+  J[Journals from GRN & adjustments] --> ST
+            </pre>
+          </div>
+          <ul class="mb-0">
+            <li><strong>Expenses</strong> — <code>/expenses</code></li>
+            <li><strong>Cash reconciliation</strong> — <code>/ops/cash-recon</code> — tick lines, bank balance, adjustments, save session</li>
+            <li><strong>Statements</strong> — <code>/finance/statements</code> — statement of financial position / performance style pack</li>
+            <li><strong>Trial balance / ledger</strong> — under Finance section</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 10 -->
+      <h2 class="sec" id="dashboard">10. Dashboards</h2>
+      <div class="frame">
+        <div class="frame-h">Live indicators</div>
+        <div class="frame-b">
+          <ul class="mb-0">
+            <li><strong>My workspace</strong> <code>/staff</code> — pending RFQs for PM, learning shortcuts, invoices.</li>
+            <li><strong>Executive dashboard</strong> <code>/dashboard</code> — counts of facilities, products, RFQs, POs, stock, finance (reads live ERP/finance tables).</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 11 -->
+      <h2 class="sec" id="checklist">11. Quick start checklist</h2>
+      <div class="frame">
+        <div class="frame-h">First-time programme setup</div>
+        <div class="frame-b">
+          <ol class="mb-0">
+            <li>Create COA → Projects → Expense codes → Budget codes.</li>
+            <li>Register products (Admin → Products) and facilities (warehouse, kiosks, PHCs).</li>
+            <li>Register vendors (ERP → Vendors).</li>
+            <li>Raise RFQ with catalogue lines + TOR → PM approves → Create vendor link.</li>
+            <li>Receive bids → evaluate → recommend → PM award → Share → vendor accepts.</li>
+            <li>Post GRN → warehouse stock → dispatch → uptake.</li>
+            <li>Reconcile cash → review statements → check dashboard KPIs.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="alert alert-light border mt-3">
+        <strong>Tip:</strong> If a page shows a database transaction error, redeploy the latest fix and retry; the app now rolls back failed Postgres transactions automatically.
+        Open this manual anytime from <code>/user-manual</code>.
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' });
+</script>
+{% endblock %}
