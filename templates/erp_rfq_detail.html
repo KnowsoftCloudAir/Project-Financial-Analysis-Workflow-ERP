@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ rfq.rfq_no }}{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <a href="{{ url_for('erp.rfqs_list') }}" class="btn btn-sm btn-outline-secondary mb-2">← RFQs</a>
+  <h3>{{ rfq.rfq_no }} — {{ rfq.title }}</h3>
+  <p class="text-muted">Lot: <strong>{{ rfq.lot or '—' }}</strong> · Status: <span class="badge bg-secondary">{{ rfq.status }}</span> · Eval: {{ rfq.evaluation_method }}</p>
+  
+  {% if codes %}
+  <p class="small">Project <strong>{{ codes.project_code or '—' }}</strong>
+     · Expense <strong>{{ codes.expense_code or '—' }}</strong>
+     · Budget <strong>{{ codes.budget_code or '—' }}</strong>
+     {% if tor_path %}· <span class="text-success">TOR uploaded</span>{% endif %}
+  </p>
+  {% endif %}
+  {% if line_items %}
+  <div class="card mb-3"><div class="card-header fw-semibold">RFQ line items</div>
+  <div class="table-responsive"><table class="table table-sm mb-0">
+    <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit cost</th><th>Total</th></tr></thead>
+    <tbody>
+    {% for it in line_items %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ it.name }}</td>
+        <td>{{ it.qty }}</td>
+        <td>{{ it.unit or 'unit' }}</td>
+        <td>{% if it.unit_cost %}{{ '%.2f'|format(it.unit_cost) }}{% else %}<em class="text-muted">vendor</em>{% endif %}</td>
+        <td>{% if it.total %}{{ '%.2f'|format(it.total) }}{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div></div>
+  {% endif %}
+
+
+
+  {% if rfq.status in ['pending_review', 'pending'] %}
+  <form method="post" action="{{ url_for('erp.rfq_approve', rid=rfq.id) }}" class="card card-body mb-3 border-warning">
+    <p class="mb-2 fw-semibold">Program Manager approval required before bidder links.</p>
+    <button class="btn btn-success me-2" name="action" value="approve">Approve</button>
+    <button class="btn btn-outline-danger" name="action" value="return">Return</button>
+  </form>
+  {% endif %}
+  {% if rfq.status in ['approved', 'open'] %}
+  <div class="alert alert-success">Approved — open <a href="{{ url_for('ops.procurement_home') }}">Procurement</a> to manage vendor links, or continue evaluation below.</div>
+  {% endif %}
+  <div class="d-flex gap-2 mb-3">
+    <form method="post" action="{{ url_for('erp.rank_financial', rid=rfq.id) }}">
+      <button class="btn btn-sm btn-primary">Rank financial (lowest price among technical pass)</button>
+    </form>
+  </div>
+
+  
+  {% if request.args.get('award_link') %}
+  <div class="alert alert-success d-flex flex-wrap gap-2 align-items-center">
+    <span class="fw-semibold">Award link for vendor:</span>
+    <input class="form-control form-control-sm" style="max-width:420px" id="awardLinkBox" readonly value="{{ request.args.get('award_link') }}">
+    <button type="button" class="btn btn-sm btn-outline-success" onclick="navigator.clipboard.writeText(document.getElementById('awardLinkBox').value);this.textContent='Copied!'">Copy</button>
+  </div>
+  {% endif %}
+<div class="card">
+    <div class="card-header"><strong>Bids / Quotes</strong></div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Vendor</th><th>Total</th><th>Prelim</th><th>Technical</th><th>Fin rank</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+        {% for q in quotes %}
+          <tr>
+            <td>{{ q.vendor_name }}</td>
+            <td>{{ '{:,.0f}'.format(q.total_amount or 0) }}</td>
+            <td>{% if q.preliminary_pass %}✓{% else %}—{% endif %}</td>
+            <td>{% if q.technical_pass %}Pass ({{ q.technical_score }}){% elif q.status=='rejected' %}Fail{% else %}Pending{% endif %}</td>
+            <td>{{ q.financial_rank or '—' }}</td>
+            <td>{{ q.status }}</td>
+            <td class="text-nowrap">
+              {% if q.status in ('submitted','preliminary','technical') and not q.technical_pass %}
+              <form method="post" action="{{ url_for('erp.evaluate_technical', qid=q.id) }}" class="d-inline">
+                <input type="hidden" name="pass_fail" value="1"><input type="hidden" name="score" value="85">
+                <button class="btn btn-sm btn-success">Tech Pass</button>
+              </form>
+              <form method="post" action="{{ url_for('erp.evaluate_technical', qid=q.id) }}" class="d-inline">
+                <input type="hidden" name="pass_fail" value="0"><input type="hidden" name="comment" value="Does not meet specs">
+                <button class="btn btn-sm btn-outline-danger">Tech Fail</button>
+              </form>
+              {% endif %}
+              {% if q.status in ('submitted','technical') or q.technical_pass %}
+              <form method="post" action="{{ url_for('erp.recommend_award', rid=rfq.id, qid=q.id) }}" class="d-inline"
+                    onsubmit="return confirm('Recommend {{ q.vendor_name }} for award?')">
+                <button class="btn btn-sm btn-warning">Recommend for award</button>
+              </form>
+              {% endif %}
+              {% if q.status == 'recommended' or rfq.status == 'pending_award' %}
+              <form method="post" action="{{ url_for('erp.pm_award_quote', rid=rfq.id, qid=q.id) }}" class="d-inline"
+                    onsubmit="return confirm('Program Manager award to {{ q.vendor_name }}?')">
+                <button class="btn btn-sm btn-primary">PM Award</button>
+              </form>
+              {% endif %}
+              {% if q.status in ('awarded','accepted') or rfq.status in ('awarded','shared','contracted') %}
+              <form method="post" action="{{ url_for('erp.share_award', rid=rfq.id) }}" class="d-inline">
+                <button class="btn btn-sm btn-success">Share</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}<tr><td colspan="7" class="text-muted">No bids</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card mt-3">
+    <div class="card-header"><strong>Add a bid</strong></div>
+    <form method="post" action="{{ url_for('erp.add_quote', rid=rfq.id) }}" class="card-body row g-2">
+      <div class="col-md-5"><input name="vendor_name" class="form-control" placeholder="Vendor name" required></div>
+      <div class="col-md-4"><input name="total_amount" type="number" step="0.01" class="form-control" placeholder="Total amount" required></div>
+      <div class="col-md-3"><button class="btn btn-primary">Add bid</button></div>
+    </form>
+  </div>
+  <p class="small text-muted mt-2">Mandatory docs (by lot): {{ mandatory.get(rfq.lot, mandatory['default']) | join(', ') }}</p>
+</div>
+{% endblock %}
