@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from functools import wraps
 
+from werkzeug.exceptions import HTTPException
 from flask import (
     Flask, render_template, redirect, url_for, flash, request,
     jsonify, abort, session, send_file, current_app
@@ -131,13 +132,52 @@ except Exception:
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 
+
+@app.teardown_request
+def _teardown_request(exception=None):
+    """Rollback only when the request failed; always remove the scoped session."""
+    try:
+        if exception is not None:
+            db.session.rollback()
+    except Exception:
+        pass
+    # Do not call remove() here if it races with streaming responses; use appcontext teardown
+    try:
+        pass
+    except Exception:
+        pass
+
+
+@app.teardown_appcontext
+def _teardown_appcontext(exception=None):
+    try:
+        if exception is not None:
+            db.session.rollback()
+    except Exception:
+        pass
+    try:
+        db.session.remove()
+    except Exception:
+        pass
+
+
 @app.context_processor
 def inject_branding():
+    b = {'app_name': 'Project Financial Management Workflow', 'app_logo': 'branding/knowsoft_logo.png'}
     try:
-        b = report_branding()
+        fn = globals().get('report_branding')
+        if callable(fn):
+            got = fn() or {}
+            if isinstance(got, dict):
+                b.update(got)
     except Exception:
-        b = {'app_name': 'Project Financial Management Workflow', 'app_logo': ''}
+        pass
     return {'app_brand': b}
+
+
+@app.context_processor
+def inject_ui_defaults():
+    return {'hide_back_button': False}
 
 
 login_manager.login_view = 'login'
@@ -789,8 +829,15 @@ STAFF_ROLES = (
     'rh_consultant', 'mel_consultant', 'demand_consultant',
     'sdoc_consultant', 'logistics_consultant',
 )
-ADMIN_ROLES = ('general_admin', 'program_admin', 'finance_admin', 'admin', 'project_manager', 'finance_analyst')
-FINANCE_ROLES = ('finance_analyst', 'finance_admin', 'general_admin', 'admin')
+ADMIN_ROLES = (
+    'general_admin', 'program_admin', 'finance_admin', 'admin',
+    'project_manager', 'finance_analyst', 'super_admin', 'system_admin',
+)
+FULL_ADMIN_ROLES = ('general_admin', 'admin', 'super_admin', 'system_admin')
+FINANCE_ROLES = (
+    'finance_analyst', 'finance_admin', 'general_admin', 'admin',
+    'super_admin', 'system_admin', 'project_manager',
+)
 # Ops / programme (everything except pure finance tools for PM)
 PROGRAM_OPS_ROLES = (
     'project_manager', 'program_admin', 'general_admin', 'admin',
@@ -804,12 +851,33 @@ CONSULTANT_ROLES = (
 
 
 def _is_admin_role(role):
-    return role in ADMIN_ROLES or role in STAFF_ROLES
+    r = (role or '').strip().lower()
+    return r in ADMIN_ROLES or r in STAFF_ROLES or r in FULL_ADMIN_ROLES
+
+
+def is_full_admin(user_or_role=None):
+    """App admin — no feature limits."""
+    try:
+        if user_or_role is None:
+            from flask_login import current_user
+            if not getattr(current_user, 'is_authenticated', False):
+                return False
+            role = getattr(current_user, 'role', '') or ''
+        elif hasattr(user_or_role, 'role'):
+            role = getattr(user_or_role, 'role', '') or ''
+        else:
+            role = user_or_role or ''
+        r = str(role).strip().lower()
+        return r in FULL_ADMIN_ROLES or r == 'admin' or r == 'general_admin'
+    except Exception:
+        return False
 
 
 def _can_export_financial(role):
-    # Project Manager: no finance downloads; Finance Analyst + system admins: yes
-    return role in FINANCE_ROLES
+    r = (role or '').strip().lower()
+    if r in FULL_ADMIN_ROLES or r in ('admin', 'general_admin'):
+        return True
+    return r in FINANCE_ROLES
 
 
 def _can_manage_admins(role):
@@ -3435,6 +3503,10 @@ def api_expense_code(cid):
 @app.route('/expenses')
 @login_required
 def expense_list():
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
     if current_user.role == 'provider':
         flash('Expense claims are for programme staff.', 'warning')
         return redirect(url_for('provider_dashboard'))
@@ -3445,12 +3517,23 @@ def expense_list():
         items = q.limit(200).all()
     except Exception as e:
         try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
             current_app.logger.exception('expense_list: %s', e)
         except Exception:
             pass
         items = []
         flash('Expense register could not load fully. If this continues, ask an administrator to check the database.', 'warning')
-    return render_template('expense_list.html', items=items)
+    try:
+        return render_template('expense_list.html', items=items)
+    except Exception:
+        return (
+            '<div class="container py-4"><h3>Expenses</h3>'
+            '<p><a href="/expenses/new">New expense</a> · <a href="/staff">Workspace</a></p></div>',
+            200, {'Content-Type': 'text/html; charset=utf-8'},
+        )
 
 
 @app.route('/expenses/new', methods=['GET', 'POST'])
@@ -3917,6 +4000,15 @@ def budget_ifrs_pdf():
 # ---------------------------------------------------------------------------
 # Staff home + Invoice / payment workflow
 # ---------------------------------------------------------------------------
+
+@app.route('/user-manual')
+@app.route('/help')
+@login_required
+def user_manual():
+    """Comprehensive in-app user manual with flow charts."""
+    return render_template('user_manual.html')
+
+
 @app.route('/staff')
 @login_required
 @admin_required
@@ -4030,22 +4122,49 @@ def _dashboard_kpis():
         pass
     try:
         from sqlalchemy import text
-        for key, sql in [
-            ('vendors', 'SELECT COUNT(*) FROM erp_vendors'),
-            ('rfqs', 'SELECT COUNT(*) FROM erp_rfqs'),
-            ('pos', 'SELECT COUNT(*) FROM erp_purchase_orders'),
-            ('proc_invoices', 'SELECT COUNT(*) FROM erp_invoices'),
-            ('stock_lines', 'SELECT COUNT(*) FROM stock_balances'),
-            ('open_requests', "SELECT COUNT(*) FROM stock_requests WHERE status IN ('pending','submitted','open')"),
-            ('dispatches', 'SELECT COUNT(*) FROM dispatch_notes'),
-            ('accounts', 'SELECT COUNT(*) FROM fin_accounts'),
-            ('journals', 'SELECT COUNT(*) FROM fin_journals'),
-            ('expense_reqs', 'SELECT COUNT(*) FROM expense_requests'),
+        # Prefer live ERP / finance table names; try alternates if schema differs
+        for key, sqls in [
+            ('vendors', ['SELECT COUNT(*) FROM erp_vendors']),
+            ('rfqs', [
+                'SELECT COUNT(*) FROM erp_procurement_rfqs',
+                'SELECT COUNT(*) FROM erp_rfqs',
+            ]),
+            ('pos', ['SELECT COUNT(*) FROM erp_purchase_orders']),
+            ('proc_invoices', [
+                'SELECT COUNT(*) FROM erp_procurement_invoices',
+                'SELECT COUNT(*) FROM erp_invoices',
+            ]),
+            ('stock_lines', [
+                'SELECT COUNT(*) FROM stock_items',
+                'SELECT COUNT(*) FROM stock_balances',
+            ]),
+            ('open_requests', [
+                "SELECT COUNT(*) FROM stock_requests WHERE status IN ('pending','submitted','open')",
+            ]),
+            ('dispatches', [
+                'SELECT COUNT(*) FROM stock_transactions WHERE transaction_type LIKE \'%dispatch%\' OR movement_type LIKE \'%dispatch%\'',
+                'SELECT COUNT(*) FROM dispatch_notes',
+            ]),
+            ('accounts', ['SELECT COUNT(*) FROM fin_accounts']),
+            ('journals', [
+                'SELECT COUNT(DISTINCT document_id) FROM fin_journal_lines',
+                'SELECT COUNT(*) FROM fin_journal_lines',
+                'SELECT COUNT(*) FROM fin_journals',
+            ]),
+            ('expense_reqs', [
+                'SELECT COUNT(*) FROM expense_requests',
+                'SELECT COUNT(*) FROM fin_documents',
+            ]),
         ]:
-            try:
-                kpis[key] = db.session.execute(text(sql)).scalar() or 0
-            except Exception:
-                pass
+            for sql in sqls:
+                try:
+                    kpis[key] = db.session.execute(text(sql)).scalar() or 0
+                    break
+                except Exception:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
         try:
             kpis['pending_finance'] = Invoice.query.filter_by(status='submitted').count()
         except Exception:
@@ -4076,11 +4195,11 @@ def _chart_data():
     try:
         from sqlalchemy import text
         proc['data'] = [
-            db.session.execute(text('SELECT COUNT(*) FROM erp_rfqs')).scalar() or 0,
+            db.session.execute(text('SELECT COUNT(*) FROM erp_procurement_rfqs')).scalar() or 0,
             db.session.execute(text("SELECT COUNT(*) FROM erp_rfqs WHERE status LIKE '%eval%'")).scalar() or 0,
             db.session.execute(text("SELECT COUNT(*) FROM erp_rfqs WHERE status LIKE '%award%'")).scalar() or 0,
             db.session.execute(text('SELECT COUNT(*) FROM erp_purchase_orders')).scalar() or 0,
-            db.session.execute(text('SELECT COUNT(*) FROM erp_invoices')).scalar() or 0,
+            db.session.execute(text('SELECT COUNT(*) FROM erp_procurement_invoices')).scalar() or 0,
         ]
     except Exception:
         pass
@@ -4118,14 +4237,34 @@ def main_dashboard():
             chart_proc=chart_proc,
         )
     except Exception as e:
-        # Never redirect to index (that caused ERR_TOO_MANY_REDIRECTS).
-        # Templates now use static paths so the real dashboard should render;
-        # if it still fails, send the user to the normal staff workspace.
         try:
             app.logger.exception('main_dashboard: %s', e)
         except Exception:
             pass
-        return redirect('/staff')
+        # Never blank: show a minimal working dashboard
+        k = kpis if isinstance(kpis, dict) else {}
+        return (
+            '<!DOCTYPE html><html><head><title>Dashboard</title>'
+            '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">'
+            '</head><body class="p-4">'
+            '<h2>Executive Dashboard</h2>'
+            '<p class="text-muted">Full template failed (%s). Live counts below.</p>'
+            '<div class="row g-3">'
+            '<div class="col-md-3"><div class="card p-3">Facilities<br><b>%s</b></div></div>'
+            '<div class="col-md-3"><div class="card p-3">Products<br><b>%s</b></div></div>'
+            '<div class="col-md-3"><div class="card p-3">RFQs<br><b>%s</b></div></div>'
+            '<div class="col-md-3"><div class="card p-3">Accounts<br><b>%s</b></div></div>'
+            '</div>'
+            '<p class="mt-3"><a href="/staff">My workspace</a> · '
+            '<a href="/ops/rfq">RFQ</a> · <a href="/finance/">Finance</a> · '
+            '<a href="/user-manual">Manual</a></p>'
+            '</body></html>' % (
+                type(e).__name__,
+                k.get('facilities', 0), k.get('products', 0),
+                k.get('rfqs', 0), k.get('accounts', 0),
+            ),
+            200, {'Content-Type': 'text/html; charset=utf-8'},
+        )
 
 
 @app.route('/dashboard/export/excel')
@@ -5129,11 +5268,14 @@ def admin_backup_restore():
         if not request.form.get('confirm') == 'RESTORE':
             flash('Type RESTORE in the confirmation box to proceed.', 'warning')
             return redirect(url_for('admin_backup_page'))
-        # Disable FK checks where possible
+        # Disable FK checks so restore works on Postgres and SQLite.
+        # Result = exactly the backup contents (full replace, not merge).
         bind = db.session.get_bind()
         dialect = bind.dialect.name if bind else 'sqlite'
         if dialect == 'sqlite':
             db.session.execute(db.text('PRAGMA foreign_keys=OFF'))
+        elif dialect == 'postgresql':
+            db.session.execute(db.text("SET session_replication_role = 'replica'"))
         for table in reversed(list(db.metadata.sorted_tables)):
             db.session.execute(table.delete())
         db.session.commit()
@@ -5144,13 +5286,16 @@ def admin_backup_restore():
             rows = _json.loads(zf.read(path_in_zip))
             if not rows:
                 continue
-            # Insert in batches
+            # Insert only rows from this backup
             db.session.execute(table.insert(), rows)
         db.session.commit()
         if dialect == 'sqlite':
             db.session.execute(db.text('PRAGMA foreign_keys=ON'))
             db.session.commit()
-        flash('Backup restored successfully. Please sign in again if sessions were reset.', 'success')
+        elif dialect == 'postgresql':
+            db.session.execute(db.text("SET session_replication_role = 'origin'"))
+            db.session.commit()
+        flash('Backup restored successfully. Database now matches only this backup. Sign in again if needed.', 'success')
     except Exception as e:
         db.session.rollback()
         app.logger.exception('Restore failed')
@@ -5526,27 +5671,30 @@ except Exception as _log_boot:
 # Branded error pages (CONTRAconnect) — never show a bare stack / blank page
 # ---------------------------------------------------------------------------
 def _render_error(code, title, message):
+    """Always return a usable error page (never a blank response)."""
     try:
         app.logger.error('HTTP %s: %s — %s', code, title, message)
     except Exception:
         pass
     try:
-        return render_template(
-            'error.html',
-            code=code,
-            title=title,
-            message=message,
-        ), code
+        return render_template('error.html', code=code, title=title, message=message), int(code or 500)
     except Exception:
-        # Absolute last resort if template itself fails
-        body = (
-            f'<!DOCTYPE html><html><head><title>{code}</title></head><body style='
-            f'"font-family:system-ui;text-align:center;padding:3rem">'
-            f'<h1>{code}</h1><p>{title}</p><p>{message}</p>'
-            f'<p><a href="javascript:history.back()">Go back</a> · '
-            f'<a href="/">Home</a></p></body></html>'
-        )
-        return body, code
+        pass
+    body = (
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>%s</title>'
+        '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">'
+        '</head><body style="background:#0b6e6e;min-height:100vh;display:flex;align-items:center;justify-content:center">'
+        '<div style="background:#fff;border-radius:1rem;padding:2rem;max-width:420px;text-align:center">'
+        '<div style="font-size:2.5rem;font-weight:800;color:#0f4c6e">%s</div>'
+        '<h1 style="font-size:1.15rem;margin:.5rem 0">%s</h1>'
+        '<p style="color:#64748b">%s</p>'
+        '<p><a class="btn btn-success" href="/staff">My workspace</a> '
+        '<a class="btn btn-outline-secondary" href="/dashboard">Dashboard</a> '
+        '<a class="btn btn-outline-primary" href="/login">Sign in</a></p>'
+        '</div></body></html>'
+    ) % (code, code, title, message)
+    return body, int(code or 500)
+
 
 
 @app.errorhandler(403)
@@ -5592,16 +5740,13 @@ def error_500(e):
 
 @app.errorhandler(Exception)
 def error_unhandled(e):
-    # Log-friendly; still show branded page in production (include short error type for diagnosis)
+    # Let Flask/Werkzeug HTTP errors (401/302 login redirect, 404, etc.) pass through
+    if isinstance(e, HTTPException):
+        return e
     try:
         current_app.logger.exception('Unhandled error: %s', e)
     except Exception:
         pass
-    code = getattr(e, 'code', None) or 500
-    if code == 403:
-        return error_403(e)
-    if code == 404:
-        return error_404(e)
     detail = '%s: %s' % (type(e).__name__, str(e)[:180])
     return _render_error(
         500,
