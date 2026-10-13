@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Backup & restore – Project Financial Management Workflow{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page" style="max-width:900px">
+  <h2 class="mb-2">Backup, restore &amp; clear data</h2>
+  <p class="text-muted">Download a full archive of tables and uploads. Restore can keep your logins. Clear removes only operational/demo data.</p>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white fw-semibold">Create backup</div>
+        <div class="card-body">
+          <p class="small text-muted">Download all current database tables and uploaded files.</p>
+          <a class="btn btn-success" href="{{ url_for('admin_backup_download') }}">
+            <i class="bi bi-download"></i> Download full backup (.zip)
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100 border-warning">
+        <div class="card-header bg-white fw-semibold">Clear operational data only</div>
+        <div class="card-body">
+          <p class="small text-muted">
+            Removes RFQs, bids, stock movements, journals, invoices, clients, learning submissions, demo rows.
+            <strong>Does not delete users or passwords.</strong>
+          </p>
+          <form method="post" action="{{ url_for('admin_clear_operational') }}">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" name="keep_structure" value="1" id="ks" checked>
+              <label class="form-check-label small" for="ks">Keep structure (COA, facilities, products, project codes)</label>
+            </div>
+            <label class="form-label small">Type <code>CLEAR</code> to confirm</label>
+            <input class="form-control mb-2" name="confirm" placeholder="CLEAR" required>
+            <button class="btn btn-warning" onclick="return confirm('Clear operational data? Users will stay.')">Clear operational data</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12">
+      <div class="card shadow-sm border-danger">
+        <div class="card-header bg-white fw-semibold">Restore from backup</div>
+        <div class="card-body">
+          <p class="small text-muted">
+            By default, <strong>users and login accounts are preserved</strong>. Only operational tables are replaced from the zip.
+            Uncheck below only if you intend a full wipe including staff accounts.
+          </p>
+          <form method="post" action="{{ url_for('admin_backup_restore') }}" enctype="multipart/form-data">
+            <input type="file" name="backup_file" class="form-control mb-2" accept=".zip" required>
+            <div class="mb-2">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="preserve_users" value="1" id="pu1" checked>
+                <label class="form-check-label" for="pu1">Preserve users &amp; logins (recommended)</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="preserve_users" value="0" id="pu0">
+                <label class="form-check-label" for="pu0">Full replace including users (advanced)</label>
+              </div>
+            </div>
+            <p class="small text-danger mb-1">Type <code>RESTORE</code> to confirm</p>
+            <input class="form-control mb-2" name="confirm" placeholder="RESTORE" required>
+            <button class="btn btn-danger" onclick="return confirm('Restore from this backup?');">Restore backup</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
