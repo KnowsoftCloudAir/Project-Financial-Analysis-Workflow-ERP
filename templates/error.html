@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} Error{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:560px">
+  <div class="card border-0 shadow-sm text-center p-4">
+    <h2 class="mb-2">{{ code }}</h2>
+    <p class="text-muted">{{ message or 'An error occurred.' }}</p>
+    <div class="d-flex gap-2 justify-content-center flex-wrap">
+      <a class="btn btn-primary" href="/dashboard">Dashboard</a>
+      <a class="btn btn-outline-secondary" href="/learning">Learning</a>
+      <a class="btn btn-outline-secondary" href="/ops/inventory">Inventory</a>
+      <a class="btn btn-outline-secondary" href="/">Home</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
