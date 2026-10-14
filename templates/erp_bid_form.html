@@ -1,0 +1,143 @@
+{% extends "erp_vendor_shell.html" %}
+{% block title %}Submit quotation — {{ rfq.rfq_no }}{% endblock %}
+{% block header %}{{ rfq.rfq_no }} — {{ rfq.title }}{% endblock %}
+{% block content %}
+{% if form_error %}<div class="alert alert-danger">{{ form_error }}</div>{% endif %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div>
+        <h4 class="mb-1">Vendor quotation form</h4>
+        <p class="text-muted small mb-0">Enter unit prices for each line. Totals calculate automatically.</p>
+      </div>
+      <div class="text-end">
+        <div class="small text-muted">Your reference</div>
+        <div class="fw-bold text-primary">{{ code }}</div>
+      </div>
+    </div>
+
+    {% if tor_path %}
+    <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span><i class="bi bi-file-earmark-pdf"></i> Terms of Reference (TOR)</span>
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('erp.public_bid_file', rel=tor_path) }}">Download TOR</a>
+    </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" id="vendorBidForm">
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <label class="form-label">Vendor / company name <span class="text-danger">*</span></label>
+          <input class="form-control" name="vendor_name" value="{{ prefill_vendor }}" {% if mode=='vendor' and prefill_vendor %}readonly{% endif %} required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Email</label>
+          <input class="form-control" type="email" name="email">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Phone</label>
+          <input class="form-control" name="phone">
+        </div>
+      </div>
+
+      {% if items %}
+      <h6 class="mt-2">Quotation lines — enter unit cost</h6>
+      <div class="table-responsive mb-3">
+        <table class="table table-sm table-bordered align-middle" id="lineTable">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Description</th>
+              <th class="text-end">Qty</th>
+              <th>Unit</th>
+              <th style="min-width:120px">Unit cost</th>
+              <th class="text-end">Line total</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for it in items %}
+            <tr data-qty="{{ it.qty or 0 }}">
+              <td>{{ loop.index }}</td>
+              <td>{{ it.name }}
+                <input type="hidden" name="line_name_{{ loop.index0 }}" value="{{ it.name }}">
+                <input type="hidden" name="line_qty_{{ loop.index0 }}" value="{{ it.qty or 0 }}">
+                <input type="hidden" name="line_unit_{{ loop.index0 }}" value="{{ it.unit or 'unit' }}">
+              </td>
+              <td class="text-end qty-cell">{{ it.qty }}</td>
+              <td>{{ it.unit or 'unit' }}</td>
+              <td>
+                <input class="form-control form-control-sm unit-cost" type="number" step="any" min="0"
+                       name="line_unit_cost_{{ loop.index0 }}" placeholder="0.00" required>
+              </td>
+              <td class="text-end fw-semibold line-total">0.00</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="table-light">
+              <th colspan="5" class="text-end">Grand total</th>
+              <th class="text-end" id="grandTotalDisplay">0.00</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <input type="hidden" name="total_amount" id="totalAmountInput" value="0">
+      <input type="hidden" name="line_count" value="{{ items|length }}">
+      {% else %}
+      <div class="mb-3">
+        <label class="form-label">Total quotation amount</label>
+        <input class="form-control" type="number" step="any" min="0" name="total_amount" placeholder="0.00">
+      </div>
+      {% endif %}
+
+      <div class="alert alert-secondary small">
+        <strong>Quotation upload</strong><br>
+        Upload your official quotation as <strong>one PDF (max 2 MB)</strong> including:
+        CAC, business profile, and any other requirements stated in the TOR.
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Upload quotation package (PDF) <span class="text-danger">*</span></label>
+        <input class="form-control" type="file" name="quotation_pdf" id="quotationPdf"
+               accept=".pdf,application/pdf" required>
+        <div class="form-text">Single PDF · maximum 2 MB · include CAC, profile &amp; TOR requirements</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg px-4">Submit quotation</button>
+    </form>
+  </div>
+</div>
+<script>
+(function(){
+  function fmt(n){ return (Math.round(n * 100) / 100).toFixed(2); }
+  function recalc(){
+    var grand = 0;
+    document.querySelectorAll('#lineTable tbody tr').forEach(function(tr){
+      var qty = parseFloat(tr.getAttribute('data-qty') || '0') || 0;
+      var inp = tr.querySelector('.unit-cost');
+      var unit = parseFloat(inp && inp.value ? inp.value : '0') || 0;
+      var line = qty * unit;
+      grand += line;
+      var cell = tr.querySelector('.line-total');
+      if (cell) cell.textContent = fmt(line);
+    });
+    var g = document.getElementById('grandTotalDisplay');
+    if (g) g.textContent = fmt(grand);
+    var h = document.getElementById('totalAmountInput');
+    if (h) h.value = fmt(grand);
+  }
+  document.querySelectorAll('.unit-cost').forEach(function(el){
+    el.addEventListener('input', recalc);
+    el.addEventListener('change', recalc);
+  });
+  var pdf = document.getElementById('quotationPdf');
+  if (pdf) {
+    pdf.addEventListener('change', function(){
+      if (this.files && this.files[0] && this.files[0].size > 2 * 1024 * 1024) {
+        alert('File must be 2 MB or smaller.');
+        this.value = '';
+      }
+    });
+  }
+  recalc();
+})();
+</script>
+{% endblock %}
