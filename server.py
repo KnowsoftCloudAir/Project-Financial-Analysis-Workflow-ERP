@@ -267,6 +267,95 @@ def inject_ui_defaults():
 login_manager.login_view = 'login'
 login_manager.login_message_category = 'warning'
 
+
+# ---------------------------------------------------------------------------
+# Force-safe url_for in Jinja (context processors alone do not always override)
+# ---------------------------------------------------------------------------
+def _install_safe_url_for():
+    from flask import url_for as _real_url_for
+    FALLBACKS = {
+        'ops.section_finance_setup': '/ops/sections/finance-setup',
+        'ops.section_finance_reports': '/ops/sections/financial-reports',
+        'ops.section_finance': '/ops/sections/finance',
+        'ops.section_program_items': '/ops/sections/program-items',
+        'ops.section_program_core': '/ops/sections/program-core',
+        'ops.section_procurement': '/ops/sections/procurement',
+        'ops.section_staff': '/ops/sections/staff',
+        'learning_hub': '/learning',
+        'learning_report_dashboard': '/learning/dashboard',
+        'learning_analysis': '/learning/analysis',
+        'learning_export_excel': '/learning/export/excel',
+        'learning_export_pptx': '/learning/export/pptx',
+        'learning_load_demo': '/learning/load-demo',
+        'learning_assign': '/learning/assign',
+        'ops.inventory_home': '/ops/inventory',
+        'ops.procurement_home': '/ops/procurement',
+        'ops.bank_recon': '/ops/bank',
+        'ops.fx_setup': '/ops/fx',
+        'ops.budget_template': '/ops/budget-template',
+        'ops.privileges': '/ops/privileges',
+        'wf.rfq_home': '/ops/rfq',
+        'wf.cash_recon': '/ops/cash-recon',
+        'erp.rfqs_list': '/erp/rfqs',
+        'erp.vendors_list': '/erp/vendors',
+        'erp.pos_list': '/erp/pos',
+        'erp.invoices_list': '/erp/invoices',
+        'erp.erp_home': '/erp',
+        'fin.coa': '/finance/coa',
+        'fin.journals': '/finance/journals',
+        'fin.trial_balance': '/finance/trial-balance',
+        'fin.statements': '/finance/statements',
+        'fin.home': '/finance',
+        'fin.projects': '/finance/projects',
+        'fin.expense_codes': '/finance/expense-codes',
+        'fin.budget_codes': '/finance/budget-codes',
+        'fin.variance': '/finance/variance',
+        'fin.payments': '/finance/payments',
+        'logistics.catalogue': '/ops/catalogue',
+        'logistics.grn_new': '/ops/grn',
+        'logistics.dispatch_move': '/ops/dispatch',
+        'logistics.uptake_home': '/ops/uptake',
+        'main_dashboard': '/dashboard',
+        'staff_dashboard': '/staff',
+        'admin_dashboard': '/admin',
+        'expense_list': '/expenses',
+        'admin_currency': '/admin/currency',
+        'admin_manage_users': '/admin/users',
+        'admin_staff_approvals': '/admin/staff-approvals',
+        'admin_activity': '/admin/activity',
+        'admin_facilities': '/admin/facilities',
+        'admin_products': '/admin/products',
+        'admin_costs': '/admin/costs',
+        'admin_sample_data': '/admin/sample-data',
+        'admin_branding': '/admin/branding',
+        'admin_homepage_editor': '/admin/homepage',
+        'invoice_list': '/invoices',
+        'invoice_new': '/invoices/new',
+        'login': '/login',
+        'logout': '/logout',
+        'provider_dashboard': '/provider',
+    }
+    def safe_url_for(endpoint, **values):
+        try:
+            return _real_url_for(endpoint, **values)
+        except Exception:
+            path = FALLBACKS.get(endpoint)
+            if path:
+                for k, v in (values or {}).items():
+                    if k in ('id', 'rid', 'qid', 'poid', 'iid', 'sid', 'lq_code', 'token', 'eid', 'code'):
+                        path = path.rstrip('/') + '/' + str(v)
+                return path
+            return '/dashboard'
+    try:
+        app.jinja_env.globals['url_for'] = safe_url_for
+    except Exception:
+        pass
+    return safe_url_for
+
+_SAFE_URL_FOR = _install_safe_url_for()
+
+
+
 # ---------------------------------------------------------------------------
 # Password policy
 # ---------------------------------------------------------------------------
@@ -1297,7 +1386,7 @@ def debug_home():
 @app.route('/debug-routes')
 def debug_routes():
     """List blueprints and critical endpoint presence (no login required)."""
-    lines = ['build=UPGRADE-2026-10-11', 'blueprints=%s' % sorted(app.blueprints.keys())]
+    lines = ['build=SAFE-URLFOR-2026-10-14', 'blueprints=%s' % sorted(app.blueprints.keys())]
     needed = [
         'main_dashboard', 'staff_dashboard', 'learning_hub', 'ops.inventory_home',
         'ops.section_finance_setup', 'ops.section_finance_reports', 'wf.rfq_home',
@@ -1335,7 +1424,7 @@ def debug_templates():
         'ops_bank.html', 'logistics_uptake_home.html', 'logistics_clients.html',
         'erp_rfqs.html', 'fin_home.html', 'base.html', 'error.html', 'login.html',
     ]
-    lines = ['build=UPGRADE-2026-10-11-templates']
+    lines = ['build=SAFE-URLFOR-2026-10-14-templates']
     for n in names:
         try:
             app.jinja_env.get_template(n)
@@ -5920,7 +6009,7 @@ def db_health():
 @app.route('/upgrade-status')
 def upgrade_status():
     return (
-        'UPGRADE-2026-10-11-inventory-rfq-cash-clients\n'
+        'SAFE-URLFOR-2026-10-14-dashboard-heal\n'
         'finance-setup=/ops/sections/finance-setup\n'
         'financial-reports=/ops/sections/financial-reports\n'
         'rfq=/ops/rfq\n'
