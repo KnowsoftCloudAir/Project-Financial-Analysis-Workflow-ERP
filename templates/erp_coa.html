@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Chart of Accounts{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page">
+  <h3>Chart of Accounts</h3>
+  <div class="card"><div class="table-responsive"><table class="table mb-0">
+    <thead><tr><th>Code</th><th>Name</th><th>Type</th><th class="text-end">Balance</th></tr></thead>
+    <tbody>
+    {% for a in accounts %}
+      <tr><td>{{ a.code }}</td><td>{{ a.name }}</td><td>{{ a.account_type }}</td><td class="text-end">{{ '{:,.2f}'.format(balances.get(a.id, 0) if balances is defined else 0) }}</td></tr>
+    {% else %}<tr><td colspan="4" class="text-muted">No accounts yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div></div>
+</div>
+{% endblock %}
