@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ code }} · {{ rfq.rfq_no }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    body { background:#f4f7f7; min-height:100vh; margin:0; }
+    .v-header { background:linear-gradient(135deg,#0d6e6e,#0a4f4f); color:#fff; padding:1rem 1.25rem; }
+  </style>
+</head>
+<body>
+  <div class="v-header">
+    <div class="container" style="max-width:860px">
+      <div class="small opacity-75">Vendor quotation portal</div>
+      <div class="fw-semibold">{{ rfq.rfq_no }} · {{ code }}</div>
+    </div>
+  </div>
+  <div class="container py-4" style="max-width:860px">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}{% for cat, msg in messages %}
+      <div class="alert alert-{{ cat if cat != 'message' else 'info' }}">{{ msg }}</div>
+      {% endfor %}{% endif %}
+    {% endwith %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        <h4 class="mb-1">{{ rfq.title }}</h4>
+        <p class="text-muted small">Closing: {{ rfq.closing_at }}</p>
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="submission_code" value="{{ code }}">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Vendor / company name *</label>
+              <input class="form-control" name="vendor_name" required></div>
+            <div class="col-md-6"><label class="form-label">Email *</label>
+              <input class="form-control" type="email" name="email" required></div>
+            <div class="col-md-6"><label class="form-label">Phone *</label>
+              <input class="form-control" name="phone" required></div>
+            <div class="col-md-6"><label class="form-label">Years of experience *</label>
+              <input class="form-control" type="number" name="years_experience" min="0" required></div>
+            <div class="col-12"><label class="form-label">Qualification / capability *</label>
+              <textarea class="form-control" name="qualification" rows="2" required></textarea></div>
+            <div class="col-md-6"><label class="form-label">Date of submission *</label>
+              <input class="form-control" type="date" name="submission_date" required></div>
+            <div class="col-12"><label class="form-label">Total quotation amount (USD)</label>
+              <input class="form-control" name="total_amount" type="number" step="0.01" min="0"></div>
+          </div>
+          <hr>
+          <p class="small text-muted mb-2">Upload supporting documents (PDF preferred)</p>
+          <div class="row g-2">
+            {% for field, label in [
+              ('invoice','Official quotation / invoice *'),
+              ('proposal','Technical proposal *'),
+              ('cac','CAC / registration *'),
+              ('bank','Bank details *'),
+              ('tax','Tax clearance *'),
+              ('audit','Audit report *'),
+              ('jobs','Similar jobs evidence *'),
+              ('cert','Certificates (optional)')
+            ] %}
+            <div class="col-md-6">
+              <label class="form-label small">{{ label }}</label>
+              <input class="form-control form-control-sm" type="file" name="{{ field }}" {% if field != 'cert' %}required{% endif %}>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" name="consent" value="1" id="c1" required>
+            <label class="form-check-label" for="c1">I confirm the documents are true and genuine.</label>
+          </div>
+          <div class="mt-4 d-grid">
+            <button type="submit" class="btn btn-primary btn-lg">Submit quotation</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
