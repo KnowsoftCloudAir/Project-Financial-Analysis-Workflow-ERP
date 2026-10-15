@@ -154,18 +154,61 @@ def _install_safe_url_for():
         'ops.section_procurement': '/ops/sections/procurement',
         'ops.section_staff': '/ops/sections/staff',
         'learning_hub': '/learning',
+        'learning_report_dashboard': '/learning/dashboard',
+        'learning_analysis': '/learning/analysis',
+        'learning_export_excel': '/learning/export/excel',
+        'learning_export_pptx': '/learning/export/pptx',
+        'learning_load_demo': '/learning/load-demo',
+        'learning_assign': '/learning/assign',
+        'learning_template': '/learning/template',
+        'learning_submission_detail': '/learning/submission',
         'ops.inventory_home': '/ops/inventory',
+        'ops.procurement_home': '/ops/procurement',
+        'ops.bank_recon': '/ops/bank',
+        'ops.fx_setup': '/ops/fx',
+        'ops.budget_template': '/ops/budget-template',
+        'ops.privileges': '/ops/privileges',
+        'wf.rfq_home': '/ops/rfq',
+        'wf.cash_recon': '/ops/cash-recon',
+        'erp.rfqs_list': '/erp/rfqs',
+        'erp.vendors_list': '/erp/vendors',
+        'erp.pos_list': '/erp/pos',
+        'erp.invoices_list': '/erp/invoices',
+        'erp.erp_home': '/erp',
+        'fin.coa': '/finance/coa',
+        'fin.journals': '/finance/journals',
+        'fin.home': '/finance',
+        'fin.projects': '/finance/projects',
+        'fin.expense_codes': '/finance/expense-codes',
+        'fin.budget_codes': '/finance/budget-codes',
+        'logistics.catalogue': '/ops/catalogue',
+        'logistics.uptake_home': '/ops/uptake',
+        'logistics.grn_new': '/ops/grn',
+        'logistics.dispatch_move': '/ops/dispatch',
         'main_dashboard': '/dashboard',
         'staff_dashboard': '/staff',
+        'admin_dashboard': '/admin',
         'expense_list': '/expenses',
+        'admin_currency': '/admin/currency',
+        'admin_manage_users': '/admin/users',
+        'admin_facilities': '/admin/facilities',
+        'admin_products': '/admin/products',
+        'login': '/login',
+        'logout': '/logout',
+        'provider_dashboard': '/provider',
     }
     def safe_url_for(endpoint, **values):
         try:
             return _real_url_for(endpoint, **values)
         except Exception:
-            path = FALLBACKS.get(endpoint, '/dashboard')
+            path = FALLBACKS.get(endpoint)
+            if not path and endpoint:
+                # Guess path from endpoint name instead of dumping users on dashboard
+                path = '/' + str(endpoint).replace('.', '/').replace('_', '-')
+            if not path:
+                path = '#'
             for k, v in (values or {}).items():
-                if k in ('id', 'rid', 'lq_code', 'token', 'iid', 'sid', 'code'):
+                if k in ('id', 'rid', 'lq_code', 'token', 'iid', 'sid', 'code', 'poid', 'eid'):
                     path = path.rstrip('/') + '/' + str(v)
             return path
     try:
@@ -3471,73 +3514,6 @@ def api_expense_code(cid):
 
 
 
-@app.route('/expenses/clear-sample', methods=['POST'])
-@login_required
-def clear_sample_expenses():
-    try:
-        n1 = ExpenseRequest.query.filter(ExpenseRequest.request_number.like('SAMPLE-%')).delete(synchronize_session=False)
-    except Exception:
-        n1 = 0
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-    try:
-        n2 = Expenditure.query.filter(Expenditure.description.like('SAMPLE:%')).delete(synchronize_session=False)
-    except Exception:
-        n2 = 0
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-    try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-    flash('Removed sample expenses (%s requests, %s rows).' % (n1 or 0, n2 or 0), 'success')
-    return redirect('/expenses')
-
-
-def get_operating_currency():
-    try:
-        return get_setting('operating_currency', 'NGN') or 'NGN'
-    except Exception:
-        return 'NGN'
-
-
-@app.route('/admin/currency', methods=['GET', 'POST'])
-@login_required
-def admin_currency():
-    if request.method == 'POST':
-        code = (request.form.get('currency') or 'NGN').strip().upper()[:8]
-        try:
-            set_setting('operating_currency', code)
-            flash('Operating currency set to %s' % code, 'success')
-        except Exception as e:
-            flash(str(e), 'danger')
-        return redirect('/admin/currency')
-    cur = get_operating_currency()
-    opts = ''.join(
-        '<option value="%s" %s>%s</option>' % (c, 'selected' if c == cur else '', c)
-        for c in ['NGN', 'USD', 'EUR', 'GBP', 'GHS', 'KES', 'ZAR']
-    )
-    return (
-        '<div style="font-family:sans-serif;max-width:480px;margin:2rem auto">'
-        '<h3>Operating currency</h3>'
-        '<form method="post"><select name="currency">%s</select> '
-        '<button type="submit">Save</button></form>'
-        '<p><a href="/dashboard">Dashboard</a></p></div>'
-    ) % opts, 200, {'Content-Type': 'text/html; charset=utf-8'}
-
-
-@app.context_processor
-def inject_operating_currency():
-    try:
-        return {'OPERATING_CURRENCY': get_operating_currency()}
-    except Exception:
-        return {'OPERATING_CURRENCY': 'NGN'}
-
-
 @app.route('/expenses')
 @login_required
 def expense_list():
@@ -5719,6 +5695,85 @@ def error_unhandled(e):
 
 application = app  # WSGI alias for gunicorn / Render
 
+
+
+# ---------------------------------------------------------------------------
+# Sample expense clear + operating currency (safe registration, unique endpoints)
+# ---------------------------------------------------------------------------
+def get_operating_currency():
+    try:
+        return get_setting('operating_currency', 'NGN') or 'NGN'
+    except Exception:
+        return 'NGN'
+
+
+@app.route('/expenses/clear-sample', methods=['POST'], endpoint='clear_sample_expenses')
+@login_required
+def clear_sample_expenses():
+    n1 = n2 = 0
+    try:
+        n1 = ExpenseRequest.query.filter(ExpenseRequest.request_number.like('SAMPLE-%')).delete(synchronize_session=False)
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    try:
+        n2 = Expenditure.query.filter(Expenditure.description.like('SAMPLE:%')).delete(synchronize_session=False)
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    try:
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    flash('Removed sample expenses (%s requests, %s rows).' % (n1 or 0, n2 or 0), 'success')
+    return redirect('/expenses')
+
+
+@app.route('/admin/currency', methods=['GET', 'POST'], endpoint='admin_currency')
+@login_required
+def admin_currency():
+    if request.method == 'POST':
+        code = (request.form.get('currency') or 'NGN').strip().upper()[:8]
+        try:
+            set_setting('operating_currency', code)
+            flash('Operating currency set to %s' % code, 'success')
+        except Exception as e:
+            flash(str(e), 'danger')
+        return redirect('/admin/currency')
+    cur = get_operating_currency()
+    opts = ''.join(
+        '<option value="%s"%s>%s</option>' % (c, ' selected' if c == cur else '', c)
+        for c in ['NGN', 'USD', 'EUR', 'GBP', 'GHS', 'KES', 'ZAR']
+    )
+    return (
+        '<div style="font-family:sans-serif;max-width:480px;margin:2rem auto">'
+        '<h3>Operating currency</h3>'
+        '<form method="post"><select name="currency">%s</select> '
+        '<button type="submit">Save</button></form>'
+        '<p><a href="/dashboard">Dashboard</a></p></div>'
+    ) % opts, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+
+@app.context_processor
+def inject_operating_currency():
+    try:
+        return {'OPERATING_CURRENCY': get_operating_currency()}
+    except Exception:
+        return {'OPERATING_CURRENCY': 'NGN'}
+
+
+# Re-install safe url_for after blueprints so template links resolve correctly
+try:
+    _install_safe_url_for()
+except Exception:
+    pass
 
 if __name__ == '__main__':
     with app.app_context():
