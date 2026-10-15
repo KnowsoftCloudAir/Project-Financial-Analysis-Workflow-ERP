@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Confirm receipt{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Confirm delivery {{ note.note_no }}</h3>
+  <p>Tick each commodity received and upload the signed PDF. Confirmation moves the lines under this facility. It is not an outflow.</p>
+  <form method="post" enctype="multipart/form-data" class="card card-body">
+    {% for line in lines %}
+      <div class="row g-2 mb-2">
+        <div class="col-md-6">{{ line.product_name }}</div>
+        <div class="col-md-3">Dispatched {{ line.quantity }}</div>
+        <div class="col-md-3"><input name="confirm_{{ line.id }}" value="{{ line.quantity }}" class="form-control" required></div>
+      </div>
+    {% endfor %}
+    <label class="form-label">Signed dispatch PDF</label>
+    <input type="file" name="evidence" accept="application/pdf" class="form-control mb-3" required>
+    <button class="btn btn-success">Record delivery</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Transfer approvals{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3>Inter-facility transfers</h3>
+  <p class="text-muted">Only the program manager or a staff member assigned approval rights can approve. A transfer moves stock between facilities. It is not an outflow.</p>
+  <table class="table">
+    <thead><tr><th>From</th><th>To</th><th>Commodity</th><th>Qty</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ facilities.get(r.from_facility_id) }}</td>
+        <td>{{ facilities.get(r.to_facility_id) }}</td>
+        <td>{{ products.get(r.product_id) }}</td>
+        <td>{{ r.quantity }}</td>
+        <td>{{ r.status }}</td>
+        <td>
+          {% if r.status == 'pending' and can_approve %}
+          <form method="post" class="d-flex gap-1">
+            <input type="hidden" name="tid" value="{{ r.id }}">
+            <button name="decision" value="approve" class="btn btn-sm btn-success">Approve</button>
+            <button name="decision" value="reject" class="btn btn-sm btn-outline-danger">Reject</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="6" class="text-muted">No transfer requests.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
