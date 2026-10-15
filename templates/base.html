@@ -140,7 +140,6 @@
                     <li class="nav-item"><a class="nav-link" href="/data-exchange"><i class="bi bi-arrow-left-right"></i> Download / Upload CSV</a></li>
                     <li class="nav-item mt-2"><span class="nav-link text-uppercase small fw-bold">Staff</span></li>
                     <li class="nav-item"><a class="nav-link" href="/ops/sections/staff"><i class="bi bi-shield-lock"></i> Rights, approvals, privileges</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/user-manual"><i class="bi bi-book"></i> User manual</a></li>
                     {% if current_user.role in ['general_admin', 'admin', 'project_manager'] %}
                     <li class="nav-item"><a class="nav-link" href="/admin/backup"><i class="bi bi-cloud-arrow-down"></i> Backup and restore</a></li>
                     {% endif %}
