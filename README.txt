@@ -1,12 +1,9 @@
-FIX: Program Core menu + RFQ products from admin/products
+REPLACE server.py AT APP ROOT (overwrite completely).
 
-1. templates/base.html
-   - Removed "Client feedback" under Program Core sidebar
-   - Program Core now only: Learning, reports, homepage
+Crash cause: @app.route("/expenses") was stacked onto clear_sample_expenses.
+This file has:
+  GET  /expenses              -> expense_list
+  POST /expenses/clear-sample -> clear_sample_expenses (at end of file)
+  /admin/currency             -> admin_currency
 
-2. erp_extension.py
-   - RFQ commodity dropdown loads from same products table as /admin/products
-   - Uses Product ORM first, then SQL fallbacks
-   - Warns if catalogue is empty
-
-Upload both files to GitHub ROOT (overwrite), push main, redeploy Railway.
+After deploy, logs must NOT say Worker failed to boot.
