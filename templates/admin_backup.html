@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Backup & restore – Project Financial Management Workflow{% endblock %}
+{% block content %}
+<div class="container-fluid py-3 wrap-page" style="max-width:920px">
+  <h2 class="mb-2">Backup, restore &amp; clear data</h2>
+  <div class="alert alert-info small">
+    <strong>Design:</strong> Backups contain <em>operational and demo data only</em>.
+    Staff users, passwords and login tokens are <strong>never</strong> included in the zip and are
+    <strong>never</strong> deleted or overwritten on restore.
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white fw-semibold">Download operational backup</div>
+        <div class="card-body">
+          <p class="small text-muted">RFQs, stock, invoices, journals, clients, catalogue, COA structure, uploads — not credentials.</p>
+          <a class="btn btn-success" href="{{ url_for('admin_backup_download') }}">
+            <i class="bi bi-download"></i> Download ops backup (.zip)
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100 border-warning">
+        <div class="card-header bg-white fw-semibold">Clear operational data</div>
+        <div class="card-body">
+          <p class="small text-muted">Wipe transactions / demo rows. Keep logins. Optional: keep COA, facilities, products.</p>
+          <form method="post" action="{{ url_for('admin_clear_operational') }}">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" name="keep_structure" value="1" id="ks" checked>
+              <label class="form-check-label small" for="ks">Keep structure (COA, facilities, products, codes)</label>
+            </div>
+            <label class="form-label small">Type <code>CLEAR</code></label>
+            <input class="form-control mb-2" name="confirm" placeholder="CLEAR" required autocomplete="off">
+            <button type="submit" class="btn btn-warning">Clear operational data</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-12">
+      <div class="card shadow-sm border-primary">
+        <div class="card-header bg-white fw-semibold">Restore operational backup</div>
+        <div class="card-body">
+          <p class="small text-muted mb-2">
+            Replaces operational tables from the zip. <strong>Users and passwords stay as they are now.</strong>
+            Facility links on staff are cleared first so restore cannot cascade-delete accounts.
+          </p>
+          <form method="post" action="{{ url_for('admin_backup_restore') }}" enctype="multipart/form-data">
+            <input type="file" name="backup_file" class="form-control mb-2" accept=".zip" required>
+            <label class="form-label small">Type <code>RESTORE</code></label>
+            <input class="form-control mb-2" name="confirm" placeholder="RESTORE" required autocomplete="off">
+            <button type="submit" class="btn btn-primary">Restore (keep users)</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-3 shadow-sm">
+    <div class="card-header bg-white fw-semibold">Accounting rules (unchanged UI)</div>
+    <div class="card-body small">
+      <ul class="mb-0">
+        <li><strong>GRN → central warehouse:</strong> stock in; payment/invoice path uses COA dropdowns on finance review.</li>
+        <li><strong>Dispatch / transfer / return:</strong> warehouse reconciliation only — <em>no</em> GL posting.</li>
+        <li><strong>Uptake (administer):</strong> posts Dr expense / Cr stores (default 5100 / 1300; per-outlet codes for finance).</li>
+        <li><strong>Invoice finance review:</strong> debit / credit / payable accounts from Chart of Accounts.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

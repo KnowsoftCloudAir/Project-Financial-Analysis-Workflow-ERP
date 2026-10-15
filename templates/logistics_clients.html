@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Client assigned list{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <h2>Client assigned list</h2>
+  <div class="table-responsive card shadow-sm">
+    <table class="table table-sm table-hover mb-0">
+      <thead><tr><th>Date</th><th>Facility</th><th>Client code</th><th>Method</th><th>Outcome</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.encounter_date or r.created_at }}</td>
+          <td>{{ fac_names.get(r.facility_id, r.facility_id) }}</td>
+          <td>{{ r.client_code or '—' }}</td>
+          <td>{{ r.method_accepted or '—' }}</td>
+          <td>{{ r.outcome or '—' }}</td>
+          <td><a href="{{ url_for('logistics.uptake_client_detail', cid=r.id) }}">Open</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-muted text-center py-4">No client records yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <a class="btn btn-outline-secondary mt-3" href="{{ url_for('logistics.uptake_home') }}">Back</a>
+</div>
+{% endblock %}
