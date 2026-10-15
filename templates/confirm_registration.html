@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Confirm registration – CONTRAconnect{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:520px">
+  <div class="card shadow-sm">
+    <div class="card-body p-4 text-center">
+      {% if ok %}
+      <div class="mb-3" style="font-size:2.5rem;color:#0d9488">✓</div>
+      <h1 class="h4">Registration confirmed</h1>
+      {% else %}
+      <div class="mb-3" style="font-size:2.5rem;color:#dc2626">!</div>
+      <h1 class="h4">Could not confirm</h1>
+      {% endif %}
+      <p class="text-muted mt-3">{{ message }}</p>
+      <a href="{{ url_for('login') }}" class="btn btn-success mt-2" style="background:#0d9488;border-color:#0d9488">
+        Go to sign in
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
