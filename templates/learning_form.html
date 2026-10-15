@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ lq_code }} – {{ meta.title }}{% endblock %}
 {% block content %}
-{% set form_data = form_data or {} %}
 <div class="container py-4" style="max-width:720px">
   <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
@@ -51,25 +50,6 @@
             {% endfor %}
           </select>
           <input type="hidden" name="facility_name" id="facility_name" value="{{ form_data.get('facility_name','') }}">
-        </div>
-
-        
-        <div class="card border-primary mb-3">
-          <div class="card-header bg-white fw-semibold">Client details</div>
-          <div class="card-body row g-2">
-            <div class="col-md-4">
-              <label class="form-label small">Client name <span class="text-danger">*</span></label>
-              <input class="form-control" name="client_name" value="{{ form_data.get('client_name','') }}" required>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small">Phone number <span class="text-danger">*</span></label>
-              <input class="form-control" name="client_phone" value="{{ form_data.get('client_phone','') }}" required>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small">Client Unique No. <span class="text-danger">*</span></label>
-              <input class="form-control" name="client_unique_no" value="{{ form_data.get('client_unique_no','') }}" required>
-            </div>
-          </div>
         </div>
 
         {% for f in meta.fields %}
