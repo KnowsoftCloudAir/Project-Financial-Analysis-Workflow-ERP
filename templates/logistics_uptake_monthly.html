@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Monthly uptake record{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <h3>Monthly client uptake record</h3>
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-auto">
+      <label class="form-label small mb-0">Month</label>
+      <input type="month" name="month" value="{{ month }}" class="form-control">
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-primary">Load</button>
+    </div>
+    <div class="col-auto">
+      <a class="btn btn-outline-secondary" href="/ops/uptake/administer">Back</a>
+    </div>
+  </form>
+  <div class="table-responsive card shadow-sm">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Date</th><th>Client</th><th>Facility</th><th>Recorder</th><th>Nurse</th><th>Commodities</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.administered_at or r.created_at }}</td>
+          <td>{{ r.client_name }}</td>
+          <td>{{ r.facility_name }}</td>
+          <td>{{ r.recorder_name }}</td>
+          <td>{{ r.nurse_name }}</td>
+          <td class="small">{{ r.commodities }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-muted text-center">No administered cases in this month.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
