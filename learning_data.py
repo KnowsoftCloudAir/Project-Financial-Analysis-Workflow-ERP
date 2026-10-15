@@ -495,6 +495,39 @@ def register_learning_routes(
     # Optional Facility model injected from server.py (avoids circular imports)
     FacilityModel = Facility
 
+    # ------------------------------------------------------------------
+    # Models (must be defined before any route that uses them)
+    # ------------------------------------------------------------------
+    class LearningAssignment(db.Model):
+        __tablename__ = 'learning_assignments'
+        id = db.Column(db.Integer, primary_key=True)
+        lq_code = db.Column(db.String(10), index=True, nullable=False)
+        staff_user_id = db.Column(db.Integer, index=True, nullable=False)
+        is_active = db.Column(db.Boolean, default=True)
+        assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    class LearningSubmission(db.Model):
+        __tablename__ = 'learning_submissions'
+        id = db.Column(db.Integer, primary_key=True)
+        lq_code = db.Column(db.String(10), index=True, nullable=False)
+        period_label = db.Column(db.String(120))
+        period_num = db.Column(db.Integer, index=True)
+        data_json = db.Column(db.Text)
+        computed_json = db.Column(db.Text)
+        staff_user_id = db.Column(db.Integer, index=True)
+        staff_name = db.Column(db.String(120))
+        staff_email = db.Column(db.String(120))
+        submitted_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+        status = db.Column(db.String(40), default='submitted')
+
+    # Ensure tables exist
+    with app.app_context():
+        try:
+            db.create_all()
+        except Exception:
+            pass
+
+
     def _list_active_facilities():
         """Same facility list as /admin/facilities — active preferred, then all."""
         out = []
