@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ po.po_no }}{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <a href="{{ url_for('erp.pos_list') }}" class="btn btn-sm btn-outline-secondary mb-2">← Purchase orders</a>
+  <h3>{{ po.po_no }}</h3>
+  <p class="text-muted">
+    Vendor: <strong>{{ po.vendor_name }}</strong>
+    · Amount: <strong>{{ '{:,.2f}'.format(po.amount or 0) }}</strong>
+    · Status: <span class="badge bg-secondary">{{ po.status }}</span>
+  </p>
+
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">Goods to receive (from winning vendor quotation)</div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>Description</th>
+            <th class="text-end">Qty</th>
+            <th>Unit</th>
+            <th class="text-end">Unit cost</th>
+            <th class="text-end">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for it in grn_lines %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ it.name }}</td>
+            <td class="text-end">{{ it.qty }}</td>
+            <td>{{ it.unit or 'unit' }}</td>
+            <td class="text-end">{{ '%.2f'|format(it.unit_cost or 0) }}</td>
+            <td class="text-end">{{ '%.2f'|format(it.total or 0) }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-muted">No quotation lines found — GRN will use PO amount.</td></tr>
+        {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="table-light">
+            <th colspan="5" class="text-end">Grand total</th>
+            <th class="text-end">
+              {{ '%.2f'|format(grn_lines|sum(attribute='total') if grn_lines else (po.amount or 0)) }}
+            </th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header"><strong>Goods Received Note</strong></div>
+        <div class="card-body">
+          <p class="small text-muted">Confirm delivery against the vendor quotation above. On accept, stock posts to <strong>Main Warehouse</strong>.</p>
+          <form method="post" action="/erp/pos/{{ po.id }}/grn">
+            {% for it in grn_lines %}
+            <input type="hidden" name="recv_qty_{{ loop.index0 }}" value="{{ it.qty }}">
+            {% endfor %}
+            {% for field, label in [
+              ('quantities_ok','Quantities match quotation / PO'),
+              ('package_integrity_ok','Package integrity OK'),
+              ('shelf_life_ok','Shelf-life compliant'),
+              ('regulatory_docs_ok','Regulatory docs OK'),
+              ('storage_guidance_received','Storage guidance received'),
+            ] %}
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="{{ field }}" value="1" id="{{ field }}" checked>
+              <label class="form-check-label" for="{{ field }}">{{ label }}</label>
+            </div>
+            {% endfor %}
+            <div class="mt-2"><input name="received_by" class="form-control form-control-sm" placeholder="Received by"></div>
+            <button class="btn btn-primary btn-sm mt-2">Submit GRN → update warehouse</button>
+          </form>
+          <hr>
+          {% for g in grns %}
+            <div class="small mb-1">
+              {{ g.grn_no }} —
+              <span class="badge {% if g.all_conditions_met %}bg-success{% else %}bg-danger{% endif %}">{{ g.status }}</span>
+            </div>
+          {% else %}
+            <div class="small text-muted">No GRN yet</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header"><strong>Invoice → Finance</strong></div>
+        <div class="card-body">
+          <form method="post" action="/erp/pos/{{ po.id }}/invoice">
+            <select name="grn_id" class="form-select form-select-sm mb-2">
+              <option value="">Select accepted GRN</option>
+              {% for g in grns if g.all_conditions_met %}
+              <option value="{{ g.id }}">{{ g.grn_no }}</option>
+              {% endfor %}
+            </select>
+            <input name="invoice_no" class="form-control form-control-sm mb-2" placeholder="Vendor invoice no." required>
+            <input name="amount" type="number" step="0.01" class="form-control form-control-sm mb-2"
+                   value="{{ '%.2f'|format(grn_lines|sum(attribute='total') if grn_lines else (po.amount or 0)) }}" placeholder="Amount">
+            <input name="tax_amount" type="number" step="0.01" class="form-control form-control-sm mb-2" value="0" placeholder="Tax">
+            <button class="btn btn-primary btn-sm">Create invoice</button>
+          </form>
+          <hr>
+          {% for i in invoices %}
+            <div class="small">{{ i.invoice_no }} — {{ '{:,.0f}'.format(i.total_amount or 0) }} — {{ i.status }}</div>
+          {% else %}
+            <div class="small text-muted">No invoices yet</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
