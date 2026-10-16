@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Inventory Dashboard{% endblock %}
+{% block extra_css %}
+<style>
+  .inv-hero { background: linear-gradient(135deg,#0d6e6e,#0a4f4f); color:#fff; border-radius:16px; padding:1.2rem 1.4rem; }
+  .inv-card { border:none; border-radius:16px; box-shadow:0 8px 24px rgba(15,60,60,.08); transition:transform .2s; }
+  .inv-card:hover { transform:translateY(-4px); }
+  .chart-sm { height:180px; }
+  .chart-lg { height:320px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="inv-hero mb-4">
+    <h2 class="mb-1"><i class="bi bi-box-seam"></i> Inventory Dashboard</h2>
+    <p class="mb-0 small opacity-90">Main warehouse and active service points</p>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card inv-card h-100">
+        <div class="card-body text-center">
+          <div class="icon-3d mx-auto mb-2" style="width:72px;height:72px;border-radius:20px;background:linear-gradient(145deg,#0d9488,#0f766e);display:flex;align-items:center;justify-content:center;color:#fff;font-size:2rem">
+            <i class="bi bi-building"></i>
+          </div>
+          <h5>Main Warehouse</h5>
+          <p class="small text-muted">Central stock, receipts, dispatches</p>
+          <a href="#warehouse" class="btn btn-sm btn-success">Open warehouse</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card inv-card h-100">
+        <div class="card-body text-center">
+          <div class="icon-3d mx-auto mb-2" style="width:72px;height:72px;border-radius:20px;background:linear-gradient(145deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:2rem">
+            <i class="bi bi-geo-alt"></i>
+          </div>
+          <h5>Service Points</h5>
+          <p class="small text-muted">Kiosks, PHCs and outlets</p>
+          <a href="#servicepoints" class="btn btn-sm btn-primary">Open service points</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ---- Main Warehouse ---- #}
+  <div id="warehouse" class="mb-5">
+    <h3 class="mb-3">Main Warehouse</h3>
+    {% for sheet in sheets if sheet.facility_type == 'warehouse' or 'warehouse' in (sheet.facility_name or '')|lower %}
+    <div class="card inv-card mb-3">
+      <div class="card-header bg-white fw-semibold">{{ sheet.facility_name }}</div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-lg-8">
+            <div class="table-responsive">
+              <table class="table table-sm table-hover">
+                <thead><tr>
+                  <th>Commodity</th><th class="text-end">Opening</th><th class="text-end">Received</th>
+                  <th class="text-end">Dispatched</th><th class="text-end">Returned</th><th class="text-end">Balance</th>
+                </tr></thead>
+                <tbody>
+                {% for line in sheet.lines %}
+                <tr>
+                  <td>{{ line.name }}</td>
+                  <td class="text-end">{{ '%.1f'|format(line.opening or 0) }}</td>
+                  <td class="text-end">{{ '%.1f'|format(line.received or 0) }}</td>
+                  <td class="text-end">{{ '%.1f'|format(line.dispatched or 0) }}</td>
+                  <td class="text-end">{{ '%.1f'|format(line.returned or 0) }}</td>
+                  <td class="text-end fw-bold">{{ '%.1f'|format(line.balance or 0) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-muted text-center">No stock lines</td></tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <canvas class="chart-lg" id="chartWh{{ loop.index }}"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-muted">No warehouse data available.</p>
+    {% endfor %}
+  </div>
+
+  {# ---- Service Points ---- #}
+  <div id="servicepoints">
+    <h3 class="mb-3">Active Service Points</h3>
+    <div class="row g-3">
+    {% for sheet in sheets if sheet.facility_type != 'warehouse' and 'warehouse' not in (sheet.facility_name or '')|lower %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card inv-card h-100">
+          <div class="card-header bg-white small fw-semibold">{{ sheet.facility_name }}</div>
+          <div class="card-body p-2">
+            <div class="table-responsive" style="max-height:200px">
+              <table class="table table-sm mb-2">
+                <thead><tr><th>Item</th><th class="text-end">Bal</th></tr></thead>
+                <tbody>
+                {% for line in sheet.lines[:5] %}
+                <tr>
+                  <td class="small">{{ line.name }}</td>
+                  <td class="text-end small">{{ '%.0f'|format(line.balance or 0) }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <canvas class="chart-sm" id="chartSp{{ loop.index }}"></canvas>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="col-12"><p class="text-muted">No active service points found.</p></div>
+    {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  // Warehouse charts
+  {% for sheet in sheets if sheet.facility_type == 'warehouse' or 'warehouse' in (sheet.facility_name or '')|lower %}
+  (function(){
+    var labels = [{% for line in sheet.lines %}"{{ line.name|e }}"{% if not loop.last %},{% endif %}{% endfor %}];
+    var data = [{% for line in sheet.lines %}{{ line.balance or 0 }}{% if not loop.last %},{% endif %}{% endfor %}];
+    var el = document.getElementById('chartWh{{ loop.index }}');
+    if (el && labels.length) {
+      new Chart(el, { type:'bar', data:{ labels:labels, datasets:[{ label:'Balance', data:data, backgroundColor:'#0d9488' }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} } } });
+    }
+  })();
+  {% endfor %}
+
+  // Service point mini charts
+  {% for sheet in sheets if sheet.facility_type != 'warehouse' and 'warehouse' not in (sheet.facility_name or '')|lower %}
+  (function(){
+    var labels = [{% for line in sheet.lines[:6] %}"{{ line.name|e }}"{% if not loop.last %},{% endif %}{% endfor %}];
+    var data = [{% for line in sheet.lines[:6] %}{{ line.balance or 0 }}{% if not loop.last %},{% endif %}{% endfor %}];
+    var el = document.getElementById('chartSp{{ loop.index }}');
+    if (el && labels.length) {
+      new Chart(el, { type:'bar', data:{ labels:labels, datasets:[{ label:'Balance', data:data, backgroundColor:'#3b82f6' }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ ticks:{ font:{size:9} } } } } });
+    }
+  })();
+  {% endfor %}
+})();
+</script>
+{% endblock %}
