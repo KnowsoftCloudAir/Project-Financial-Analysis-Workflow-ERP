@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Learning Data{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-3">Learning Data Collection</h2>
+  <p class="text-muted">Select a Learning Question to record data. Project Managers can also open the full report dashboard.</p>
+
+  {% if is_pm %}
+  <div class="mb-3">
+    <a href="{{ url_for('learning_report_dashboard') }}" class="btn btn-primary">Open Learning Report Dashboard</a>
+    <a href="{{ url_for('learning_assign') }}" class="btn btn-outline-secondary">Assign staff</a>
+  </div>
+  {% endif %}
+
+  <div class="row g-3">
+    {% for code, meta in questions.items() %}
+      {% if code in visible %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <h5 class="card-title">{{ code }}</h5>
+            <p class="card-text small">{{ meta.title or code }}</p>
+            <a href="{{ url_for('learning_template', lq_code=code) }}" class="btn btn-sm btn-outline-primary">Open form</a>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if recent %}
+  <hr class="my-4">
+  <h5>Recent submissions</h5>
+  <ul class="list-group">
+    {% for s in recent %}
+    <li class="list-group-item d-flex justify-content-between">
+      <span>{{ s.lq_code }} — {{ s.period_label or '' }}</span>
+      <small class="text-muted">{{ s.staff_name }} · {{ s.submitted_at.strftime('%Y-%m-%d %H:%M') if s.submitted_at else '' }}</small>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endblock %}
