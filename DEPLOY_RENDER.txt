@@ -1,0 +1,21 @@
+RENDER DEPLOY — REQUIRED LAYOUT
+
+On GitHub the repository ROOT must look like:
+
+  main.py
+  Procfile
+  requirements.txt
+  runtime.txt
+  app/
+  static/
+
+WRONG (causes: Could not import module "main"):
+  OneChurchgate-main/main.py
+  OneChurchgate-main/app/...
+
+How to fix:
+1. Download OneChurchgate-RENDER-ROOT.zip
+2. Extract so main.py is in the folder you push as the repo root
+3. git add -A && git commit && git push
+4. Render Root Directory: leave EMPTY (or ".")
+5. Start command: uvicorn main:app --host 0.0.0.0 --port $PORT

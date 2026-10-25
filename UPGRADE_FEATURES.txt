@@ -1,0 +1,13 @@
+
+Churchgate upgrade checklist (after deploy)
+===========================================
+1. Login page shows: "Try Churchgate — 10 minutes free (no registration)"
+2. Portal Ambient bar: animation select, Pause, Fullscreen
+3. Animations: sunset (free), ocean_fish, sky_run, jupiter, word_forms, great_men, sunrise_ant
+4. Kwealth: first 2 books free; more need active subscription or trial
+5. Background music list: first 2 free for non-subscribers
+6. Admin -> Kwealth Books: multi-file PDF/Word/text upload
+7. Angel unknown topic: "Sorry I can't help with that."
+8. YouTube / books / songs NOT wiped on normal code deploy
+
+Data safety: restore_bundled_backup(force=False) — marker skips re-restore.

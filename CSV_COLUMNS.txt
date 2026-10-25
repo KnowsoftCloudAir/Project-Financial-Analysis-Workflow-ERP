@@ -1,0 +1,21 @@
+Churchgate Social Stream CSV columns
+
+Required for upload:
+  platform     - youtube | facebook | tiktok | instagram
+  title        - display name
+  source_url   - public URL (youtu.be, youtube.com/live/..., /channel/.../live, @handle/live)
+  category     - tv | movies | news | games | ministration | others
+  description  - optional note
+
+Optional:
+  is_active    - 1 or 0 (default 1)
+  sort_order   - number (lower shows first)
+
+How to use:
+1. Admin → Social Stream → Upload CSV (check Replace all if restoring after deploy)
+2. Or download backup anytime with Download CSV
+
+Login codes:
+- Registration confirmation: once (email link)
+- Password reset: only when user requests reset
+- Normal login: email + password only — NO code every time

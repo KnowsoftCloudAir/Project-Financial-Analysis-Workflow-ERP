@@ -1,0 +1,3 @@
+platform,title,source_url,embed_url,description,category,youtube_channel_id,is_active,sort_order
+youtube,Al Jazeera Live,https://www.youtube.com/channel/UCEXGDNclvmg6RW0vipJYsTQ/live,,News live,news,UCEXGDNclvmg6RW0vipJYsTQ,1,0
+youtube,Example Video,https://www.youtube.com/watch?v=dQw4w9WgXcQ,,Sample,others,,1,10

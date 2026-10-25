@@ -1,0 +1,11 @@
+=== HOME (always play) ===
+{% include "partials/churchgate_hero.html" %}
+
+=== LOGIN (replace video) ===
+{% include "partials/churchgate_hero_login.html" %}
+
+=== MEMBER SOCIAL AREA ===
+{% include "partials/churchgate_hero_social.html" %}
+
+=== Raw iframe (if partials folder not used) ===
+<iframe src="/static/churchgate-default-hero.html" title="Churchgate" allow="autoplay" style="width:100%;height:min(70vh,560px);border:0;border-radius:16px;background:#020617;"></iframe>

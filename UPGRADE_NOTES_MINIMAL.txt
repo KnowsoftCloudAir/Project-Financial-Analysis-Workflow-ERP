@@ -1,0 +1,1 @@
+Book panel = scene size. Scene folded unless selected. FS = book + captions. Swipe L/R pages.

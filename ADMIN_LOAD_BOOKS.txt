@@ -1,0 +1,14 @@
+
+After deploy, as General Admin open:
+  https://churchgate.knowsoft.org.uk/admin/library/load-permanent
+OR
+  https://churchgate.knowsoft.org.uk/admin/kwealth/books
+and upload the three .txt from static/books if seed fails.
+
+Angel resources:
+  https://churchgate.knowsoft.org.uk/admin/angel-resources
+(Login as admin first via /ks-admin/login)
+
+Confirm reuse:
+  First click = confirm
+  Second click = already confirmed (not expired unless >72h)

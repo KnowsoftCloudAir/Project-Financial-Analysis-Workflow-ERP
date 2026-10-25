@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Churchgate — The Walk</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#020617;font-family:Inter,system-ui,sans-serif;overflow:hidden}
+#cgHero{
+  position:relative;width:100vw;height:100vh;height:100dvh;
+  background:#0a1628;overflow:hidden;isolation:isolate;
+}
+.progress{position:absolute;top:0;left:0;right:0;height:3px;z-index:80;background:rgba(255,255,255,.12)}
+.progress .bar{height:100%;width:0%;background:linear-gradient(90deg,#0ea5e9,#7dd3fc);transition:width .1s linear}
+.wm{position:absolute;top:12px;left:14px;z-index:80;font-family:"Playfair Display",Georgia,serif;font-weight:700;font-size:clamp(.95rem,2vw,1.25rem);color:rgba(255,255,255,.88)}
+.wm span{color:#38bdf8}
+.caption{
+  position:absolute;left:50%;bottom:max(12px,env(safe-area-inset-bottom));
+  transform:translateX(-50%);z-index:80;width:min(94%,48rem);
+  padding:.75rem 1.25rem;border-radius:14px;
+  background:rgba(15,23,42,.9);border:1px solid rgba(255,255,255,.16);
+  color:#f8fafc;font-size:clamp(.85rem,2.2vw,1.1rem);font-weight:600;
+  text-align:center;line-height:1.4;opacity:0;transition:opacity .4s;
+}
+.caption.on{opacity:1}
+.controls{position:absolute;bottom:max(4.6rem,calc(env(safe-area-inset-bottom)+4.2rem));left:50%;transform:translateX(-50%);z-index:80;display:flex;gap:8px;align-items:center}
+.controls button{width:2.5rem;height:2.5rem;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(15,23,42,.85);color:#e2e8f0;cursor:pointer;font-size:.9rem}
+.controls .time{color:rgba(226,232,240,.7);font-size:.72rem;font-weight:600;min-width:5.2rem;text-align:center}
+
+/* World scroller */
+.world{
+  position:absolute;inset:0;
+  display:flex;align-items:stretch;
+  width:700%; /* 7 panels */
+  height:100%;
+  transform:translateX(0);
+  transition:transform 1.4s cubic-bezier(.4,0,.2,1);
+  will-change:transform;
+}
+.panel{
+  position:relative;width:calc(100% / 7);height:100%;flex-shrink:0;
+  overflow:hidden;
+}
+
+/* shared ground & sky */
+.sky{position:absolute;inset:0 0 28% 0}
+.ground{position:absolute;left:0;right:0;bottom:0;height:28%;background:linear-gradient(180deg,#334155,#1e293b)}
+.ground::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:rgba(255,255,255,.08)}
+
+/* ===== PANEL 0: House exterior day ===== */
+.p0 .sky{background:linear-gradient(180deg,#7dd3fc 0%,#bae6fd 40%,#fef3c7 100%)}
+.p0 .ground{background:linear-gradient(180deg,#86efac,#4ade80 30%,#22c55e)}
+.house{
+  position:absolute;left:12%;bottom:26%;width:32%;height:48%;
+  background:linear-gradient(180deg,#fef3c7,#fde68a);
+  border:3px solid #b45309;border-radius:6px 6px 0 0;
+  box-shadow:8px 12px 30px rgba(0,0,0,.25);
+}
+.house .roof{
+  position:absolute;left:-8%;right:-8%;top:-18%;height:28%;
+  background:linear-gradient(135deg,#dc2626,#991b1b);
+  clip-path:polygon(50% 0%,100% 100%,0% 100%);
+}
+.house .door{
+  position:absolute;left:38%;right:38%;bottom:0;height:42%;
+  background:#78350f;border-radius:6px 6px 0 0;
+}
+.house .door.open{transform-origin:left center;animation:doorOpen 1.2s ease forwards}
+@keyframes doorOpen{to{transform:perspective(200px) rotateY(-55deg)}}
+.house .win{
+  position:absolute;top:22%;width:16%;height:16%;
+  background:#7dd3fc;border:2px solid #b45309;border-radius:3px;
+}
+.house .win.l{left:12%}.house .win.r{right:12%}
+.tree{position:absolute;bottom:26%;width:8%;height:28%}
+.tree .trunk{position:absolute;left:40%;bottom:0;width:20%;height:40%;background:#78350f}
+.tree .leaves{position:absolute;left:0;right:0;top:0;height:65%;background:#16a34a;border-radius:50%}
+.tree.t1{left:52%}.tree.t2{right:8%;height:22%;width:6%}
+
+/* ===== PANEL 1: Street + buildings + cars ===== */
+.p1 .sky{background:linear-gradient(180deg,#38bdf8,#e0f2fe 50%,#fef9c3)}
+.p1 .ground{background:linear-gradient(180deg,#64748b,#475569)}
+.bldg{
+  position:absolute;bottom:26%;
+  background:linear-gradient(180deg,#cbd5e1,#94a3b8);
+  border:2px solid #64748b;border-radius:4px 4px 0 0;
+  box-shadow:4px 8px 20px rgba(0,0,0,.2);
+}
+.bldg .w{position:absolute;background:#fef08a;border-radius:2px;opacity:.85}
+.b1{left:5%;width:16%;height:42%}
+.b2{left:24%;width:14%;height:55%;background:linear-gradient(180deg,#a5b4fc,#6366f1)}
+.b3{left:42%;width:18%;height:38%}
+.b4{right:8%;width:15%;height:48%;background:linear-gradient(180deg,#fca5a5,#ef4444)}
+.b1 .w{width:22%;height:12%}.b1 .w:nth-child(1){left:15%;top:15%}.b1 .w:nth-child(2){right:15%;top:15%}.b1 .w:nth-child(3){left:15%;top:40%}.b1 .w:nth-child(4){right:15%;top:40%}
+.car{
+  position:absolute;bottom:30%;height:7%;width:12%;
+  background:#2563eb;border-radius:6px 10px 4px 4px;
+  box-shadow:0 4px 12px rgba(0,0,0,.3);
+}
+.car::before{content:'';position:absolute;left:15%;right:25%;top:-45%;height:50%;background:#93c5fd;border-radius:4px 8px 0 0}
+.car::after{content:'';position:absolute;left:12%;bottom:-25%;width:22%;height:40%;background:#1e293b;border-radius:50%;box-shadow:55px 0 0 #1e293b}
+.car.c1{left:55%;background:#dc2626;animation:carPass 8s linear infinite}
+.car.c2{left:20%;background:#16a34a;width:10%;animation:carPass 11s linear infinite reverse}
+@keyframes carPass{0%{transform:translateX(-20vw)}100%{transform:translateX(90vw)}}
+
+/* ===== PANEL 2: Friends group ===== */
+.p2 .sky{background:linear-gradient(180deg,#38bdf8,#fef3c7)}
+.p2 .ground{background:linear-gradient(180deg,#86efac,#22c55e)}
+.friends{position:absolute;left:50%;bottom:28%;transform:translateX(-50%);display:flex;gap:clamp(8px,2vw,18px);align-items:flex-end}
+.friend{position:relative;width:clamp(36px,7vw,56px);height:clamp(70px,14vw,110px)}
+.friend .h{position:absolute;left:50%;top:0;width:55%;height:28%;margin-left:-27.5%;border-radius:50%;background:#fcd9b0}
+.friend .b{position:absolute;left:20%;right:20%;top:26%;bottom:18%;border-radius:30% 30% 10% 10%}
+.friend .l{position:absolute;bottom:0;width:28%;height:20%;background:#1e3a8a;border-radius:4px}
+.friend .l.a{left:18%}.friend .l.b{right:18%}
+.friend.f1 .b{background:#3b82f6}
+.friend.f2 .b{background:#ec4899}.friend.f2 .h{background:#e8b896}
+.friend.f3 .b{background:#22c55e}
+.friend.f4 .b{background:#a855f7}.friend.f4 .h{background:#f5d0c0}
+.wave-hand{position:absolute;top:30%;right:-10%;font-size:clamp(1rem,2.5vw,1.5rem);animation:hi 0.8s ease-in-out infinite alternate}
+@keyframes hi{from{transform:rotate(-20deg)}to{transform:rotate(25deg)}}
+
+/* ===== PANEL 3: Girls ===== */
+.p3 .sky{background:linear-gradient(180deg,#7dd3fc,#fce7f3 60%,#fef3c7)}
+.p3 .ground{background:linear-gradient(180deg,#f9a8d4,#fb7185 40%,#f472b6)}
+.girls{position:absolute;left:55%;bottom:28%;display:flex;gap:clamp(6px,1.5vw,14px);align-items:flex-end}
+.girl{position:relative;width:clamp(34px,6.5vw,52px);height:clamp(68px,13vw,105px)}
+.girl .h{position:absolute;left:50%;top:0;width:58%;height:28%;margin-left:-29%;border-radius:50%;background:#e8b896}
+.girl .hair{position:absolute;left:50%;top:-5%;width:70%;height:35%;margin-left:-35%;background:#1c1917;border-radius:50% 50% 20% 20%;z-index:0}
+.girl .b{position:absolute;left:18%;right:18%;top:26%;bottom:16%;border-radius:35% 35% 12% 12%;z-index:1}
+.girl .l{position:absolute;bottom:0;width:26%;height:18%;background:#4c1d95;border-radius:4px}
+.girl .l.a{left:20%}.girl .l.b{right:20%}
+.girl.g1 .b{background:#f472b6}
+.girl.g2 .b{background:#c084fc}.girl.g2 .hair{background:#78350f}
+.girl.g3 .b{background:#38bdf8}
+.shop{position:absolute;left:8%;bottom:26%;width:28%;height:40%;background:#fef3c7;border:2px solid #d97706;border-radius:6px 6px 0 0}
+.shop .sign{position:absolute;top:8%;left:10%;right:10%;text-align:center;font-size:clamp(.55rem,1.4vw,.8rem);font-weight:800;color:#92400e}
+
+/* ===== PANEL 4: Approach church (dusk) ===== */
+.p4 .sky{background:linear-gradient(180deg,#1e3a5f 0%,#7c3aed 40%,#fb923c 85%,#fef3c7)}
+.p4 .ground{background:linear-gradient(180deg,#57534e,#292524)}
+.church-out{
+  position:absolute;left:50%;bottom:26%;transform:translateX(-50%);
+  width:min(42%,280px);height:min(55%,360px);
+}
+.church-out .body{
+  position:absolute;left:15%;right:15%;bottom:0;top:28%;
+  background:linear-gradient(180deg,#e7e5e4,#a8a29e);
+  border-radius:4px;box-shadow:0 12px 40px rgba(0,0,0,.4);
+}
+.church-out .roof{
+  position:absolute;left:5%;right:5%;top:8%;height:26%;
+  background:linear-gradient(135deg,#b91c1c,#7f1d1d);
+  clip-path:polygon(50% 0%,100% 100%,0% 100%);
+}
+.church-out .cross{
+  position:absolute;left:50%;top:0;width:8%;height:12%;margin-left:-4%;
+  background:#fbbf24;box-shadow:0 0 16px rgba(251,191,36,.6);
+}
+.church-out .cross::after{content:'';position:absolute;left:-90%;top:28%;width:280%;height:22%;background:#fbbf24}
+.church-out .door{
+  position:absolute;left:38%;right:38%;bottom:0;height:32%;
+  background:#44403c;border-radius:50% 50% 0 0;
+}
+.church-out .win{
+  position:absolute;top:40%;width:14%;height:16%;background:#fde68a;border-radius:4px;
+  box-shadow:0 0 12px rgba(253,230,138,.5);
+}
+.church-out .win.l{left:22%}.church-out .win.r{right:22%}
+
+/* ===== PANEL 5: Inside church DARK ===== */
+.p5 .sky{background:#020617}
+.p5 .ground{background:#0c0a09;height:35%}
+.p5{
+  background:#020617 !important;
+  transition:background 1s;
+}
+.p5.lit{
+  background:radial-gradient(ellipse at 50% 60%, #0c4a6e 0%, #020617 70%) !important;
+}
+.pews{
+  position:absolute;left:10%;right:10%;bottom:32%;height:20%;
+  display:flex;flex-direction:column;gap:6px;opacity:.35;
+}
+.pew{height:22%;background:#1c1917;border-radius:2px}
+.altar{
+  position:absolute;left:50%;top:22%;transform:translateX(-50%);
+  width:18%;height:8%;background:#292524;border-radius:4px;opacity:.4;
+}
+.big-cross{
+  position:absolute;left:50%;top:12%;transform:translateX(-50%);
+  width:4%;height:14%;background:#44403c;opacity:.5;
+}
+.big-cross::after{content:'';position:absolute;left:-100%;top:25%;width:300%;height:18%;background:#44403c}
+.dark-veil{
+  position:absolute;inset:0;background:rgba(0,0,0,.75);
+  transition:opacity 1.2s;
+  pointer-events:none;z-index:5;
+}
+.p5.lit .dark-veil{opacity:0}
+.p5.lit .pews,.p5.lit .altar,.p5.lit .big-cross{opacity:.85}
+
+/* ===== PANEL 6: Phone glow + CHURCHGATE ===== */
+.p6 .sky{background:radial-gradient(ellipse at 50% 55%, #0e7490 0%, #0c4a6e 30%, #020617 70%)}
+.p6 .ground{background:linear-gradient(180deg,#134e4a,#042f2e);height:32%}
+.p6 .pews{opacity:.7}
+.p6 .altar{opacity:.8}
+.p6 .big-cross{opacity:.9;background:#fbbf24;box-shadow:0 0 20px rgba(251,191,36,.5)}
+.p6 .big-cross::after{background:#fbbf24}
+
+/* Young man walker */
+.walker{
+  position:absolute;
+  left:18%;
+  bottom:24%;
+  width:clamp(48px,9vw,72px);
+  height:clamp(100px,20vw,150px);
+  z-index:20;
+  transition:left 1.4s cubic-bezier(.4,0,.2,1), bottom .8s ease, opacity .6s;
+  transform-origin:bottom center;
+}
+.walker .head{
+  position:absolute;left:50%;top:0;width:42%;height:22%;margin-left:-21%;
+  background:radial-gradient(circle at 35% 30%,#fcd9b0,#d4a574);
+  border-radius:50%;z-index:3;
+  box-shadow:inset -2px -1px 4px rgba(0,0,0,.15);
+}
+.walker .hair{
+  position:absolute;left:50%;top:-4%;width:48%;height:16%;margin-left:-24%;
+  background:#1c1917;border-radius:50% 50% 20% 20%;z-index:2;
+}
+.walker .body{
+  position:absolute;left:28%;right:28%;top:20%;height:42%;
+  background:linear-gradient(180deg,#2563eb,#1e3a8a);
+  border-radius:30% 30% 12% 12%;z-index:2;
+}
+.walker .arm{
+  position:absolute;top:22%;width:16%;height:28%;
+  background:linear-gradient(180deg,#2563eb 40%,#fcd9b0);
+  border-radius:10px;transform-origin:top center;z-index:1;
+}
+.walker .arm.l{left:12%;animation:armL .55s ease-in-out infinite alternate}
+.walker .arm.r{right:12%;animation:armR .55s ease-in-out infinite alternate}
+@keyframes armL{from{transform:rotate(25deg)}to{transform:rotate(-20deg)}}
+@keyframes armR{from{transform:rotate(-25deg)}to{transform:rotate(20deg)}}
+.walker .leg{
+  position:absolute;bottom:0;width:18%;height:30%;
+  background:#1e3a8a;border-radius:6px;transform-origin:top center;
+}
+.walker .leg.l{left:28%;animation:legL .55s ease-in-out infinite alternate}
+.walker .leg.r{right:28%;animation:legR .55s ease-in-out infinite alternate}
+@keyframes legL{from{transform:rotate(-18deg)}to{transform:rotate(18deg)}}
+@keyframes legR{from{transform:rotate(18deg)}to{transform:rotate(-18deg)}}
+.walker.stopped .arm.l,.walker.stopped .arm.r,
+.walker.stopped .leg.l,.walker.stopped .leg.r{animation:none;transform:rotate(0)}
+
+/* Phone in hand */
+.phone-glow{
+  position:absolute;right:2%;top:38%;width:28%;height:18%;
+  background:#0f172a;border:2px solid #38bdf8;border-radius:4px;
+  opacity:0;z-index:5;
+  box-shadow:0 0 0 rgba(56,189,248,0);
+}
+.walker.phone-on .phone-glow{
+  opacity:1;
+  animation:phonePulse 1.2s ease-in-out infinite;
+}
+@keyframes phonePulse{
+  0%,100%{box-shadow:0 0 8px 2px rgba(56,189,248,.5)}
+  50%{box-shadow:0 0 28px 10px rgba(56,189,248,.85)}
+}
+
+/* CHURCHGATE word rising from phone */
+.cg-word{
+  position:absolute;left:50%;top:42%;transform:translate(-50%,0) scale(.3);
+  font-family:"Playfair Display",Georgia,serif;
+  font-size:clamp(1.8rem,7vw,4.2rem);font-weight:700;
+  color:#7dd3fc;letter-spacing:.04em;
+  text-shadow:0 0 20px rgba(56,189,248,.8),0 0 60px rgba(14,165,233,.5),0 4px 24px rgba(0,0,0,.5);
+  opacity:0;z-index:30;pointer-events:none;
+  white-space:nowrap;
+}
+.cg-word.show{
+  animation:wordRise 2.5s ease forwards;
+}
+@keyframes wordRise{
+  0%{opacity:0;transform:translate(-50%,30px) scale(.25)}
+  30%{opacity:1;transform:translate(-50%,-10px) scale(1)}
+  70%{opacity:1;transform:translate(-50%,-20px) scale(1.08);text-shadow:0 0 40px rgba(125,211,252,1),0 0 80px rgba(56,189,248,.7),0 0 120px rgba(14,165,233,.4)}
+  100%{opacity:1;transform:translate(-50%,-28px) scale(1.05)}
+}
+.light-burst{
+  position:absolute;left:50%;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;
+  border-radius:50%;z-index:15;opacity:0;pointer-events:none;
+  background:radial-gradient(circle,rgba(125,211,252,.7) 0%,rgba(14,165,233,.3) 40%,transparent 70%);
+}
+.light-burst.show{animation:burst 2s ease forwards}
+@keyframes burst{
+  0%{opacity:0;transform:scale(0)}
+  40%{opacity:1;transform:scale(25)}
+  100%{opacity:.55;transform:scale(40)}
+}
+</style>
+</head>
+<body>
+<div id="cgHero">
+  <div class="progress"><div class="bar" id="cgBar"></div></div>
+  <div class="wm">Church<span>gate</span></div>
+  <div class="caption" id="cgCaption"></div>
+  <div class="controls">
+    <button type="button" id="cgPlay" aria-label="Play">⏸</button>
+    <span class="time" id="cgTime">0:00</span>
+    <button type="button" id="cgMute" aria-label="Mute">🔊</button>
+  </div>
+  <audio id="cgAudio" preload="auto" playsinline>
+    <source src="Churchgate_Marketing_VoiceNote.mp3" type="audio/mpeg">
+    <source src="/static/Churchgate_Marketing_VoiceNote.mp3" type="audio/mpeg">
+  </audio>
+
+  <div class="cg-word" id="cgWord">Churchgate</div>
+  <div class="light-burst" id="cgBurst"></div>
+
+  <div class="walker" id="cgWalker">
+    <div class="hair"></div>
+    <div class="head"></div>
+    <div class="arm l"></div>
+    <div class="arm r"></div>
+    <div class="body"></div>
+    <div class="leg l"></div>
+    <div class="leg r"></div>
+    <div class="phone-glow"></div>
+  </div>
+
+  <div class="world" id="cgWorld">
+    <!-- 0 House -->
+    <div class="panel p0">
+      <div class="sky"></div>
+      <div class="tree t1"><div class="trunk"></div><div class="leaves"></div></div>
+      <div class="tree t2"><div class="trunk"></div><div class="leaves"></div></div>
+      <div class="house">
+        <div class="roof"></div>
+        <div class="win l"></div><div class="win r"></div>
+        <div class="door" id="cgDoor"></div>
+      </div>
+      <div class="ground"></div>
+    </div>
+    <!-- 1 Street -->
+    <div class="panel p1">
+      <div class="sky"></div>
+      <div class="bldg b1"><div class="w"></div><div class="w"></div><div class="w"></div><div class="w"></div></div>
+      <div class="bldg b2"><div class="w" style="left:20%;top:12%;width:20%;height:10%"></div><div class="w" style="right:20%;top:12%;width:20%;height:10%"></div></div>
+      <div class="bldg b3"></div>
+      <div class="bldg b4"></div>
+      <div class="car c1"></div>
+      <div class="car c2"></div>
+      <div class="ground"></div>
+    </div>
+    <!-- 2 Friends -->
+    <div class="panel p2">
+      <div class="sky"></div>
+      <div class="friends">
+        <div class="friend f1"><div class="h"></div><div class="b"></div><div class="l a"></div><div class="l b"></div></div>
+        <div class="friend f2"><div class="h"></div><div class="b"></div><div class="l a"></div><div class="l b"></div><span class="wave-hand">👋</span></div>
+        <div class="friend f3"><div class="h"></div><div class="b"></div><div class="l a"></div><div class="l b"></div></div>
+        <div class="friend f4"><div class="h"></div><div class="b"></div><div class="l a"></div><div class="l b"></div></div>
+      </div>
+      <div class="ground"></div>
+    </div>
+    <!-- 3 Girls -->
+    <div class="panel p3">
+      <div class="sky"></div>
+      <div class="shop"><div class="sign">Café</div></div>
+      <div class="girls">
+        <div class="girl g1"><div class="hair"></div><div class="h"></div><div class="b"></div><div class="l a"></div><div class="l b"></div></div>
+        <div class="girl g2"><div class="hair"></div><div class="h"></div><div class="b"></div><div class="l a"></div><div class="l b"></div></div>
+        <div class="girl g3"><div class="hair"></div><div class="h"></div><div class="b"></div><div class="l a"></div><div class="l b"></div></div>
+      </div>
+      <div class="ground"></div>
+    </div>
+    <!-- 4 Church outside dusk -->
+    <div class="panel p4">
+      <div class="sky"></div>
+      <div class="church-out">
+        <div class="cross"></div><div class="roof"></div>
+        <div class="body"><div class="win l"></div><div class="win r"></div><div class="door"></div></div>
+      </div>
+      <div class="ground"></div>
+    </div>
+    <!-- 5 Inside dark -->
+    <div class="panel p5" id="cgInside">
+      <div class="sky"></div>
+      <div class="big-cross"></div>
+      <div class="altar"></div>
+      <div class="pews"><div class="pew"></div><div class="pew"></div><div class="pew"></div><div class="pew"></div></div>
+      <div class="dark-veil" id="cgVeil"></div>
+      <div class="ground"></div>
+    </div>
+    <!-- 6 Lit by Churchgate -->
+    <div class="panel p6">
+      <div class="sky"></div>
+      <div class="big-cross"></div>
+      <div class="altar"></div>
+      <div class="pews"><div class="pew"></div><div class="pew"></div><div class="pew"></div><div class="pew"></div></div>
+      <div class="ground"></div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  // Story panels timed for ~40s visual cycle, also driven by voice if present
+  // panel index 0..6
+  var STEPS = [
+    { t: 0,  panel: 0, walk: 22, cap: "A quiet morning. He steps out of the house…", door: true },
+    { t: 8,  panel: 1, walk: 40, cap: "Through the streets — buildings and cars rush by." },
+    { t: 18, panel: 2, walk: 48, cap: "Past a group of friends who wave hello." },
+    { t: 28, panel: 3, walk: 52, cap: "Past faces and places of the city…" },
+    { t: 40, panel: 4, walk: 50, cap: "Until the church stands before him at dusk." },
+    { t: 52, panel: 5, walk: 45, cap: "He walks in — and the light goes out.", dark: true, stop: true },
+    { t: 62, panel: 5, walk: 45, cap: "His phone lights up the darkness…", phone: true, stop: true },
+    { t: 70, panel: 6, walk: 50, cap: "Churchgate — glowing, brightening the place.", phone: true, word: true, stop: true },
+    { t: 85, panel: 6, walk: 50, cap: "Your church, closer than ever.", phone: true, word: true, stop: true }
+  ];
+
+  var world = document.getElementById('cgWorld');
+  var walker = document.getElementById('cgWalker');
+  var caption = document.getElementById('cgCaption');
+  var audio = document.getElementById('cgAudio');
+  var bar = document.getElementById('cgBar');
+  var timeEl = document.getElementById('cgTime');
+  var btnPlay = document.getElementById('cgPlay');
+  var btnMute = document.getElementById('cgMute');
+  var door = document.getElementById('cgDoor');
+  var inside = document.getElementById('cgInside');
+  var word = document.getElementById('cgWord');
+  var burst = document.getElementById('cgBurst');
+  var current = -1;
+  var visualT0 = null;
+  var useAudio = false;
+  var storyDur = 95; // seconds for visual loop if no audio
+
+  function fmt(s) {
+    s = Math.max(0, Math.floor(s || 0));
+    return Math.floor(s / 60) + ':' + ((s % 60 < 10) ? '0' : '') + (s % 60);
+  }
+
+  function applyStep(s) {
+    world.style.transform = 'translateX(-' + (s.panel * (100 / 7)) + '%)';
+    walker.style.left = s.walk + '%';
+    if (s.stop) walker.classList.add('stopped');
+    else walker.classList.remove('stopped');
+    if (s.phone) walker.classList.add('phone-on');
+    else walker.classList.remove('phone-on');
+    if (s.door && door) door.classList.add('open');
+    if (s.dark) {
+      inside.classList.remove('lit');
+    }
+    if (s.phone && s.panel >= 5) {
+      inside.classList.add('lit');
+    }
+    if (s.word) {
+      word.classList.add('show');
+      burst.classList.add('show');
+    } else {
+      word.classList.remove('show');
+      burst.classList.remove('show');
+    }
+    caption.textContent = s.cap;
+    caption.classList.add('on');
+  }
+
+  function stepForTime(t) {
+    var idx = 0;
+    for (var i = 0; i < STEPS.length; i++) {
+      if (t >= STEPS[i].t) idx = i;
+    }
+    return idx;
+  }
+
+  function tick() {
+    var t;
+    if (useAudio && audio && !isNaN(audio.duration) && audio.duration > 0) {
+      t = audio.currentTime || 0;
+      var dur = audio.duration;
+      // map full audio (~188s) onto story (~95s visual keyframes scaled)
+      var scale = storyDur / dur;
+      var vt = t * scale;
+      bar.style.width = Math.min(100, (t / dur) * 100) + '%';
+      timeEl.textContent = fmt(t) + ' / ' + fmt(dur);
+      var idx = stepForTime(vt);
+      if (idx !== current) { current = idx; applyStep(STEPS[idx]); }
+    } else {
+      if (visualT0 == null) visualT0 = performance.now();
+      t = ((performance.now() - visualT0) / 1000) % storyDur;
+      bar.style.width = Math.min(100, (t / storyDur) * 100) + '%';
+      timeEl.textContent = fmt(t);
+      var idx2 = stepForTime(t);
+      if (idx2 !== current) {
+        current = idx2;
+        applyStep(STEPS[idx2]);
+        // reset door/word when looping
+        if (idx2 === 0) {
+          if (door) door.classList.remove('open');
+          word.classList.remove('show');
+          burst.classList.remove('show');
+          walker.classList.remove('phone-on');
+          inside.classList.remove('lit');
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+  }
+
+  if (audio) {
+    audio.addEventListener('timeupdate', function () {
+      if (!useAudio) return;
+      tick();
+    });
+    audio.addEventListener('play', function () { useAudio = true; visualT0 = null; });
+    audio.addEventListener('ended', function () {
+      setTimeout(function () {
+        audio.currentTime = 0;
+        audio.play().catch(function () {});
+      }, 2000);
+    });
+  }
+
+  btnPlay.addEventListener('click', function () {
+    if (!audio) return;
+    if (audio.paused) {
+      useAudio = true;
+      audio.play().catch(function () {});
+      btnPlay.textContent = '⏸';
+    } else {
+      audio.pause();
+      btnPlay.textContent = '▶';
+    }
+  });
+  btnMute.addEventListener('click', function () {
+    if (!audio) return;
+    audio.muted = !audio.muted;
+    btnMute.textContent = audio.muted ? '🔇' : '🔊';
+  });
+
+  // Start visual timeline immediately (always renders)
+  applyStep(STEPS[0]);
+  requestAnimationFrame(tick);
+
+  // Try audio
+  if (audio) {
+    var p = audio.play();
+    if (p && p.then) {
+      p.then(function () {
+        useAudio = true;
+        btnPlay.textContent = '⏸';
+      }).catch(function () {
+        btnPlay.textContent = '▶';
+        caption.textContent = 'Tap ▶ for voice — or watch the walk continue';
+        caption.classList.add('on');
+      });
+    }
+  }
+  document.addEventListener('click', function once() {
+    if (audio && audio.paused) {
+      useAudio = true;
+      audio.play().catch(function () {});
+      btnPlay.textContent = '⏸';
+    }
+    document.removeEventListener('click', once);
+  });
+
+  window.ChurchgateHero = { el: document.getElementById('cgHero'), audio: audio };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "books": [
+    {
+      "id": "araby-james-joyce",
+      "title": "Araby",
+      "author": "James Joyce",
+      "type": "server_book",
+      "permanent": true,
+      "file": "araby_james_joyce.json"
+    }
+  ]
+}

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Social Stream — Churchgate</title>
+  <style>
+    html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui,sans-serif;overflow:hidden;}
+    #stage{position:fixed;left:0;right:0;top:0;bottom:96px;background:#000;}
+    #stage.fs{bottom:0;}
+    #stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;z-index:1;}
+    #swipeLayer{position:absolute;inset:0;z-index:5;touch-action:none;}
+    #top{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px 4px;background:linear-gradient(#000e,#0000);}
+    #top a,#top button{color:#fff;background:rgba(15,23,42,.82);border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 11px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer;}
+    .tabs{position:fixed;top:40px;left:0;right:0;z-index:30;display:flex;gap:6px;overflow-x:auto;padding:0 10px 6px;}
+    .tab{flex:0 0 auto;color:#e2e8f0;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:5px 11px;font-size:11px;font-weight:700;text-decoration:none;}
+    .tab.on{background:#0d9488;}
+    #nowTitle{
+      position:fixed;right:12px;bottom:108px;z-index:30;max-width:70vw;
+      padding:7px 12px;border-radius:12px 12px 4px 12px;
+      background:rgba(15,23,42,.88);border:1px solid rgba(255,255,255,.2);
+      font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+      opacity:0;transform:translateY(8px);transition:opacity .4s, transform .4s;pointer-events:none;
+    }
+    #nowTitle.show{opacity:1;transform:translateY(0);}
+    #liveBadge{
+      position:fixed;left:12px;bottom:108px;z-index:30;
+      padding:5px 10px;border-radius:999px;font-size:11px;font-weight:800;
+      background:#b91c1c;color:#fff;letter-spacing:.04em;
+      display:none;align-items:center;gap:6px;
+    }
+    #liveBadge.on{display:inline-flex;}
+    #liveBadge i{width:7px;height:7px;border-radius:50%;background:#fff;animation:blink 1s infinite;}
+    @keyframes blink{50%{opacity:.35}}
+    #hint{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:25;font-size:11px;opacity:.65;pointer-events:none;}
+    body.fs-on .tabs, body.fs-on #hint{display:none;}
+    body.fs-on #nowTitle, body.fs-on #liveBadge{bottom:18px;}
+  </style>
+</head>
+<body>
+  <div id="top">
+    <a href="/member" id="btnBack">Dashboard</a>
+    <img src="/static/img/knowsoft-logo.png" alt="" style="height:24px" onerror="this.style.display='none'">
+    <span>
+      <button type="button" id="btnSound">Sound off</button>
+      <button type="button" id="btnFs">Open full</button>
+      <button type="button" id="btnLand">Landscape</button>
+      <button type="button" id="btnReduce" style="display:none">Reduce screen</button>
+    </span>
+  </div>
+  <div class="tabs">
+    {% set cur = cat or 'all' %}
+    <a class="tab {% if cur=='all' %}on{% endif %}" href="/member/social-watch?cat=all">All</a>
+    <a class="tab {% if cur=='tv' %}on{% endif %}" href="/member/social-watch?cat=tv">TV</a>
+    <a class="tab {% if cur=='movies' %}on{% endif %}" href="/member/social-watch?cat=movies">Movies</a>
+    <a class="tab {% if cur=='news' %}on{% endif %}" href="/member/social-watch?cat=news">News</a>
+    <a class="tab {% if cur=='games' %}on{% endif %}" href="/member/social-watch?cat=games">Games</a>
+    <a class="tab {% if cur=='ministration' %}on{% endif %}" href="/member/social-watch?cat=ministration">Ministration</a>
+    <a class="tab {% if cur=='others' %}on{% endif %}" href="/member/social-watch?cat=others">Others</a>
+  </div>
+  <div id="liveBadge"><i></i> CHANNEL LIVE</div>
+  <div id="nowTitle"></div>
+  <div id="stage">
+    {% if links %}
+    <iframe id="stageFrame" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+    {% else %}
+    <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;padding:24px;text-align:center">No streams saved yet.</div>
+    {% endif %}
+    <div id="swipeLayer" aria-hidden="true"></div>
+  </div>
+  <div id="hint">Swipe or arrow keys · Channel live stays on the channel</div>
+<script>
+/* Items: url = embed, title, channelLive = true if persistent channel live_stream embed */
+var ITEMS = [
+{% for L in links %}
+  {
+    url: {{ (L.embed_url or '')|tojson }},
+    title: {{ (L.title or 'Stream')|tojson }},
+    source: {{ (L.source_url or '')|tojson }},
+    channelLive: {{ ('true' if (L.embed_url and 'embed/live_stream' in (L.embed_url or '') and 'channel=' in (L.embed_url or '')) else 'false') }}
+  }{% if not loop.last %},{% endif %}
+{% endfor %}
+].filter(function(x){ return x && x.url && String(x.url).indexOf('undefined')<0 && x.url !== '#'; });
+
+var idx = 0, startY = null, startX = null, titleTimer = null, leaving = false;
+var soundOn = false;
+var liveReloadTimer = null;
+var LIVE_RELOAD_MS = 4 * 60 * 1000; /* re-dock channel live every 4 min so a new broadcast can attach */
+
+try { soundOn = localStorage.getItem('cg_stream_sound') === '1'; } catch(e){}
+
+function flashTitle(text){
+  var el = document.getElementById('nowTitle');
+  if(!el) return;
+  el.textContent = text || 'Stream';
+  el.classList.add('show');
+  clearTimeout(titleTimer);
+  titleTimer = setTimeout(function(){ el.classList.remove('show'); }, 2800);
+}
+function setLiveBadge(on){
+  var b = document.getElementById('liveBadge');
+  if(b) b.classList.toggle('on', !!on);
+}
+function hdUrl(url, isChannelLive){
+  if(!url) return '';
+  try {
+    var u = new URL(url, location.origin);
+    u.searchParams.set('autoplay','1');
+    u.searchParams.set('mute', soundOn ? '0' : '1');
+    u.searchParams.set('playsinline','1');
+    u.searchParams.set('rel','0');
+    if(u.hostname.indexOf('youtube')>=0){
+      u.searchParams.set('modestbranding','1');
+      /* channel live_stream: do NOT force a video id — channel= is the persistent dock */
+      if(!isChannelLive){
+        u.searchParams.set('vq','hd1080');
+        u.searchParams.set('hd','1');
+      }
+    }
+    /* cache-bust channel live reloads so player re-resolves current broadcast */
+    if(isChannelLive){
+      u.searchParams.set('_cg', String(Date.now()));
+    }
+    return u.toString();
+  } catch(e){ return url; }
+}
+function clearLiveReload(){
+  if(liveReloadTimer){ clearInterval(liveReloadTimer); liveReloadTimer = null; }
+}
+function scheduleLiveReload(){
+  clearLiveReload();
+  var item = ITEMS[idx];
+  if(!item || !item.channelLive) return;
+  liveReloadTimer = setInterval(function(){
+    /* soft reload: same channel embed, new cache buster — picks up next live if prior ended */
+    play(idx, true);
+  }, LIVE_RELOAD_MS);
+}
+function play(i, softReload){
+  if(!ITEMS.length) return;
+  idx = (i + ITEMS.length) % ITEMS.length;
+  var fr = document.getElementById('stageFrame');
+  var item = ITEMS[idx];
+  var isCL = !!item.channelLive;
+  setLiveBadge(isCL);
+  flashTitle((isCL ? '🔴 ' : '') + (item.title || 'Stream'));
+  if(fr && item.url){
+    fr.src = hdUrl(item.url, isCL);
+    try {
+      localStorage.setItem('cg_last_embed', item.url);
+      localStorage.setItem('cg_last_stream', location.pathname + location.search);
+      localStorage.setItem('cg_stream_closed','0');
+    } catch(e){}
+  }
+  if(!softReload) scheduleLiveReload();
+}
+function next(){ play(idx+1); }
+function prev(){ play(idx-1); }
+function isFs(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function goDashboard(){
+  if(leaving) return;
+  leaving = true;
+  clearLiveReload();
+  window.location.replace('/member');
+}
+function syncFsBtns(){
+  var fs = isFs();
+  document.body.classList.toggle('fs-on', fs);
+  var stage = document.getElementById('stage');
+  if(stage) stage.classList.toggle('fs', fs);
+  var a = document.getElementById('btnFs');
+  var b = document.getElementById('btnReduce');
+  if(a) a.style.display = fs ? 'none' : 'inline-block';
+  if(b) b.style.display = fs ? 'inline-block' : 'none';
+}
+function enterFs(){
+  var el = document.getElementById('stage');
+  var req = el && (el.requestFullscreen || el.webkitRequestFullscreen);
+  if(req) req.call(el);
+  play(idx);
+}
+function lockLandscape(){
+  var lock = screen.orientation && screen.orientation.lock;
+  enterFs();
+  if(lock){ lock.call(screen.orientation, 'landscape').catch(function(){}); }
+}
+function exitFs(){
+  try { if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+  var ex = document.exitFullscreen || document.webkitExitFullscreen;
+  if(ex && isFs()){
+    leaving = true;
+    document.addEventListener('fullscreenchange', function once(){
+      document.removeEventListener('fullscreenchange', once);
+      goDashboard();
+    });
+    ex.call(document);
+    setTimeout(goDashboard, 400);
+  } else {
+    goDashboard();
+  }
+}
+var soundBtn = document.getElementById('btnSound');
+if(soundBtn) soundBtn.textContent = soundOn ? 'Sound on' : 'Sound off';
+soundBtn.onclick = function(){
+  soundOn = !soundOn;
+  try { localStorage.setItem('cg_stream_sound', soundOn ? '1' : '0'); } catch(e){}
+  this.textContent = soundOn ? 'Sound on' : 'Sound off';
+  play(idx);
+};
+document.getElementById('btnFs').onclick = enterFs;
+document.getElementById('btnLand').onclick = lockLandscape;
+document.getElementById('btnReduce').onclick = exitFs;
+document.getElementById('btnBack').addEventListener('click', function(e){
+  e.preventDefault();
+  goDashboard();
+});
+document.addEventListener('fullscreenchange', function(){
+  syncFsBtns();
+  if(!isFs() && leaving) goDashboard();
+});
+document.addEventListener('webkitfullscreenchange', syncFsBtns);
+
+function bindSwipe(el){
+  if(!el) return;
+  el.addEventListener('touchstart', function(e){
+    startY = e.changedTouches[0].clientY; startX = e.changedTouches[0].clientX;
+  }, {passive:true});
+  el.addEventListener('touchend', function(e){
+    if(startY==null) return;
+    var dy = e.changedTouches[0].clientY - startY;
+    var dx = e.changedTouches[0].clientX - startX;
+    if(Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)) { dy<0 ? next() : prev(); }
+    else if(Math.abs(dx) > 40) { dx<0 ? next() : prev(); }
+    startY = startX = null;
+  }, {passive:true});
+  el.addEventListener('mousedown', function(e){ startY = e.clientY; startX = e.clientX; });
+  window.addEventListener('mouseup', function(e){
+    if(startY==null) return;
+    var dy = e.clientY - startY, dx = e.clientX - startX;
+    if(Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) { dy<0 ? next() : prev(); }
+    else if(Math.abs(dx) > 50) { dx<0 ? next() : prev(); }
+    startY = startX = null;
+  });
+}
+bindSwipe(document.getElementById('swipeLayer'));
+window.addEventListener('keydown', function(e){
+  if(['ArrowDown','PageDown','ArrowRight'].indexOf(e.key)>=0){ e.preventDefault(); next(); }
+  if(['ArrowUp','PageUp','ArrowLeft'].indexOf(e.key)>=0){ e.preventDefault(); prev(); }
+  if(e.key==='Escape') exitFs();
+  if(e.key==='f' || e.key==='F'){ isFs()?exitFs():enterFs(); }
+});
+/* Re-resolve channel live when tab becomes visible again */
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible' && ITEMS[idx] && ITEMS[idx].channelLive){
+    play(idx, true);
+  }
+});
+
+var last=null; try{ last=localStorage.getItem('cg_last_embed'); }catch(e){}
+var start=0;
+if(last){ for(var i=0;i<ITEMS.length;i++){ if(ITEMS[i].url===last){ start=i; break; } } }
+play(start);
+syncFsBtns();
+</script>
+</body>
+</html>
