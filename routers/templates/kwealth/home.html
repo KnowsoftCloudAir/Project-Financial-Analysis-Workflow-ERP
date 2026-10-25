@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kwealth — Churchgate</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/js/offline-store.js"></script>
+  <link rel="manifest" href="/static/manifest.json">
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+      <a href="/member/portal" class="text-sm text-teal-300">← Member dashboard</a>
+      <span class="text-xs text-slate-400" id="netStatus">Checking connection…</span>
+    </div>
+    <h1 class="text-3xl font-black tracking-tight">Kwealth</h1>
+    <p class="text-slate-400 text-sm mt-1">Books · Notes · Excerpts — PDF, Word & text · offline-ready on this device</p>
+
+    <div class="mt-4 rounded-2xl border border-teal-600/40 bg-teal-950/40 p-4 text-sm">
+      <p class="font-semibold text-teal-200">Offline on this device</p>
+      <p class="text-teal-100/80 mt-1">Books you load, personal music, hymns shell, and login/portal pages can be cached. When the network drops, open Kwealth Books or Personal Music to continue.</p>
+      <p class="text-xs text-slate-400 mt-2" id="offlineBooks">Offline books stored: …</p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 mt-6">
+      <div class="rounded-2xl bg-teal-900/50 border border-teal-700/50 p-4 text-center">
+        <div class="text-3xl font-black">{{ total_books }}</div>
+        <div class="text-xs text-teal-200/80">Server books</div>
+      </div>
+      <div class="rounded-2xl bg-indigo-900/50 border border-indigo-700/50 p-4 text-center">
+        <div class="text-3xl font-black">{{ total_read }}</div>
+        <div class="text-xs text-indigo-200/80">Books started</div>
+      </div>
+    </div>
+
+    <div class="mt-6 grid gap-3">
+      <a href="/member/kwealth/books" class="block rounded-2xl bg-gradient-to-r from-amber-600 to-orange-700 p-5 font-bold shadow-lg hover:brightness-110">📚 Books — PDF, Word, text · read, flip, listen</a>
+      <a href="/member/device-music" class="block rounded-2xl bg-slate-800 border border-slate-600 p-4 font-semibold hover:bg-slate-700">🎵 Personal music (on device)</a>
+      <a href="/member/kwealth/notes" class="block rounded-2xl bg-gradient-to-r from-violet-700 to-fuchsia-800 p-5 font-bold shadow-lg">📝 Notes</a>
+      <a href="/member/kwealth/excerpts" class="block rounded-2xl bg-gradient-to-r from-emerald-700 to-teal-800 p-5 font-bold shadow-lg">📌 Excerpts</a>
+    </div>
+  </div>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
+    }
+    function updNet() {
+      var el = document.getElementById('netStatus');
+      if (!el) return;
+      el.textContent = navigator.onLine ? 'Online' : 'Offline — device library available';
+      el.className = 'text-xs ' + (navigator.onLine ? 'text-emerald-400' : 'text-amber-400');
+    }
+    window.addEventListener('online', updNet);
+    window.addEventListener('offline', updNet);
+    updNet();
+    if (window.CGOffline) {
+      CGOffline.listBooks().then(function(list) {
+        document.getElementById('offlineBooks').textContent = 'Offline books stored on this device: ' + (list.length || 0);
+      }).catch(function(){});
+    }
+  </script>
+</body>
+</html>

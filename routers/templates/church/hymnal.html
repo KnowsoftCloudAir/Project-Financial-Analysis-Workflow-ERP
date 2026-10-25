@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Church Hymnal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <header class="border-b border-white/10 px-4 py-3 flex gap-3 items-center">
+    <a href="/dashboard" class="text-teal-300 text-sm font-semibold">← Dashboard</a>
+    <h1 class="font-bold">Global church hymn pack</h1>
+  </header>
+  <main class="max-w-3xl mx-auto px-4 py-6">
+    {% if request.query_params.get('ok') %}<p class="text-emerald-400 text-sm mb-2">Saved for members.</p>{% endif %}
+    {% if request.query_params.get('err') == 'empty' %}<p class="text-rose-400 text-sm">Body required.</p>{% endif %}
+    {% if request.query_params.get('err') == 'noglobal' %}<p class="text-rose-400 text-sm">No global church linked.</p>{% endif %}
+    <p class="text-sm text-slate-400 mb-4">Paste plain-text hymns for your global church. Members see these with the public-domain list. Format: {1} TITLE then verses.</p>
+    <form method="post" action="/church/hymnal/save" class="space-y-3">
+      <input name="title" class="w-full rounded-xl px-3 py-2 text-slate-900" value="{{ pack.title if pack else 'Church Hymns' }}">
+      <textarea name="body" rows="18" class="w-full rounded-xl px-3 py-2 text-slate-900 font-mono text-sm" required>{{ pack.body if pack else '' }}</textarea>
+      <button class="rounded-xl bg-violet-600 px-4 py-2 font-bold text-sm">Save hymn pack</button>
+    </form>
+  </main>
+</body>
+</html>

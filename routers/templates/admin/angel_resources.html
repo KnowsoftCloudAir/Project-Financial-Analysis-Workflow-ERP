@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Angel Resources — General Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <header class="border-b border-white/10 bg-slate-900/80">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center gap-4">
+      <a href="/admin/" class="text-teal-300 text-sm font-semibold">← Admin</a>
+      <h1 class="font-bold text-lg">Angel knowledge resources</h1>
+    </div>
+  </header>
+  <main class="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <p class="text-sm text-slate-400">Paste plain-text FAQ, doctrine notes, or study material. Active resources are searched when members ask Angel. Built-in file resources remain available.</p>
+    {% if request.query_params.get('ok') %}<p class="text-emerald-400 text-sm">Saved.</p>{% endif %}
+    {% if request.query_params.get('err') %}<p class="text-rose-400 text-sm">Body cannot be empty.</p>{% endif %}
+
+    <form method="post" action="/admin/angel-resources/upload" class="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3">
+      <label class="block text-xs uppercase text-slate-400">Title</label>
+      <input name="title" class="w-full rounded-xl px-3 py-2 text-slate-900" placeholder="e.g. Extra FAQ batch" value="Angel resource">
+      <label class="block text-xs uppercase text-slate-400">Text body (plain text)</label>
+      <textarea name="body" rows="14" class="w-full rounded-xl px-3 py-2 text-slate-900 font-mono text-sm" placeholder="Paste FAQ or doctrine text here…" required></textarea>
+      <button type="submit" class="rounded-xl bg-teal-600 hover:bg-teal-500 px-4 py-2 font-bold text-sm">Upload for Angel</button>
+    </form>
+
+    <section>
+      <h2 class="font-semibold mb-3">Uploaded resources ({{ rows|length }})</h2>
+      <div class="space-y-3">
+        {% for r in rows %}
+        <div class="rounded-xl border border-white/10 bg-slate-900/40 p-3 flex flex-wrap gap-2 items-start justify-between">
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold">{{ r.title }}
+              {% if r.is_active %}<span class="text-xs text-emerald-400">active</span>{% else %}<span class="text-xs text-slate-500">off</span>{% endif %}
+            </p>
+            <p class="text-xs text-slate-500">{{ r.updated_at }} · {{ (r.body or '')|length }} chars</p>
+            <pre class="text-xs text-slate-400 mt-1 max-h-20 overflow-hidden">{{ (r.body or '')[:280] }}…</pre>
+          </div>
+          <div class="flex gap-2">
+            <form method="post" action="/admin/angel-resources/{{ r.id }}/toggle">
+              <button class="text-xs px-2 py-1 rounded-lg bg-slate-700">Toggle</button>
+            </form>
+            <form method="post" action="/admin/angel-resources/{{ r.id }}/delete" onsubmit="return confirm('Delete?')">
+              <button class="text-xs px-2 py-1 rounded-lg bg-rose-800">Delete</button>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-slate-500 text-sm">No uploaded resources yet. Built-in FAQ file still feeds Angel.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Focus groups{% endblock %}
+{% block content %}
+<p class="max-w-3xl mx-auto px-4 pt-4 text-sm text-slate-600">Members can <a href="/member/feed" class="text-blue-700 font-semibold">request to join</a> groups from the Interaction panel.</p>
+
+<div class="min-h-[80vh] bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950 text-white">
+  <div class="max-w-3xl mx-auto px-4 py-10">
+    <div class="flex flex-wrap justify-between gap-4 items-end mb-8">
+      <div>
+        <p class="text-xs uppercase tracking-[0.2em] text-indigo-300 font-semibold">Together in purpose</p>
+        <h1 class="text-3xl font-bold mt-1">Focus groups</h1>
+        <p class="text-sm text-slate-300 mt-2">Topic-based circles for prayer, planning and encouragement.</p>
+      </div>
+      {% if can_manage %}
+      <a href="/focus-groups/new" class="px-5 py-2.5 rounded-2xl bg-amber-400 text-indigo-950 font-bold text-sm shadow-lg hover:bg-amber-300">+ Create focus group</a>
+      {% endif %}
+    </div>
+    {% if groups %}
+    <div class="grid gap-4">
+      {% for g in groups %}
+      <a href="/focus-groups/{{ g.id }}" class="block rounded-3xl border border-white/10 bg-white/5 backdrop-blur p-5 hover:bg-white/10 transition shadow-xl">
+        <div class="flex justify-between gap-3 items-start">
+          <div>
+            <p class="font-bold text-lg text-amber-200">{{ g.name }}</p>
+            <p class="text-sm text-slate-300 mt-1">{{ g.description or "Open the circle and join the conversation." }}</p>
+          </div>
+          <span class="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500/40">Enter →</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="rounded-3xl border border-dashed border-white/20 p-10 text-center">
+      <p class="text-lg font-semibold">No focus groups yet</p>
+      <p class="text-sm text-slate-400 mt-2">{% if can_manage %}Create a group, pick a topic, and invite members.{% else %}When your pastor or admin adds you to a group, it will appear here.{% endif %}</p>
+      {% if can_manage %}<a href="/focus-groups/new" class="inline-block mt-4 text-amber-300 font-semibold underline">Create one</a>{% endif %}
+    </div>
+    {% endif %}
+    <p class="text-center mt-8"><a href="/member/portal" class="text-xs text-slate-400 underline">← My dashboard</a></p>
+  </div>
+</div>
+{% endblock %}

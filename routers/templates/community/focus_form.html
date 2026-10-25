@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}New focus group{% endblock %}
+{% block content %}
+<div class="min-h-[80vh] bg-gradient-to-b from-indigo-950 to-slate-900 text-white">
+  <div class="max-w-xl mx-auto px-4 py-10">
+    <a href="/focus-groups" class="text-sm text-indigo-300">← Focus groups</a>
+    <h1 class="text-3xl font-bold mt-3 mb-2">Create a focus group</h1>
+    <p class="text-sm text-slate-300 mb-6">Name the topic, write a short purpose, and select the members who belong.</p>
+    <form method="post" action="/focus-groups/new" class="rounded-3xl bg-white/10 border border-white/15 p-6 space-y-4 shadow-2xl">
+      <div>
+        <label class="text-xs uppercase tracking-wide text-indigo-200">Topic / group name *</label>
+        <input name="name" required placeholder="e.g. Youth prayer cell · Marriage circle" class="mt-1 w-full px-4 py-3 rounded-2xl bg-white text-slate-900 border-0">
+      </div>
+      <div>
+        <label class="text-xs uppercase tracking-wide text-indigo-200">Purpose / description</label>
+        <textarea name="description" rows="3" placeholder="What will this group discuss and pray about?" class="mt-1 w-full px-4 py-3 rounded-2xl bg-white text-slate-900 border-0"></textarea>
+      </div>
+      <div>
+        <label class="text-xs uppercase tracking-wide text-indigo-200">Members in this group</label>
+        <div class="mt-2 max-h-64 overflow-y-auto rounded-2xl bg-black/30 border border-white/10 p-3 space-y-2">
+          {% for m in members %}
+          <label class="flex items-center gap-3 text-sm py-1">
+            <input type="checkbox" name="member_ids" value="{{ m.id }}" class="rounded">
+            <span>{{ m.full_name }}</span>
+            <span class="text-xs text-slate-400">{{ m.email or "" }}</span>
+          </label>
+          {% else %}
+          <p class="text-sm text-slate-400">No approved members in your scope yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+      <button class="w-full py-3.5 rounded-2xl bg-amber-400 text-indigo-950 font-bold shadow-lg">Create focus group</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

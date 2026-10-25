@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Backup & Restore{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-10">
+  <h1 class="text-2xl font-bold text-navy-900 mb-2">System backup & restore</h1>
+  <p class="text-sm text-slate-600 mb-6">General Admin can download a full JSON backup of churches, members, users, stats, programs, music, YouTube channel/video links, messages, subscriptions, and more — and restore after a crash.</p>
+  {% if request.query_params.get('restored') %}
+  <div class="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">Restored {{ request.query_params.get('restored') }} records.</div>
+  {% endif %}
+  <a href="/admin/backup/download" class="inline-block w-full text-center py-3 rounded-xl bg-navy-900 text-white font-semibold mb-6">Download full backup (JSON)</a>
+  <form method="post" action="/admin/backup/restore" enctype="multipart/form-data" class="border rounded-2xl p-5 bg-slate-50 space-y-3">
+    <p class="font-semibold text-sm">Restore from backup file</p>
+    <p class="text-xs text-amber-700">Warning: restores overwrite matching IDs. Keep a fresh backup first.</p>
+    <input type="file" name="file" accept=".json,application/json" required class="w-full text-sm">
+    <button class="w-full py-2.5 rounded-xl bg-amber-500 text-slate-900 font-bold">Upload & restore</button>
+  </form>
+</div>
+{% endblock %}

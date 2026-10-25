@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Excerpts — Kwealth</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-100">
+  <div class="max-w-2xl mx-auto px-4 py-8">
+    <a href="/member/kwealth" class="text-sm text-teal-700 font-semibold">← Kwealth</a>
+    <h1 class="text-2xl font-bold mt-2">Excerpts</h1>
+    <p class="text-sm text-slate-500 mb-4">Paste Bible or book excerpts. Angel uses these as a knowledge source.</p>
+    <form method="post" action="/member/kwealth/excerpts" class="bg-white rounded-2xl border p-5 space-y-3 shadow-sm">
+      <input name="title" placeholder="Title" class="w-full rounded-xl border px-3 py-2">
+      <input name="source" placeholder="Source (e.g. Psalm 23, Matthew Henry)" class="w-full rounded-xl border px-3 py-2">
+      <textarea name="body" required rows="6" placeholder="Paste excerpt…" class="w-full rounded-xl border px-3 py-2"></textarea>
+      <button class="w-full py-3 rounded-xl bg-slate-900 text-white font-semibold">Save excerpt</button>
+    </form>
+    <div class="mt-6 space-y-3">
+      {% for e in excerpts %}
+      <div class="bg-white rounded-xl border p-4 shadow-sm">
+        <div class="font-semibold">{{ e.title }}</div>
+        <div class="text-xs text-slate-400">{{ e.source }} · {{ e.created_at }}</div>
+        <p class="text-sm mt-2 whitespace-pre-wrap">{{ e.body }}</p>
+        <form method="post" action="/member/kwealth/excerpts/{{ e.id }}/delete" class="mt-2">
+          <button class="text-xs text-rose-600">Delete</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="text-slate-400 text-sm">No excerpts yet.</p>
+      {% endfor %}
+    </div>
+    <p class="text-xs text-slate-500 mt-6">Matthew Henry: <a class="text-teal-700 underline" href="{{ mh_url }}" target="_blank">{{ mh_url }}</a></p>
+  </div>
+</body>
+</html>

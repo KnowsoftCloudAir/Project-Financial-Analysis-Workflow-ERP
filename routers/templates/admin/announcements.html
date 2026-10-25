@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Announcements{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <a href="/admin/" class="text-sm text-blue-700 font-medium">← Admin</a>
+  <h1 class="text-2xl font-bold text-navy-900 mt-2 mb-1">Maintenance & upgrade messages</h1>
+  <p class="text-sm text-slate-500 mb-6">Message all users about app maintenance or upgrades. Shown on the login page when active.</p>
+
+  <form method="post" action="/admin/force-password-reset" class="mb-8 rounded-2xl border p-4 bg-amber-50 border-amber-200">
+    <p class="font-semibold text-sm mb-1">After deploy / upgrade</p>
+    <p class="text-xs text-slate-600 mb-3">Require every user to set a new strong password on next login. Disable when the wave is finished.</p>
+    {% if force_password %}
+    <p class="text-sm text-amber-900 mb-2">Force password reset is <strong>ON</strong>.</p>
+    <button name="enable" value="0" class="px-4 py-2 rounded-xl bg-slate-800 text-white text-sm font-semibold">Turn off</button>
+    {% else %}
+    <button name="enable" value="1" class="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-semibold">Turn ON force password reset</button>
+    {% endif %}
+  </form>
+
+  <form method="post" action="/admin/announcements" class="bg-white border rounded-2xl p-5 space-y-3 mb-8 shadow-sm">
+    <input name="title" required placeholder="Title *" class="w-full px-3 py-2 rounded-xl border">
+    <textarea name="body" required rows="4" placeholder="Message to all users *" class="w-full px-3 py-2 rounded-xl border"></textarea>
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="show_on_login" value="yes" checked> Show on login page</label>
+    <button class="w-full py-2.5 rounded-xl bg-navy-900 text-white font-semibold">Send message to all users</button>
+  </form>
+
+  <div class="space-y-3">
+    {% for a in items %}
+    <div class="border rounded-xl p-4 {% if not a.is_active %}opacity-50{% endif %}">
+      <div class="flex justify-between gap-2">
+        <p class="font-semibold">{{ a.title }}</p>
+        <span class="text-xs">{{ "Active" if a.is_active else "Off" }}</span>
+      </div>
+      <p class="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{{ a.body }}</p>
+      {% if a.is_active %}
+      <form method="post" action="/admin/announcements/{{ a.id }}/deactivate" class="mt-2">
+        <button class="text-xs text-red-600 font-semibold">Deactivate</button>
+      </form>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">No announcements yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

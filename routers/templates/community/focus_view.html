@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} · Focus group{% endblock %}
+{% block content %}
+<div class="min-h-[80vh] bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950 text-white">
+  <div class="max-w-2xl mx-auto px-4 py-8">
+    <a href="/focus-groups" class="text-sm text-indigo-300">← All focus groups</a>
+    <div class="mt-4 mb-6 rounded-3xl bg-gradient-to-r from-indigo-600/40 to-amber-500/20 border border-white/10 p-6 shadow-2xl">
+      <p class="text-xs uppercase tracking-[0.15em] text-amber-200 font-semibold">Focus circle</p>
+      <h1 class="text-2xl sm:text-3xl font-bold mt-1">{{ group.name }}</h1>
+      {% if group.description %}<p class="text-sm text-slate-200 mt-2">{{ group.description }}</p>{% endif %}
+      <p class="text-xs text-slate-400 mt-3">{{ members|length }} member{{ "s" if members|length != 1 else "" }} in this group</p>
+    </div>
+
+    {% if can_manage %}
+    <div class="mb-6 rounded-3xl bg-white/10 border border-amber-400/30 p-5">
+      <h2 class="text-lg font-bold text-amber-200 mb-1">Manage members</h2>
+      <p class="text-xs text-slate-300 mb-4">Add approved church members to this existing focus group.</p>
+
+      {% if members %}
+      <div class="mb-4">
+        <p class="text-xs uppercase tracking-wide text-indigo-200 mb-2">In this group</p>
+        <ul class="space-y-2 max-h-40 overflow-y-auto">
+          {% for m in members %}
+          <li class="flex items-center justify-between gap-2 text-sm bg-black/20 rounded-xl px-3 py-2">
+            <span>{{ m.full_name }} <span class="text-slate-400 text-xs">({{ m.email or m.status }})</span></span>
+            <form method="post" action="/focus-groups/{{ group.id }}/remove-member" onsubmit="return confirm('Remove this member from the group?');">
+              <input type="hidden" name="member_id" value="{{ m.id }}">
+              <button class="text-xs font-semibold text-rose-300 hover:text-rose-200">Remove</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if available_members %}
+      <form method="post" action="/focus-groups/{{ group.id }}/add-members" class="space-y-3">
+        <p class="text-xs uppercase tracking-wide text-indigo-200">Add members</p>
+        <div class="max-h-48 overflow-y-auto space-y-2 rounded-2xl bg-black/20 p-3 border border-white/10">
+          {% for m in available_members %}
+          <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-white/5 rounded-lg px-2 py-1.5">
+            <input type="checkbox" name="member_ids" value="{{ m.id }}" class="rounded border-white/30">
+            <span>{{ m.full_name }}</span>
+            <span class="text-xs text-slate-400">{{ m.sex or '' }} · {{ m.status or 'member' }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        <button type="submit" class="px-5 py-2.5 rounded-2xl bg-amber-400 text-indigo-950 font-bold text-sm">Add selected to group</button>
+      </form>
+      {% else %}
+      <p class="text-xs text-slate-400">All approved members in your scope are already in this group, or none are available to add.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/focus-groups/{{ group.id }}/message" enctype="multipart/form-data" class="rounded-3xl bg-white/10 border border-white/15 p-4 mb-6 space-y-3">
+      <label class="text-xs text-indigo-200 font-semibold">Start a topic or share with the group</label>
+      <input name="topic" placeholder="New topic title (optional)" class="w-full px-4 py-2 rounded-2xl bg-white text-slate-900 text-base">
+      <textarea name="body" rows="3" placeholder="Write encouragement, a prayer point, or an update…" class="w-full px-4 py-3 rounded-2xl bg-white text-slate-900 text-base"></textarea>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-indigo-200">Picture</label>
+          <input type="file" name="image" accept="image/*" class="w-full text-sm text-indigo-100">
+        </div>
+        <div>
+          <label class="text-xs text-indigo-200">Audio (max ~30 seconds)</label>
+          <input type="file" name="audio" accept="audio/*,.webm,.mp3,.m4a,.ogg" class="w-full text-sm text-indigo-100">
+        </div>
+      </div>
+      <button class="px-5 py-2.5 rounded-2xl bg-amber-400 text-indigo-950 font-bold text-sm">Post to group</button>
+    </form>
+
+    <div class="space-y-4">
+      {% for msg in messages %}
+      <article class="rounded-3xl bg-white text-slate-900 border border-white/20 shadow-xl overflow-hidden">
+        <div class="p-4">
+          <p class="text-xs text-slate-500"><span class="font-bold text-indigo-900">{{ msg.sender }}</span> · {{ msg.at }}</p>
+          {% if msg.topic %}<p class="mt-1 text-sm font-bold text-indigo-800">{{ msg.topic }}</p>{% endif %}
+          <p class="mt-2 whitespace-pre-wrap leading-relaxed text-base sm:text-lg">{{ msg.body }}</p>
+          {% if msg.image_path %}<img src="{{ msg.image_path }}" alt="" class="mt-3 rounded-xl max-h-64 object-cover">{% endif %}
+          {% if msg.audio_path %}<audio controls class="mt-3 w-full" src="{{ msg.audio_path }}"></audio>{% endif %}
+          <div class="mt-3 flex flex-wrap items-center gap-3">
+            <form method="post" action="/focus-groups/messages/{{ msg.id }}/like">
+              <button class="text-sm font-semibold {% if msg.liked %}text-rose-600{% else %}text-slate-500{% endif %}">
+                {% if msg.liked %}♥{% else %}♡{% endif %} {{ msg.like_count or 0 }}
+              </button>
+            </form>
+            <span class="text-xs text-slate-400">{{ msg.comments|length }} comment{{ "s" if msg.comments|length != 1 else "" }}</span>
+          </div>
+        </div>
+        <div class="bg-slate-50 border-t px-4 py-3">
+          <ul class="space-y-2 mb-3">
+            {% for c in msg.comments %}
+            <li class="text-base">
+              <span class="font-semibold text-indigo-800">{{ c.user }}</span>
+              <span class="text-slate-800"> — {{ c.body }}</span>
+            </li>
+            {% else %}
+            <li class="text-xs text-slate-400">No comments yet — be the first.</li>
+            {% endfor %}
+          </ul>
+          <form method="post" action="/focus-groups/messages/{{ msg.id }}/comment" class="flex gap-2">
+            <input name="body" required placeholder="Write a comment…" class="flex-1 px-3 py-2 rounded-xl border text-base">
+            <button class="px-3 py-2 rounded-xl bg-indigo-700 text-white text-sm font-semibold">Comment</button>
+          </form>
+        </div>
+      </article>
+      {% else %}
+      <div class="rounded-3xl border border-dashed border-white/20 p-8 text-center text-slate-300">
+        <p class="font-semibold">No messages yet</p>
+        <p class="text-sm mt-1">Start the conversation on this topic above.</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

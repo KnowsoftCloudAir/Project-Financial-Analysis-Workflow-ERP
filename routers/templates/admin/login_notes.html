@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Login notes{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-10">
+  <h1 class="text-xl font-bold mb-4">Login page notes</h1>
+  <form method="post" action="/admin/login-notes/invite" class="bg-white border rounded-2xl p-5 space-y-3">
+    <p class="text-sm text-slate-600">Show <strong>Invite &amp; earn</strong> note on the login page?</p>
+    <label class="flex items-center gap-2 text-sm"><input type="radio" name="enabled" value="on" {% if show_invite %}checked{% endif %}> Show</label>
+    <label class="flex items-center gap-2 text-sm"><input type="radio" name="enabled" value="off" {% if not show_invite %}checked{% endif %}> Hide (delete from login)</label>
+    <button class="w-full py-2.5 rounded-xl bg-slate-900 text-white font-semibold">Save</button>
+  </form>
+  <a href="/admin/" class="inline-block mt-4 text-sm text-teal-700">← Admin</a>
+</div>
+{% endblock %}

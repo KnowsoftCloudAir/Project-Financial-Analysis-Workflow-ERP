@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Library & reading music{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <a href="/admin/" class="text-sm text-blue-700 font-medium">← Admin</a>
+  <h1 class="text-2xl font-bold text-navy-900 mt-2 mb-1">General books & reading music</h1>
+  <p class="text-sm text-slate-500 mb-6">Upload non-personal books for all members. PDF text is extracted for reading aloud. Upload calm background music for continuous reading.</p>
+
+  <form method="post" action="/admin/library/book" enctype="multipart/form-data" class="bg-white border rounded-2xl p-5 mb-8 space-y-3 shadow-sm">
+    <h2 class="font-semibold">Upload general book</h2>
+    <input name="title" required placeholder="Title *" class="w-full px-3 py-2 rounded-xl border">
+    <input name="author" placeholder="Author" class="w-full px-3 py-2 rounded-xl border">
+    <textarea name="description" rows="2" placeholder="Short description" class="w-full px-3 py-2 rounded-xl border"></textarea>
+    <input type="file" name="file" accept=".pdf,.txt,.md,application/pdf,text/plain" required class="text-sm">
+    <p class="text-xs text-slate-500">PDF or TXT. Text is extracted for the member Books reader and Angel context.</p>
+    <button class="px-5 py-2.5 rounded-xl bg-navy-900 text-white text-sm font-semibold">Upload book</button>
+  </form>
+
+  <div class="space-y-3 mb-10">
+    {% for b in books %}
+    <div class="bg-white border rounded-xl p-4 flex flex-wrap justify-between gap-2">
+      <div>
+        <p class="font-semibold">{{ b.title }}{% if b.author %} · {{ b.author }}{% endif %}</p>
+        <p class="text-xs text-slate-500">{% if b.is_active %}Active{% else %}Hidden{% endif %} · text {% if b.text_content %}extracted ({{ (b.text_content|length) }} chars){% else %}missing{% endif %}</p>
+      </div>
+      <div class="flex gap-2 text-xs">
+        <form method="post" action="/admin/library/book/{{ b.id }}/toggle"><button class="px-3 py-1.5 rounded-lg border">Toggle</button></form>
+        <form method="post" action="/admin/library/book/{{ b.id }}/delete" onsubmit="return confirm('Delete book?')"><button class="px-3 py-1.5 rounded-lg border border-red-200 text-red-700">Delete</button></form>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">No general books yet.</p>
+    {% endfor %}
+  </div>
+
+  <form method="post" action="/admin/library/music" enctype="multipart/form-data" class="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 mb-6 space-y-3">
+    <h2 class="font-semibold text-indigo-900">Background music for reading</h2>
+    <input name="title" required placeholder="Track title *" class="w-full px-3 py-2 rounded-xl border">
+    <input type="file" name="file" accept="audio/*,.mp3,.m4a,.ogg,.wav" required class="text-sm">
+    <button class="px-5 py-2.5 rounded-xl bg-indigo-700 text-white text-sm font-semibold">Upload music</button>
+  </form>
+  <div class="space-y-2">
+    {% for m in music %}
+    <div class="bg-white border rounded-xl p-3 flex justify-between items-center gap-2">
+      <div>
+        <p class="font-medium text-sm">{{ m.title }}</p>
+        <audio controls src="{{ m.file_path }}" class="h-8 mt-1 max-w-xs"></audio>
+      </div>
+      <form method="post" action="/admin/library/music/{{ m.id }}/delete" onsubmit="return confirm('Delete?')">
+        <button class="text-xs text-red-600 font-semibold">Delete</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">No reading music yet.</p>
+    {% endfor %}
+  </div>
+
+  <form method="post" action="/admin/library/bgm" enctype="multipart/form-data" class="bg-white border rounded-2xl p-5 mb-8 space-y-3 shadow-sm">
+    <h2 class="font-semibold">Upload shared reading music</h2>
+    <p class="text-xs text-slate-500">These tracks appear for every member in Books → Music before their own uploads.</p>
+    <input type="file" name="files" accept="audio/*,.mp3,.m4a,.ogg,.wav,.aac" multiple required class="text-sm">
+    <button class="px-5 py-2.5 rounded-xl bg-teal-700 text-white text-sm font-semibold">Upload music</button>
+  </form>
+  <div class="space-y-2 mb-10">
+    {% for tr in tracks|default([]) %}
+    <div class="bg-white border rounded-xl p-3 flex justify-between items-center gap-2">
+      <div>
+        <p class="font-medium text-sm">{{ tr.title }}</p>
+        <audio controls preload="none" src="{{ tr.url }}" class="mt-1 max-w-xs"></audio>
+      </div>
+      <form method="post" action="/admin/library/bgm/delete" onsubmit="return confirm('Remove track?')">
+        <input type="hidden" name="name" value="{{ tr.name }}">
+        <button class="text-xs text-red-600 px-3 py-1.5 border border-red-200 rounded-lg">Delete</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">No shared music yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

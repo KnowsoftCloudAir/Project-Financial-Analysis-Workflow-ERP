@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Pastor messages{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+  <a href="/dashboard" class="text-sm text-blue-700">← Dashboard</a>
+  <h1 class="text-2xl font-bold mt-2 mb-1">Messages from pastor</h1>
+  <p class="text-sm text-slate-500 mb-6">Shown on the member dashboard. Optional YouTube link embeds for members.</p>
+  <form method="post" action="/district/pastor-messages/add" class="bg-slate-50 border rounded-2xl p-4 mb-6 space-y-3">
+    <input name="title" value="Message from pastor" class="w-full px-3 py-2 rounded-xl border">
+    <textarea name="body" rows="3" placeholder="Message text" class="w-full px-3 py-2 rounded-xl border"></textarea>
+    <input name="youtube_id" placeholder="Optional YouTube URL or ID" class="w-full px-3 py-2 rounded-xl border">
+    <button class="w-full py-2.5 rounded-xl bg-indigo-700 text-white font-semibold">Post to members</button>
+  </form>
+  {% for m in msgs %}
+  <div class="border rounded-xl p-4 mb-3">
+    <p class="font-semibold">{{ m.title }}</p>
+    {% if m.body %}<p class="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{{ m.body }}</p>{% endif %}
+    {% if m.youtube_id %}<p class="text-xs mt-1"><a class="text-blue-700" href="https://www.youtube.com/watch?v={{ m.youtube_id }}" target="_blank">YouTube {{ m.youtube_id }}</a></p>{% endif %}
+    <form method="post" action="/district/pastor-messages/{{ m.id }}/delete" class="mt-2" onsubmit="return confirm('Delete?')">
+      <button class="text-xs text-red-600 font-semibold">Delete</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="text-sm text-slate-400">No messages yet.</p>
+  {% endfor %}
+</div>
+{% endblock %}

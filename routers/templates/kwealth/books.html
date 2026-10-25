@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Books — Kwealth</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/js/offline-store.js"></script>
+  <link rel="manifest" href="/static/manifest.json">
+  <style>
+    [x-cloak] { display: none !important; }
+    :root {
+      --book-bg: #0f172a;
+      --sheet-bg: linear-gradient(180deg, #fffef8 0%, #f3e9d3 100%);
+      --sheet-color: #1c1917;
+      --sheet-shadow: 12px 16px 40px rgba(0,0,0,.45);
+      --sheet-border: transparent;
+    }
+    body.theme-parchment { --book-bg: #0f172a; --sheet-bg: linear-gradient(180deg,#fffef8,#f3e9d3); --sheet-color:#1c1917; --sheet-border: transparent; }
+    body.theme-night { --book-bg: #000; --sheet-bg: #0a0a0a; --sheet-color: #f5f5f5; --sheet-shadow: 0 0 40px rgba(255,255,255,.08); --sheet-border: 1px solid rgba(255,255,255,.85); }
+    body.theme-sepia { --book-bg: #2c2416; --sheet-bg: #f4ecd8; --sheet-color: #3b2f1e; --sheet-border: 1px solid rgba(90,70,40,.25); }
+    body.theme-forest { --book-bg: #0c1a12; --sheet-bg: #e8f5e9; --sheet-color: #1b3a2a; --sheet-border: transparent; }
+    body.theme-ocean { --book-bg: #0a1628; --sheet-bg: #e3f2fd; --sheet-color: #0d2137; --sheet-border: transparent; }
+    body { background: var(--book-bg); min-height: 100vh; transition: background .35s ease; margin: 0; }
+    .bar { background: rgba(15,23,42,.95); border-bottom: 1px solid rgba(255,255,255,.12); }
+    body.theme-night .bar { background: #000; border-color: #444; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 700;
+      background: rgba(255,255,255,.12); color: #e2e8f0; border: 1px solid rgba(255,255,255,.18);
+      cursor: pointer; white-space: nowrap;
+    }
+    .chip:hover { background: rgba(255,255,255,.22); }
+    .chip.on { background: #0d9488; border-color: #2dd4bf; color: #fff; }
+    .chip:disabled { opacity: .4; cursor: not-allowed; }
+    .stage { perspective: 1600px; touch-action: pan-y; position: relative; }
+    .page-sheet {
+      background: var(--sheet-bg); color: var(--sheet-color);
+      border: var(--sheet-border);
+      border-radius: 6px 18px 18px 6px;
+      box-shadow: var(--sheet-shadow), inset -8px 0 18px rgba(120,80,20,.06);
+      min-height: 62vh; padding: 2.75rem 1.75rem 1.75rem;
+      transform-origin: left center;
+      transition: transform .4s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+      font-size: var(--fs, 18px);
+      font-family: var(--ff, Georgia, 'Times New Roman', serif);
+      line-height: 1.75; white-space: pre-wrap; word-break: break-word;
+      position: relative;
+    }
+    .page-badge {
+      position: absolute; top: 10px; right: 14px; z-index: 5;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+      pointer-events: none;
+    }
+    .page-badge .num {
+      font-size: 13px; font-weight: 800; letter-spacing: .02em;
+      padding: 4px 10px; border-radius: 999px;
+      background: rgba(15,23,42,.82); color: #f8fafc;
+      border: 1px solid rgba(255,255,255,.25);
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+    body.theme-night .page-badge .num {
+      background: rgba(0,0,0,.75); color: #fff; border: 1px solid rgba(255,255,255,.9);
+    }
+    body.theme-parchment .page-badge .num,
+    body.theme-sepia .page-badge .num,
+    body.theme-forest .page-badge .num,
+    body.theme-ocean .page-badge .num {
+      background: rgba(28,25,23,.88); color: #fff;
+    }
+    .page-badge .status {
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+      padding: 3px 8px; border-radius: 6px;
+    }
+    .status-starting { background: #1d4ed8; color: #eff6ff; }
+    .status-progress { background: #b45309; color: #fffbeb; }
+    .status-finished { background: #047857; color: #ecfdf5; }
+    .flip-curl { transform: perspective(1400px) rotateY(-70deg) scaleX(.92); opacity: .5; }
+    .flip-slide { transform: translateX(-30%) rotateZ(-2deg); opacity: .4; }
+    .flip-fold { transform: perspective(1200px) rotateX(10deg) rotateY(-50deg); opacity: .5; }
+    .flip-fade { transform: scale(.94); opacity: 0; }
+    .flip-back { transform: perspective(1400px) rotateY(70deg) scaleX(.92); opacity: .5; }
+    .flip-back-slide { transform: translateX(30%) rotateZ(2deg); opacity: .4; }
+    label.lbl { font-size: 11px; color: #94a3b8; font-weight: 600; display: block; margin-bottom: 4px; }
+    select.ctl, input.ctl {
+      width: 100%; border-radius: 8px; padding: 6px 8px; font-size: 12px;
+      color: #0f172a; border: 1px solid #cbd5e1; background: #fff;
+    }
+    input[type=range] { accent-color: #14b8a6; width: 100%; }
+    .grid-tools { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    @media (min-width: 640px) { .grid-tools { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+    .live { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; display: inline-block; animation: p 1.2s infinite; }
+    .off { width: 8px; height: 8px; border-radius: 50%; background: #64748b; display: inline-block; }
+    @keyframes p { 50% { opacity: .4; } }
+    .bgm-row {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+      margin-bottom: 6px;
+    }
+    .bgm-row.active { border-color: #2dd4bf; background: rgba(13,148,136,.2); }
+    .bgm-row button { flex-shrink: 0; }
+  
+
+    /* —— Reading ambience scenes —— */
+    #stage {
+      position: relative;
+      isolation: isolate;
+      min-height: 62vh;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    #sceneStage {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      overflow: hidden;
+      border-radius: 12px;
+      pointer-events: none;
+      background: #0c1222;
+    }
+    #stage.scene-on #sceneStage {
+      display: block !important;
+    }
+    #stage.scene-on .page-sheet {
+      background: transparent !important;
+      box-shadow: none !important;
+      border: 1px solid rgba(255,255,255,.2) !important;
+      position: relative;
+      z-index: 2;
+      min-height: 62vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #stage.scene-on .page-badge {
+      background: rgba(15,23,42,.75);
+      color: #e2e8f0;
+      z-index: 4;
+      backdrop-filter: blur(6px);
+    }
+    #stage.scene-on #sheetText {
+      position: relative;
+      z-index: 3;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2.5rem 1.5rem;
+      color: #f8fafc;
+      line-height: 1.95;
+      font-size: calc(var(--fs, 18px) * 1.18);
+      font-family: var(--ff, Georgia, serif);
+      min-height: 40vh;
+      text-shadow: 0 2px 18px rgba(0,0,0,.65);
+    }
+    #sceneStage .sc-layer { position: absolute; inset: 0; }
+
+    /* === 1. SUNRISE → SUNSET === */
+    #sceneStage.sc-sun {
+      background: linear-gradient(180deg, #0c1445 0%, #7c2d12 40%, #fb923c 70%, #fef3c7 100%);
+      animation: skyCycle 22s ease-in-out infinite alternate;
+    }
+    #sceneStage.sc-sun .sun {
+      position: absolute; left: 50%; width: 18vmin; height: 18vmin; margin-left: -9vmin;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fef9c3, #fbbf24 45%, #f97316 75%, transparent 78%);
+      box-shadow: 0 0 60px 20px rgba(251,191,36,.55), 0 0 120px 40px rgba(249,115,22,.35);
+      animation: sunPath 22s ease-in-out infinite alternate;
+    }
+    #sceneStage.sc-sun .horizon {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 32%;
+      background: linear-gradient(180deg, transparent, rgba(28,25,23,.55) 40%, rgba(15,23,42,.75));
+    }
+    #sceneStage.sc-sun .rays {
+      position: absolute; inset: -20%;
+      background: conic-gradient(from 0deg at 50% 55%, transparent 0deg, rgba(254,243,199,.12) 20deg, transparent 40deg, rgba(254,243,199,.1) 80deg, transparent 100deg);
+      animation: raySpin 28s linear infinite; opacity: 0.55;
+    }
+    @keyframes skyCycle {
+      0% { filter: hue-rotate(0deg) brightness(0.85); }
+      50% { filter: hue-rotate(12deg) brightness(1.1); }
+      100% { filter: hue-rotate(-8deg) brightness(0.7); }
+    }
+    @keyframes sunPath {
+      0% { top: 55%; transform: scale(0.9); }
+      50% { top: 16%; transform: scale(1.12); }
+      100% { top: 50%; transform: scale(0.95); }
+    }
+    @keyframes raySpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    /* === 2. EARTH ORBIT AROUND THE SUN === */
+    #sceneStage.sc-orbit {
+      background: radial-gradient(ellipse at center, #1e293b 0%, #020617 75%);
+    }
+    #sceneStage.sc-orbit .stars {
+      position: absolute; inset: 0;
+      background-image:
+        radial-gradient(1.5px 1.5px at 12% 20%, #fff, transparent),
+        radial-gradient(1px 1px at 35% 55%, #fff, transparent),
+        radial-gradient(2px 2px at 70% 15%, #fff, transparent),
+        radial-gradient(1px 1px at 88% 65%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 22% 80%, #fff, transparent),
+        radial-gradient(1px 1px at 55% 40%, #fff, transparent);
+      animation: starTwinkle 4s ease-in-out infinite alternate;
+    }
+    #sceneStage.sc-orbit .orbit-center {
+      position: absolute; left: 50%; top: 48%; width: 0; height: 0;
+    }
+    #sceneStage.sc-orbit .sun-core {
+      position: absolute; left: -8vmin; top: -8vmin; width: 16vmin; height: 16vmin;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fef9c3, #fbbf24 40%, #f59e0b 70%, #ea580c);
+      box-shadow: 0 0 55px 20px rgba(251,191,36,.65), 0 0 110px 35px rgba(245,158,11,.3);
+      animation: softPulse 3.5s ease-in-out infinite;
+    }
+    #sceneStage.sc-orbit .orbit-path {
+      position: absolute; left: -30vmin; top: -19vmin; width: 60vmin; height: 38vmin;
+      border: 1px solid rgba(148,163,184,.3); border-radius: 50%;
+    }
+    #sceneStage.sc-orbit .earth-arm {
+      position: absolute; left: 0; top: 0; width: 0; height: 0;
+      animation: earthOrbit 14s linear infinite;
+    }
+    #sceneStage.sc-orbit .earth-ball {
+      position: absolute; left: 28vmin; top: -4vmin; width: 8vmin; height: 8vmin;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(125,211,252,.9), transparent 45%),
+        radial-gradient(circle at 65% 55%, rgba(34,197,94,.85), transparent 40%),
+        radial-gradient(circle at 50% 50%, #1d4ed8, #0f172a);
+      box-shadow: 0 0 18px rgba(56,189,248,.55);
+      animation: earthSpin 5s linear infinite;
+    }
+    @keyframes earthOrbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes earthSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    /* === 3. EARTH REVELATION (close rotate → pull back → sun → approach) === */
+    #sceneStage.sc-voyage {
+      background: #020617;
+      overflow: hidden;
+    }
+    #sceneStage.sc-voyage .stars {
+      position: absolute; inset: -30%;
+      background-image:
+        radial-gradient(2px 2px at 8% 18%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 22% 45%, #fff, transparent),
+        radial-gradient(1px 1px at 40% 12%, #fff, transparent),
+        radial-gradient(2px 2px at 58% 70%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 75% 25%, #fff, transparent),
+        radial-gradient(1px 1px at 88% 55%, #fff, transparent),
+        radial-gradient(2px 2px at 15% 80%, #fff, transparent),
+        radial-gradient(1px 1px at 50% 50%, #e0e7ff, transparent),
+        radial-gradient(1.5px 1.5px at 92% 15%, #fff, transparent),
+        radial-gradient(1px 1px at 33% 90%, #fff, transparent);
+      animation: starTwinkle 5s ease-in-out infinite alternate;
+      opacity: 0.3;
+      animation: voyageStars 28s ease-in-out infinite;
+    }
+    #sceneStage.sc-voyage .distant-sun {
+      position: absolute; left: 78%; top: 18%;
+      width: 3vmin; height: 3vmin; border-radius: 50%;
+      background: radial-gradient(circle, #fefce8, #fde047 40%, #f59e0b);
+      box-shadow: 0 0 20px 6px rgba(253,224,71,.5);
+      animation: voyageSun 28s ease-in-out infinite;
+    }
+    #sceneStage.sc-voyage .far-planet {
+      position: absolute; border-radius: 50%;
+      animation: voyageFar 28s ease-in-out infinite;
+    }
+    #sceneStage.sc-voyage .fp1 {
+      width: 4.5vmin; height: 4.5vmin; top: 22%; left: 12%;
+      background: radial-gradient(circle at 35% 30%, #fca5a5, #991b1b);
+      box-shadow: 0 0 14px rgba(185,28,28,.45);
+    }
+    #sceneStage.sc-voyage .fp2 {
+      width: 3vmin; height: 3vmin; top: 68%; right: 14%;
+      background: radial-gradient(circle at 40% 35%, #93c5fd, #1e3a8a);
+      box-shadow: 0 0 12px rgba(37,99,235,.4);
+      animation-delay: 0s;
+    }
+    /* Globe wrapper: zoom in/out path */
+    #sceneStage.sc-voyage .earth-wrap {
+      position: absolute; left: 50%; top: 50%;
+      width: 0; height: 0;
+      animation: voyageZoom 28s ease-in-out infinite;
+    }
+    /* Continents rotate on the sphere */
+    #sceneStage.sc-voyage .earth-close {
+      position: absolute;
+      left: -32vmin; top: -32vmin;
+      width: 64vmin; height: 64vmin;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 50%, #0ea5e9 0%, #0369a1 38%, #0c4a6e 55%, #020617 72%);
+      box-shadow:
+        inset -10vmin -5vmin 24vmin rgba(2,6,23,.6),
+        inset 4vmin 3vmin 16vmin rgba(125,211,252,.25),
+        0 0 50px rgba(56,189,248,.4);
+      overflow: hidden;
+    }
+    /* Atmospheric rim */
+    #sceneStage.sc-voyage .earth-close::before {
+      content: '';
+      position: absolute; inset: -2%;
+      border-radius: 50%;
+      box-shadow: inset 0 0 12px 4px rgba(186,230,253,.35);
+      pointer-events: none;
+      z-index: 3;
+    }
+    /* Rotating continent/ocean layer */
+    #sceneStage.sc-voyage .earth-surface {
+      position: absolute; inset: -20%;
+      border-radius: 50%;
+      background:
+        /* oceans base already on parent; continents as blobs */
+        radial-gradient(ellipse 28% 18% at 30% 35%, #22c55e 0%, #16a34a 40%, transparent 70%),
+        radial-gradient(ellipse 22% 30% at 55% 40%, #4ade80 0%, #15803d 45%, transparent 70%),
+        radial-gradient(ellipse 18% 14% at 72% 55%, #22c55e 0%, transparent 65%),
+        radial-gradient(ellipse 25% 16% at 40% 65%, #86efac 0%, #166534 50%, transparent 70%),
+        radial-gradient(ellipse 15% 12% at 20% 55%, #15803d 0%, transparent 60%),
+        radial-gradient(ellipse 12% 20% at 80% 30%, #22c55e 0%, transparent 65%),
+        radial-gradient(ellipse 20% 10% at 60% 75%, #4ade80 0%, transparent 60%),
+        /* polar ice */
+        radial-gradient(ellipse 40% 12% at 50% 8%, rgba(248,250,252,.85) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 12% at 50% 92%, rgba(248,250,252,.75) 0%, transparent 70%),
+        /* cloud wisps */
+        radial-gradient(ellipse 30% 8% at 45% 45%, rgba(255,255,255,.25) 0%, transparent 70%),
+        radial-gradient(ellipse 20% 6% at 65% 60%, rgba(255,255,255,.2) 0%, transparent 70%);
+      animation: earthRevealSpin 14s linear infinite;
+    }
+    /* Night side shadow sweeps with rotation feel */
+    #sceneStage.sc-voyage .earth-shadow {
+      position: absolute; inset: 0; border-radius: 50%;
+      background: linear-gradient(90deg, rgba(2,6,23,.15) 0%, transparent 40%, transparent 55%, rgba(2,6,23,.55) 100%);
+      z-index: 2;
+      animation: shadowShift 14s linear infinite;
+    }
+    @keyframes voyageZoom {
+      /* Close beauty shot */
+      0%, 8%   { transform: scale(1.15) translate(0, 2%); }
+      /* Slow pull back while still large */
+      25%      { transform: scale(0.75) translate(-5%, 0); }
+      /* Far — space + sun visible */
+      45%      { transform: scale(0.28) translate(-25%, 5%); }
+      55%      { transform: scale(0.18) translate(-40%, 8%); }
+      /* Drift and return */
+      75%      { transform: scale(0.45) translate(-15%, 3%); }
+      92%, 100%{ transform: scale(1.15) translate(0, 2%); }
+    }
+    @keyframes earthRevealSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes shadowShift {
+      0% { opacity: 0.9; }
+      50% { opacity: 0.7; }
+      100% { opacity: 0.9; }
+    }
+    @keyframes voyageStars {
+      0%, 15%  { opacity: 0.15; }
+      40%, 60% { opacity: 0.95; }
+      85%, 100%{ opacity: 0.2; }
+    }
+    @keyframes voyageSun {
+      0%, 20%  { opacity: 0; transform: scale(0.4); }
+      40%      { opacity: 0.6; transform: scale(0.9); }
+      50%, 60% { opacity: 1; transform: scale(1.6); box-shadow: 0 0 45px 16px rgba(253,224,71,.85); }
+      80%, 100%{ opacity: 0.15; transform: scale(0.5); }
+    }
+    @keyframes voyageFar {
+      0%, 20%  { opacity: 0.15; transform: translate(0,0) scale(0.8); }
+      45%, 60% { opacity: 1; transform: translate(6%, -4%) scale(1.2); }
+      85%, 100%{ opacity: 0.2; transform: translate(0,0) scale(0.85); }
+    }
+
+    /* === 4. NIGHT MOON (huge blue moon rises, sets far, returns) === */
+    #sceneStage.sc-moon {
+      background: linear-gradient(180deg, #020617 0%, #0f172a 40%, #1e1b4b 70%, #0c1445 100%);
+      overflow: hidden;
+    }
+    #sceneStage.sc-moon .stars {
+      position: absolute; inset: 0;
+      background-image:
+        radial-gradient(2px 2px at 10% 15%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 25% 35%, #fff, transparent),
+        radial-gradient(1px 1px at 45% 12%, #fff, transparent),
+        radial-gradient(2px 2px at 65% 28%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 80% 18%, #fff, transparent),
+        radial-gradient(1px 1px at 90% 45%, #fff, transparent),
+        radial-gradient(2px 2px at 15% 55%, #fff, transparent),
+        radial-gradient(1px 1px at 55% 60%, #e0e7ff, transparent),
+        radial-gradient(1.5px 1.5px at 70% 75%, #fff, transparent),
+        radial-gradient(1px 1px at 35% 85%, #fff, transparent);
+      animation: starTwinkle 5s ease-in-out infinite alternate;
+    }
+    #sceneStage.sc-moon .moon-glow {
+      position: absolute; left: 50%; top: 40%;
+      width: 80vmin; height: 80vmin; margin: -40vmin 0 0 -40vmin;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(125,211,252,.25) 0%, transparent 65%);
+      animation: moonPath 24s ease-in-out infinite;
+      pointer-events: none;
+    }
+    #sceneStage.sc-moon .moon {
+      position: absolute; left: 50%;
+      width: 42vmin; height: 42vmin; margin-left: -21vmin;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 32% 28%, #e0f2fe 0%, #7dd3fc 25%, #38bdf8 50%, #0284c7 75%, #0c4a6e 100%);
+      box-shadow:
+        0 0 60px 20px rgba(56,189,248,.45),
+        0 0 120px 40px rgba(14,165,233,.25),
+        inset -8vmin -4vmin 20vmin rgba(12,74,110,.4);
+      animation: moonPath 24s ease-in-out infinite;
+      overflow: hidden;
+    }
+    #sceneStage.sc-moon .moon .crater {
+      position: absolute; border-radius: 50%;
+      background: rgba(12,74,110,.28);
+      box-shadow: inset 1px 1px 3px rgba(2,6,23,.25);
+    }
+    #sceneStage.sc-moon .moon .cr1 { width: 18%; height: 18%; top: 22%; left: 28%; }
+    #sceneStage.sc-moon .moon .cr2 { width: 12%; height: 12%; top: 48%; left: 55%; }
+    #sceneStage.sc-moon .moon .cr3 { width: 22%; height: 22%; top: 55%; left: 25%; }
+    #sceneStage.sc-moon .moon .cr4 { width: 10%; height: 10%; top: 30%; left: 62%; }
+    #sceneStage.sc-moon .horizon {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 28%;
+      background: linear-gradient(180deg, transparent, rgba(15,23,42,.75) 45%, rgba(2,6,23,.95));
+      z-index: 2;
+    }
+    @keyframes moonPath {
+      0%   { top: 72%; transform: scale(0.55); opacity: 0.6; }
+      15%  { top: 35%; transform: scale(1.05); opacity: 1; }
+      35%  { top: 12%; transform: scale(1.25); opacity: 1; }
+      55%  { top: 20%; transform: scale(1.1); opacity: 0.95; }
+      75%  { top: 55%; transform: scale(0.7); opacity: 0.75; }
+      90%, 100% { top: 78%; transform: scale(0.45); opacity: 0.4; }
+    }
+
+    /* === 5. ALL PLANETS AROUND THE SUN === */
+    #sceneStage.sc-planets {
+      background: radial-gradient(ellipse at center, #0f172a 0%, #020617 75%);
+      overflow: hidden;
+    }
+    #sceneStage.sc-planets .stars {
+      position: absolute; inset: 0;
+      background-image:
+        radial-gradient(1.5px 1.5px at 12% 20%, #fff, transparent),
+        radial-gradient(1px 1px at 30% 55%, #fff, transparent),
+        radial-gradient(2px 2px at 70% 15%, #fff, transparent),
+        radial-gradient(1px 1px at 85% 60%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 50% 80%, #fff, transparent);
+      animation: starTwinkle 4s ease-in-out infinite alternate;
+    }
+    #sceneStage.sc-planets .sys {
+      position: absolute; left: 50%; top: 50%; width: 0; height: 0;
+    }
+    #sceneStage.sc-planets .sun-core {
+      position: absolute; left: -7vmin; top: -7vmin; width: 14vmin; height: 14vmin;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fefce8, #fde047 35%, #f59e0b 65%, #ea580c);
+      box-shadow: 0 0 40px 15px rgba(251,191,36,.65), 0 0 80px 25px rgba(245,158,11,.3);
+      animation: softPulse 3s ease-in-out infinite;
+      z-index: 10;
+    }
+    #sceneStage.sc-planets .ring {
+      position: absolute; left: 50%; top: 50%; border: 1px solid rgba(148,163,184,.2);
+      border-radius: 50%; transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #sceneStage.sc-planets .r1 { width: 22vmin; height: 16vmin; }
+    #sceneStage.sc-planets .r2 { width: 32vmin; height: 22vmin; }
+    #sceneStage.sc-planets .r3 { width: 42vmin; height: 28vmin; }
+    #sceneStage.sc-planets .r4 { width: 54vmin; height: 36vmin; }
+    #sceneStage.sc-planets .r5 { width: 68vmin; height: 44vmin; }
+    #sceneStage.sc-planets .r6 { width: 82vmin; height: 52vmin; }
+    #sceneStage.sc-planets .arm {
+      position: absolute; left: 0; top: 0; width: 0; height: 0;
+    }
+    #sceneStage.sc-planets .arm.a1 { animation: planetOrbit 8s linear infinite; }
+    #sceneStage.sc-planets .arm.a2 { animation: planetOrbit 12s linear infinite; }
+    #sceneStage.sc-planets .arm.a3 { animation: planetOrbit 16s linear infinite; }
+    #sceneStage.sc-planets .arm.a4 { animation: planetOrbit 22s linear infinite; }
+    #sceneStage.sc-planets .arm.a5 { animation: planetOrbit 30s linear infinite; }
+    #sceneStage.sc-planets .arm.a6 { animation: planetOrbit 40s linear infinite; }
+    #sceneStage.sc-planets .pl {
+      position: absolute; border-radius: 50%;
+      box-shadow: 0 0 10px rgba(255,255,255,.15);
+    }
+    /* Mercury — grey */
+    #sceneStage.sc-planets .pl-me {
+      left: 10vmin; top: -1.2vmin; width: 2.4vmin; height: 2.4vmin;
+      background: radial-gradient(circle at 35% 30%, #e7e5e4, #a8a29e 50%, #57534e);
+    }
+    /* Venus — pale yellow */
+    #sceneStage.sc-planets .pl-ve {
+      left: 14.5vmin; top: -1.8vmin; width: 3.6vmin; height: 3.6vmin;
+      background: radial-gradient(circle at 35% 30%, #fef3c7, #f59e0b 55%, #b45309);
+    }
+    /* Earth — blue/green */
+    #sceneStage.sc-planets .pl-ea {
+      left: 19vmin; top: -2.2vmin; width: 4.4vmin; height: 4.4vmin;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(125,211,252,.9), transparent 45%),
+        radial-gradient(circle at 60% 55%, rgba(34,197,94,.8), transparent 40%),
+        radial-gradient(circle at 50% 50%, #1d4ed8, #0f172a);
+      box-shadow: 0 0 12px rgba(56,189,248,.4);
+    }
+    /* Mars — red */
+    #sceneStage.sc-planets .pl-ma {
+      left: 24.5vmin; top: -1.8vmin; width: 3.6vmin; height: 3.6vmin;
+      background: radial-gradient(circle at 35% 30%, #fca5a5, #dc2626 50%, #7f1d1d);
+    }
+    /* Jupiter — banded orange */
+    #sceneStage.sc-planets .pl-ju {
+      left: 30vmin; top: -4vmin; width: 8vmin; height: 8vmin;
+      background:
+        repeating-linear-gradient(180deg, #fef3c7 0%, #f59e0b 15%, #ea580c 30%, #fbbf24 45%, #d97706 60%, #fef3c7 75%, #b45309 100%);
+      box-shadow: 0 0 16px rgba(245,158,11,.35);
+    }
+    /* Saturn — with ring */
+    #sceneStage.sc-planets .pl-sa {
+      left: 37vmin; top: -3.2vmin; width: 6.4vmin; height: 6.4vmin;
+      background: radial-gradient(circle at 40% 35%, #fde68a, #ca8a04 55%, #854d0e);
+    }
+    #sceneStage.sc-planets .sa-ring {
+      position: absolute; left: 34.5vmin; top: -1.2vmin;
+      width: 11.5vmin; height: 3.2vmin;
+      border: 2px solid rgba(253,224,71,.55);
+      border-radius: 50%;
+      transform: rotateX(70deg);
+      box-shadow: 0 0 8px rgba(253,224,71,.3);
+      pointer-events: none;
+    }
+    @keyframes planetOrbit {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes softPulse {
+      0%, 100% { opacity: 0.9; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.08); }
+    }
+    @keyframes starTwinkle {
+      from { opacity: 0.5; }
+      to { opacity: 1; }
+    }
+
+    /* === 6. EARTH → JUPITER PROBE === */
+    #sceneStage.sc-probe {
+      background: radial-gradient(ellipse at 30% 60%, #0f172a 0%, #020617 70%);
+      overflow: hidden;
+    }
+    #sceneStage.sc-probe .stars {
+      position: absolute; inset: -20%;
+      background-image:
+        radial-gradient(2px 2px at 10% 20%, #fff, transparent),
+        radial-gradient(1px 1px at 30% 50%, #fff, transparent),
+        radial-gradient(2px 2px at 55% 15%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 75% 40%, #fff, transparent),
+        radial-gradient(1px 1px at 90% 70%, #fff, transparent),
+        radial-gradient(2px 2px at 20% 80%, #fff, transparent);
+      animation: starTwinkle 4s ease-in-out infinite alternate;
+    }
+    #sceneStage.sc-probe .earth-home {
+      position: absolute; left: 8%; bottom: 18%;
+      width: 28vmin; height: 28vmin; border-radius: 50%;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(125,211,252,.85), transparent 45%),
+        radial-gradient(circle at 60% 55%, rgba(34,197,94,.75), transparent 40%),
+        radial-gradient(circle at 50% 50%, #1d4ed8, #020617);
+      box-shadow: 0 0 30px rgba(56,189,248,.4);
+      animation: earthRecede 22s ease-in-out infinite;
+    }
+    #sceneStage.sc-probe .jupiter {
+      position: absolute; right: 5%; top: 20%;
+      width: 22vmin; height: 22vmin; border-radius: 50%;
+      background: repeating-linear-gradient(180deg, #fef3c7, #f59e0b 12%, #ea580c 25%, #fbbf24 40%, #d97706 55%, #fef3c7 70%, #b45309 100%);
+      box-shadow: 0 0 35px rgba(245,158,11,.45);
+      animation: jupiterApproach 22s ease-in-out infinite;
+    }
+    #sceneStage.sc-probe .probe {
+      position: absolute; left: 20%; top: 45%;
+      width: 4vmin; height: 2vmin;
+      background: linear-gradient(90deg, #94a3b8, #e2e8f0 40%, #64748b);
+      border-radius: 2px;
+      box-shadow: 0 0 12px rgba(226,232,240,.5);
+      animation: probeFlight 22s ease-in-out infinite;
+    }
+    #sceneStage.sc-probe .probe::after {
+      content: '';
+      position: absolute; right: -3vmin; top: 20%;
+      width: 3vmin; height: 1px;
+      background: linear-gradient(90deg, rgba(56,189,248,.8), transparent);
+    }
+    #sceneStage.sc-probe .probe-dish {
+      position: absolute; left: 20%; top: 45%;
+      width: 2.2vmin; height: 2.2vmin; margin: -1.5vmin 0 0 1vmin;
+      border: 2px solid #cbd5e1; border-radius: 50%;
+      animation: probeFlight 22s ease-in-out infinite;
+    }
+    @keyframes earthRecede {
+      0%, 10% { transform: scale(1.2) translate(0,0); opacity: 1; }
+      50% { transform: scale(0.35) translate(-30%, 20%); opacity: 0.7; }
+      90%, 100% { transform: scale(0.2) translate(-50%, 30%); opacity: 0.4; }
+    }
+    @keyframes jupiterApproach {
+      0%, 15% { transform: scale(0.3) translate(40%, -10%); opacity: 0.3; }
+      55% { transform: scale(0.9) translate(0,0); opacity: 1; }
+      90%, 100% { transform: scale(1.3) translate(-5%, 5%); opacity: 1; }
+    }
+    @keyframes probeFlight {
+      0% { transform: translate(0,0) rotate(-5deg); }
+      40% { transform: translate(35vw, -8vh) rotate(8deg); }
+      70% { transform: translate(55vw, 5vh) rotate(15deg); }
+      100% { transform: translate(70vw, -3vh) rotate(20deg); }
+    }
+
+    /* === 7. DEEP SPACE DRIFT (meteors + ship) === */
+    #sceneStage.sc-deep {
+      background: radial-gradient(ellipse at 40% 50%, #1e1b4b 0%, #020617 60%);
+      overflow: hidden;
+    }
+    #sceneStage.sc-deep .stars {
+      position: absolute; inset: -30%;
+      background-image:
+        radial-gradient(2px 2px at 15% 25%, #fff, transparent),
+        radial-gradient(1px 1px at 40% 60%, #fff, transparent),
+        radial-gradient(2px 2px at 70% 20%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 85% 50%, #fff, transparent),
+        radial-gradient(1px 1px at 25% 80%, #fff, transparent),
+        radial-gradient(2px 2px at 55% 40%, #e0e7ff, transparent),
+        radial-gradient(1px 1px at 90% 85%, #fff, transparent);
+      animation: starFlyDeep 20s linear infinite;
+    }
+    #sceneStage.sc-deep .nebula {
+      position: absolute; width: 70%; height: 55%; left: 15%; top: 20%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(129,140,248,.3), rgba(244,114,182,.12), transparent 70%);
+      filter: blur(28px);
+      animation: nebulaDrift 14s ease-in-out infinite alternate;
+    }
+    #sceneStage.sc-deep .meteor {
+      position: absolute; width: 80px; height: 2px;
+      background: linear-gradient(90deg, transparent, #fff 30%, #7dd3fc 70%, transparent);
+      border-radius: 2px;
+      opacity: 0;
+      animation: meteorStreak 4s linear infinite;
+    }
+    #sceneStage.sc-deep .m1 { top: 20%; left: 10%; animation-delay: 0s; }
+    #sceneStage.sc-deep .m2 { top: 45%; left: 40%; animation-delay: 1.2s; width: 100px; }
+    #sceneStage.sc-deep .m3 { top: 70%; left: 20%; animation-delay: 2.4s; width: 60px; }
+    #sceneStage.sc-deep .m4 { top: 30%; left: 60%; animation-delay: 0.6s; width: 90px; }
+    #sceneStage.sc-deep .ship {
+      position: absolute; left: 15%; top: 55%;
+      width: 8vmin; height: 3vmin;
+      background: linear-gradient(180deg, #e2e8f0, #64748b);
+      clip-path: polygon(0% 50%, 15% 0%, 85% 15%, 100% 50%, 85% 85%, 15% 100%);
+      box-shadow: 0 0 16px rgba(148,163,184,.4);
+      animation: shipDrift 18s ease-in-out infinite;
+    }
+    #sceneStage.sc-deep .ship-glow {
+      position: absolute; left: 12%; top: 56%;
+      width: 4vmin; height: 1.5vmin;
+      background: radial-gradient(ellipse, rgba(56,189,248,.7), transparent);
+      filter: blur(4px);
+      animation: shipDrift 18s ease-in-out infinite;
+    }
+    @keyframes starFlyDeep {
+      from { transform: scale(1) translate(0,0); }
+      to { transform: scale(1.5) translate(-6%, -4%); }
+    }
+    @keyframes nebulaDrift {
+      from { transform: translate(0,0) scale(1); }
+      to { transform: translate(5%, -3%) scale(1.15); }
+    }
+    @keyframes meteorStreak {
+      0% { opacity: 0; transform: translate(0,0) rotate(-35deg); }
+      10% { opacity: 1; }
+      60% { opacity: 0.8; transform: translate(40vw, 25vh) rotate(-35deg); }
+      100% { opacity: 0; transform: translate(55vw, 35vh) rotate(-35deg); }
+    }
+    @keyframes shipDrift {
+      0% { transform: translate(0,0) rotate(-3deg); }
+      50% { transform: translate(25vw, -12vh) rotate(5deg); }
+      100% { transform: translate(50vw, 5vh) rotate(-2deg); }
+    }
+
+
+    
+    /* Word highlight on scenes */
+    #stage.scene-on #sheetText .ab-sentence {
+      display: none; max-width: 36rem; margin: 0 auto;
+    }
+    #stage.scene-on #sheetText .ab-sentence.active {
+      display: block; animation: abWordIn 0.6s ease-out;
+    }
+    #stage.scene-on #sheetText .ab-sentence.leaving {
+      display: block; animation: abWordOut 0.4s ease-in forwards;
+    }
+    @keyframes abWordIn {
+      from { opacity: 0; transform: translateY(10px); filter: blur(4px); }
+      to { opacity: 1; transform: none; filter: none; }
+    }
+    @keyframes abWordOut {
+      from { opacity: 1; }
+      to { opacity: 0; filter: blur(4px); }
+    }
+    #sheetText .kw { transition: color .15s ease, background .15s ease, text-shadow .15s ease; border-radius: 3px; }
+    #stage.scene-on.ws-fill #sheetText .kw { color: rgba(226,232,240,.4); }
+    #stage.scene-on.ws-fill #sheetText .kw.spoken { color: rgba(167,243,208,.95); }
+    #stage.scene-on.ws-fill #sheetText .kw.current {
+      color: #fff; background: linear-gradient(90deg, rgba(45,212,191,.85), rgba(94,234,212,.5));
+      text-shadow: 0 0 16px rgba(45,212,191,.9); padding: 0 3px;
+    }
+    #stage.scene-on.ws-write #sheetText .kw { opacity: 0; }
+    #stage.scene-on.ws-write #sheetText .kw.spoken,
+    #stage.scene-on.ws-write #sheetText .kw.current { opacity: 1; color: #f0fdfa; }
+    #stage.scene-on.ws-write #sheetText .kw.current { color: #5eead4; text-shadow: 0 0 18px #2dd4bf; }
+    #stage.scene-on.ws-glow #sheetText .kw { color: rgba(203,213,225,.35); }
+    #stage.scene-on.ws-glow #sheetText .kw.spoken { color: rgba(226,232,240,.85); }
+    #stage.scene-on.ws-glow #sheetText .kw.current {
+      color: #fff; text-shadow: 0 0 12px #fff, 0 0 28px #2dd4bf;
+    }
+    #stage.scene-on.ws-underline #sheetText .kw { color: rgba(226,232,240,.45); border-bottom: 2px solid transparent; }
+    #stage.scene-on.ws-underline #sheetText .kw.spoken { color: #e2e8f0; border-bottom-color: rgba(45,212,191,.5); }
+    #stage.scene-on.ws-underline #sheetText .kw.current {
+      color: #fff; border-bottom-color: #2dd4bf; background: rgba(45,212,191,.2);
+    }
+
+    /* Full-screen scene mode */
+    #stage.scene-fs {
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 9990 !important;
+      min-height: 100vh !important;
+      height: 100vh !important;
+      width: 100vw !important;
+      max-width: none !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+      background: #020617;
+    }
+    #stage.scene-fs #sceneStage {
+      border-radius: 0 !important;
+      min-height: 100vh;
+    }
+    #stage.scene-fs .page-sheet {
+      min-height: 100vh !important;
+      max-width: 48rem;
+      margin: 0 auto;
+      background: transparent !important;
+    }
+    #stage.scene-fs #sheetText {
+      min-height: 70vh;
+      font-size: calc(var(--fs, 18px) * 1.25);
+    }
+
+    #fsControls {
+      display: none !important;
+      position: fixed !important;
+      bottom: 20px !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      z-index: 2147483000 !important;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      padding: 12px 16px;
+      border-radius: 16px;
+      background: rgba(15,23,42,.94) !important;
+      border: 1px solid rgba(255,255,255,.28);
+      backdrop-filter: blur(12px);
+      max-width: 96vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    body.scene-fs-on #fsControls,
+    #stage.scene-fs ~ #fsControls,
+    .scene-fs-on #fsControls {
+      display: flex !important;
+    }
+    #fsControls .chip, #fsControls select, #fsControls button {
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(30,41,59,.9);
+      color: #f1f5f9;
+      cursor: pointer;
+    }
+    #fsControls #fsRead.is-on {
+      border-color: #2dd4bf; color: #5eead4; background: rgba(13,148,136,.45);
+    }
+    #sceneFsExit {
+      display: none !important;
+      position: fixed !important;
+      top: 14px !important;
+      right: 14px !important;
+      z-index: 2147483001 !important;
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.3);
+      background: rgba(15,23,42,.92) !important;
+      color: #f8fafc !important;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+    body.scene-fs-on #sceneFsExit {
+      display: block !important;
+    }
+    #btnSceneFs.is-on {
+      border-color: #a78bfa; color: #c4b5fd; background: rgba(91,33,182,.35);
+    }
+    body.scene-fs-on { overflow: hidden; }
+
+    #btnScene.is-on {
+      border-color: #2dd4bf; color: #5eead4; background: rgba(13,148,136,.35);
+    }
+
+
+  </style>
+</head>
+<body class="theme-parchment" id="bookBody">
+<div id="fsControls">
+  <select id="fsScenePick" class="ctl" style="max-width:12rem;font-size:11px;" title="Ambience">
+          <option value="sun">Sunrise → Sunset</option>
+          <option value="orbit">Earth around the Sun</option>
+          <option value="voyage">Earth revelation</option>
+          <option value="moon">Night Moon</option>
+          <option value="planets">Planets around the Sun</option>
+          <option value="probe">Probe to Jupiter</option>
+          <option value="deep">Deep space drift</option>
+        </select>
+  <button type="button" class="chip on" id="fsRead">👼 Read</button>
+  <button type="button" class="chip" id="fsSceneToggle">Scene on/off</button>
+</div>
+<button type="button" id="sceneFsExit" aria-label="Exit full screen">✕ Exit full screen</button>
+
+  <div id="app">
+    <div class="bar sticky top-0 z-30">
+      <div style="max-width:56rem;margin:0 auto;padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+        <a href="/member/kwealth" style="color:#5eead4;font-size:12px;text-decoration:none;">← Kwealth</a>
+        <strong style="color:#f1f5f9;font-size:14px;">Books</strong>
+        <input type="file" id="filePick" hidden accept=".pdf,.txt,.text,.md,.doc,.docx,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple>
+        <button type="button" class="chip" id="btnLoad">Load</button>
+        <button type="button" class="chip" id="btnDelBook" title="Delete selected book you uploaded">Delete book</button>
+        <button type="button" class="chip" id="btnRead">👼 Read</button>
+        <button type="button" class="chip" id="btnArrange">Arrange</button>
+        <button type="button" class="chip on" id="btnTools">⚙ Settings</button>
+        <button type="button" class="chip" id="btnMusic"><span id="bgmDot" class="off"></span> Music</button>
+        <button type="button" class="chip" id="btnScene" title="Reading ambience animation">Scene</button>
+        <select id="scenePick" class="ctl" style="max-width:12rem;font-size:11px;" title="Ambience">
+          <option value="sun">Sunrise → Sunset</option>
+          <option value="orbit">Earth around the Sun</option>
+          <option value="voyage">Earth revelation</option>
+          <option value="moon">Night Moon</option>
+          <option value="planets">Planets around the Sun</option>
+          <option value="probe">Probe to Jupiter</option>
+          <option value="deep">Deep space drift</option>
+        </select>
+        <button type="button" class="chip" id="btnSceneFs" title="Full screen scene">Full screen</button>
+        <select id="wordStyle" class="ctl" style="max-width:8rem;font-size:11px;" title="Word style">
+          <option value="fill">Fill colour</option>
+          <option value="write">Writing</option>
+          <option value="glow">Glow</option>
+          <option value="underline">Underline</option>
+        </select>
+        <select id="bookSelect" class="ctl" style="max-width:45%;margin-left:auto;width:auto;">
+          {% for b in books %}
+          <option value="{{ b.id }}" {% if book and b.id==book.id %}selected{% endif %}>{{ b.title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="panelTools" style="max-width:56rem;margin:0 auto;padding:10px 12px 14px;border-top:1px solid rgba(255,255,255,.1);">
+        <p style="color:#fbbf24;font-size:12px;font-weight:700;margin:0 0 8px;">Book settings (theme · font · flip · jump)</p>
+        <div class="grid-tools">
+          <div>
+            <span class="lbl">Theme</span>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              <button type="button" class="chip theme-btn on" data-theme="parchment">Parchment</button>
+              <button type="button" class="chip theme-btn" data-theme="night">Night (black + white border)</button>
+              <button type="button" class="chip theme-btn" data-theme="sepia">Sepia</button>
+              <button type="button" class="chip theme-btn" data-theme="forest">Forest</button>
+              <button type="button" class="chip theme-btn" data-theme="ocean">Ocean</button>
+            </div>
+          </div>
+          <div>
+            <span class="lbl">Font size: <span id="fontSizeLabel">18</span>px</span>
+            <input type="range" id="fontSize" min="14" max="32" value="18">
+          </div>
+          <div>
+            <span class="lbl">Font type</span>
+            <select id="fontFamily" class="ctl">
+              <option value="Georgia, 'Times New Roman', serif">Georgia (classic)</option>
+              <option value="'Palatino Linotype', Palatino, serif">Palatino</option>
+              <option value="'Book Antiqua', Palatino, serif">Book Antiqua</option>
+              <option value="Garamond, serif">Garamond</option>
+              <option value="'Segoe UI', system-ui, sans-serif">Segoe UI</option>
+              <option value="'Helvetica Neue', Arial, sans-serif">Helvetica</option>
+              <option value="'Courier New', monospace">Courier</option>
+            </select>
+          </div>
+          <div>
+            <span class="lbl">Page flip style</span>
+            <select id="flipStyle" class="ctl">
+              <option value="curl">Curl (book edge)</option>
+              <option value="slide">Slide</option>
+              <option value="fold">Fold</option>
+              <option value="fade">Fade</option>
+            </select>
+          </div>
+          <div>
+            <span class="lbl">Jump to page</span>
+            <div style="display:flex;gap:6px;">
+              <input type="number" id="jumpTo" class="ctl" min="1" value="1" style="width:5rem;">
+              <button type="button" class="chip on" id="btnJump">Go</button>
+            </div>
+          </div>
+          <div>
+            <span class="lbl">Voice</span>
+            <select id="voiceName" class="ctl"><option value="">Default voice</option></select>
+            <span class="lbl" style="margin-top:6px;">Rate</span>
+            <input type="range" id="rate" min="0.7" max="1.15" step="0.05" value="0.95">
+            <span class="lbl" style="margin-top:8px;">Pause between paragraphs</span>
+            <select id="paraPause" class="ctl" title="Silence after each paragraph so music and words sink in">
+              <option value="0">0 sec (no pause)</option>
+              <option value="3">3 seconds</option>
+              <option value="5" selected>5 seconds</option>
+              <option value="7">7 seconds</option>
+              <option value="10">10 seconds</option>
+              <option value="15">15 seconds</option>
+              <option value="20">20 seconds</option>
+              <option value="30">30 seconds</option>
+            </select>
+            <p style="color:#64748b;font-size:11px;margin:6px 0 0;">Voice rests between paragraphs while background music can continue.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="panelMusic" style="display:none;max-width:56rem;margin:0 auto;padding:10px 12px 14px;border-top:1px solid rgba(255,255,255,.1);">
+        <p style="color:#6ee7b7;font-size:12px;font-weight:700;margin:0 0 6px;">Your background music library (max 10)</p>
+        <p style="color:#64748b;font-size:11px;margin:0 0 8px;">Upload calm tracks from your device. They stay in your list for reading sessions.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+          <button type="button" class="chip on" id="btnLoadBgm">+ Upload / sync from device</button>
+          <input type="file" id="bgmFile" hidden accept="audio/*,.mp3,.m4a,.ogg,.wav,.aac" multiple>
+          <button type="button" class="chip" id="btnBgmStop">Stop music</button>
+          <label class="lbl" style="display:flex;align-items:center;gap:8px;margin:0;">Volume
+            <input type="range" id="bgmVol" min="0" max="0.6" step="0.01" value="0.18" style="width:7rem;">
+          </label>
+          <span id="bgmCount" style="color:#94a3b8;font-size:11px;">0 / 10</span>
+        </div>
+        <div id="bgmList"></div>
+        <p id="bgmEmpty" style="color:#64748b;font-size:12px;">No tracks yet. Upload up to 10 soft background songs.</p>
+        <audio id="bgmAudio" loop preload="auto"></audio>
+      </div>
+    </div>
+
+    <main style="max-width:48rem;margin:0 auto;padding:16px 12px 32px;">
+      {% if request.query_params.get('uploaded') %}
+      <p style="text-align:center;color:#6ee7b7;font-size:13px;">Added {{ request.query_params.get('uploaded') }} book(s).</p>
+      {% endif %}
+      {% if request.query_params.get('bgm') %}
+      <p style="text-align:center;color:#6ee7b7;font-size:13px;">Background music library updated.</p>
+      {% endif %}
+
+      {% if book %}
+      <div class="stage" id="stage">
+        <div id="sceneStage" class="sc-sun" aria-hidden="true">
+          <div class="sc-layer sc-sun-bits">
+            <div class="rays"></div>
+            <div class="sun"></div>
+            <div class="horizon"></div>
+          </div>
+          <div class="sc-layer sc-orbit-bits" style="display:none">
+            <div class="stars"></div>
+            <div class="orbit-center">
+              <div class="sun-core"></div>
+              <div class="orbit-path"></div>
+              <div class="earth-arm"><div class="earth-ball"></div></div>
+            </div>
+          </div>
+          <div class="sc-layer sc-voyage-bits" style="display:none">
+            <div class="stars"></div>
+            <div class="far-planet fp1"></div>
+            <div class="far-planet fp2"></div>
+            <div class="distant-sun"></div>
+            <div class="earth-wrap">
+              <div class="earth-close">
+                <div class="earth-surface"></div>
+                <div class="earth-shadow"></div>
+              </div>
+            </div>
+          </div>
+          <div class="sc-layer sc-moon-bits" style="display:none">
+            <div class="stars"></div>
+            <div class="moon-glow"></div>
+            <div class="moon">
+              <span class="crater cr1"></span>
+              <span class="crater cr2"></span>
+              <span class="crater cr3"></span>
+              <span class="crater cr4"></span>
+            </div>
+            <div class="horizon"></div>
+          </div>
+          <div class="sc-layer sc-planets-bits" style="display:none">
+            <div class="stars"></div>
+            <div class="sys">
+              <div class="sun-core"></div>
+              <div class="ring r1"></div>
+              <div class="ring r2"></div>
+              <div class="ring r3"></div>
+              <div class="ring r4"></div>
+              <div class="ring r5"></div>
+              <div class="ring r6"></div>
+              <div class="arm a1"><div class="pl pl-me"></div></div>
+              <div class="arm a2"><div class="pl pl-ve"></div></div>
+              <div class="arm a3"><div class="pl pl-ea"></div></div>
+              <div class="arm a4"><div class="pl pl-ma"></div></div>
+              <div class="arm a5"><div class="pl pl-ju"></div></div>
+              <div class="arm a6"><div class="pl pl-sa"></div><div class="sa-ring"></div></div>
+            </div>
+          </div>
+          <div class="sc-layer sc-probe-bits" style="display:none">
+            <div class="stars"></div>
+            <div class="earth-home"></div>
+            <div class="jupiter"></div>
+            <div class="probe"></div>
+            <div class="probe-dish"></div>
+          </div>
+          <div class="sc-layer sc-deep-bits" style="display:none">
+            <div class="nebula"></div>
+            <div class="stars"></div>
+            <div class="meteor m1"></div>
+            <div class="meteor m2"></div>
+            <div class="meteor m3"></div>
+            <div class="meteor m4"></div>
+            <div class="ship-glow"></div>
+            <div class="ship"></div>
+          </div>
+        </div>
+        <div class="page-sheet" id="sheet">
+          <div class="page-badge">
+            <span class="num" id="pageBadgeNum">Page 1 / 1</span>
+            <span class="status status-starting" id="pageBadgeStatus">Starting</span>
+          </div>
+          <div id="sheetText"></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;">
+        <button type="button" class="chip" id="btnPrev">‹ Previous</button>
+        <button type="button" class="chip" id="btnHighlight">Save highlight → Excerpts</button>
+        <button type="button" class="chip" id="btnNext">Next ›</button>
+      </div>
+      <script>
+        window.__BOOK__ = { id: {{ book.id }}, pages: {{ pages|tojson }}, pageIndex: {{ page_index }} };
+        window.__AUTO_READ__ = {{ 'true' if request.query_params.get('read') else 'false' }};
+      </script>
+      {% else %}
+      <p style="text-align:center;color:#94a3b8;padding:4rem 1rem;">Tap <strong>Load</strong> for PDF, Word (.docx), or text books — or <strong>Music</strong> for background tracks.</p>
+      <script>window.__BOOK__ = { id: null, pages: [], pageIndex: 0 }; window.__AUTO_READ__ = false;</script>
+      {% endif %}
+    </main>
+  </div>
+
+  <script>
+  (function () {
+    const B = window.__BOOK__ || { id: null, pages: [], pageIndex: 0 };
+    const state = {
+      pages: B.pages || [],
+      pageIndex: B.pageIndex || 0,
+      bookId: B.id ? String(B.id) : '',
+      reading: false,
+      flipping: false,
+      arranged: false,
+      theme: localStorage.getItem('kw_book_theme') || 'parchment',
+      fontSize: Number(localStorage.getItem('kw_book_fontSize') || 18),
+      fontFamily: localStorage.getItem('kw_book_fontFamily') || "Georgia, 'Times New Roman', serif",
+      flipStyle: localStorage.getItem('kw_book_flip') || 'curl',
+      voiceName: localStorage.getItem('kw_book_voice') || '',
+      rate: Number(localStorage.getItem('kw_book_rate') || 0.95),
+      paraPause: Number(localStorage.getItem('kw_book_paraPause') || 5),
+      wordStyle: localStorage.getItem('kw_book_wordStyle') || 'fill',
+      sceneOn: false,
+      sceneName: localStorage.getItem('kw_scene') || 'sun',
+      sceneFs: localStorage.getItem('kw_scene_fs') === '1',
+      bgmId: localStorage.getItem('kw_book_bgm_id') || '',
+      bgmVol: Number(localStorage.getItem('kw_book_bgmVol') || 0.18),
+      bgmPlaying: false,
+      bgmItems: [],
+      _tx: null, _mx: null,
+    };
+
+    const $ = (id) => document.getElementById(id);
+    function on(id, ev, fn) {
+      const el = $(id);
+      if (!el) return;
+      el[ev] = fn;
+    }
+    const sheet = $('sheet');
+    const sheetText = $('sheetText');
+    const body = document.getElementById('bookBody');
+
+    function progressLabel() {
+      const total = state.pages.length || 1;
+      const i = state.pageIndex;
+      if (i <= 0) return { text: 'Starting', cls: 'status-starting' };
+      if (i >= total - 1) return { text: 'Finished', cls: 'status-finished' };
+      return { text: 'In progress', cls: 'status-progress' };
+    }
+    function applyTheme() {
+      if (body) body.className = 'theme-' + state.theme;
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('on', b.dataset.theme === state.theme));
+    }
+    function applyFont() {
+      if (!sheet) return;
+      sheet.style.setProperty('--fs', state.fontSize + 'px');
+      sheet.style.setProperty('--ff', state.fontFamily);
+      if ($('fontSizeLabel')) $('fontSizeLabel').textContent = state.fontSize;
+      localStorage.setItem('kw_book_fontSize', state.fontSize);
+      localStorage.setItem('kw_book_fontFamily', state.fontFamily);
+      localStorage.setItem('kw_book_flip', state.flipStyle);
+    }
+        function splitSentences(text) {
+      const t = (text || '').replace(/\s+/g, ' ').trim();
+      if (!t) return [];
+      const parts = t.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [t];
+      return parts.map(function (s) { return s.trim(); }).filter(Boolean);
+    }
+    function renderPage() {
+      const raw = state.pages[state.pageIndex] || '';
+      if (sheetText) {
+        if (state.sceneOn) {
+          // Sentence blocks; only active sentence shown
+          const sents = splitSentences(raw);
+          state._sentences = sents;
+          let wi = 0;
+          sheetText.innerHTML = sents.map(function (sent, si) {
+            const parts = sent.split(/(\s+)/);
+            let html = '';
+            parts.forEach(function (p) {
+              if (/^\s+$/.test(p) || p === '') { html += p; return; }
+              html += '<span class="kw" data-wi="' + wi + '" data-si="' + si + '">' +
+                p.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>';
+              wi += 1;
+            });
+            return '<div class="ab-sentence" data-si="' + si + '">' + html + '</div>';
+          }).join('');
+          state._wordCount = wi;
+          // show first sentence until speech advances
+          showSentence(typeof state._sentIndex === 'number' ? state._sentIndex : 0);
+        } else {
+          sheetText.textContent = raw;
+          state._wordCount = 0;
+          state._sentences = [];
+          state._sentIndex = 0;
+        }
+      }
+      const total = state.pages.length || 1;
+      const cur = state.pageIndex + 1;
+      if ($('pageBadgeNum')) $('pageBadgeNum').textContent = 'Page ' + cur + ' / ' + total;
+      const st = progressLabel();
+      const badge = $('pageBadgeStatus');
+      if (badge) {
+        badge.textContent = st.text;
+        badge.className = 'status ' + st.cls;
+      }
+      if ($('jumpTo')) $('jumpTo').value = cur;
+      if ($('btnPrev')) $('btnPrev').disabled = state.pageIndex <= 0;
+      if ($('btnNext')) $('btnNext').disabled = state.pageIndex >= total - 1;
+    }
+    function showSentence(si) {
+      if (!sheetText || !state.sceneOn) return;
+      const nodes = sheetText.querySelectorAll('.ab-sentence');
+      nodes.forEach(function (n) {
+        const i = Number(n.getAttribute('data-si'));
+        n.classList.remove('active', 'leaving');
+        if (i === si) n.classList.add('active');
+      });
+      state._sentIndex = si;
+    }
+    function saveProgress() {
+      if (!state.bookId) return;
+      const fd = new FormData();
+      fd.append('book_id', state.bookId);
+      fd.append('page_index', state.pageIndex);
+      fetch('/member/kwealth/books/progress', { method: 'POST', body: fd, credentials: 'same-origin' }).catch(() => {});
+    }
+    function animateFlip(dir, done) {
+      if (!sheet || state.flipping) return;
+      state.flipping = true;
+      const style = state.flipStyle || 'curl';
+      let cls = dir === 'next'
+        ? (style === 'slide' ? 'flip-slide' : style === 'fold' ? 'flip-fold' : style === 'fade' ? 'flip-fade' : 'flip-curl')
+        : (style === 'slide' ? 'flip-back-slide' : style === 'fold' ? 'flip-fold' : style === 'fade' ? 'flip-fade' : 'flip-back');
+      sheet.classList.add(cls);
+      setTimeout(() => {
+        done && done();
+        sheet.classList.remove('flip-curl', 'flip-slide', 'flip-fold', 'flip-fade', 'flip-back', 'flip-back-slide');
+        state.flipping = false;
+      }, 380);
+    }
+    function prev() {
+      if (state.pageIndex <= 0) return;
+      animateFlip('prev', () => { state.pageIndex--; renderPage(); saveProgress(); if (state.reading) speakPage(); });
+    }
+    function next() {
+      if (state.pageIndex >= state.pages.length - 1) {
+        state.reading = false;
+        if ($('btnRead')) $('btnRead').textContent = '👼 Read';
+        renderPage();
+        return;
+      }
+      animateFlip('next', () => { state.pageIndex++; renderPage(); saveProgress(); if (state.reading) speakPage(); });
+    }
+    function cleanForSpeech(text) {
+      let t = text || '';
+      t = t.replace(/https?:\/\/\S+/gi, ' ');
+      t = t.replace(/\S+@\S+\.\S+/g, ' ');
+      t = t.replace(/[^\w\s.,;:'"?!()\-]/g, ' ');
+      t = t.replace(/[.]{2,}/g, '.').replace(/[,]{2,}/g, ',');
+      t = t.replace(/\b\d{5,}\b/g, ' ');
+      return t.replace(/\s+/g, ' ').trim();
+    }
+    function loadVoices() {
+      const sel = $('voiceName');
+      if (!sel || !window.speechSynthesis) return;
+      const voices = speechSynthesis.getVoices() || [];
+      const cur = state.voiceName;
+      sel.innerHTML = '<option value="">Default voice</option>';
+      voices.forEach(v => {
+        const o = document.createElement('option');
+        o.value = v.name; o.textContent = v.name + ' (' + v.lang + ')';
+        if (v.name === cur) o.selected = true;
+        sel.appendChild(o);
+      });
+    }
+            function highlightWord(idx) {
+      if (!sheetText || !state.sceneOn) return;
+      const nodes = sheetText.querySelectorAll('.kw');
+      let activeSi = 0;
+      nodes.forEach(function (n) {
+        const i = Number(n.getAttribute('data-wi'));
+        const si = Number(n.getAttribute('data-si') || 0);
+        n.classList.remove('current');
+        if (i < idx) n.classList.add('spoken');
+        else n.classList.remove('spoken');
+        if (i === idx) {
+          n.classList.add('current');
+          activeSi = si;
+          try { n.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+        }
+      });
+      if (typeof activeSi === 'number' && state._sentIndex !== activeSi) {
+        showSentence(activeSi);
+      }
+    }
+    function splitParagraphs(text) {
+      // Prefer blank-line paragraphs; else split on sentence groups ending with . ! ?
+      let parts = (text || '').split(/\n\s*\n+/).map(function (p) { return p.replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+      if (parts.length <= 1) {
+        const one = (text || '').replace(/\s+/g, ' ').trim();
+        if (!one) return [];
+        // Soft-split long pages into ~2–4 sentence chunks for a natural rest
+        const sents = one.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [one];
+        parts = [];
+        let buf = '';
+        sents.forEach(function (s) {
+          s = s.trim();
+          if (!s) return;
+          if ((buf + ' ' + s).trim().split(/\s+/).length > 55 && buf) {
+            parts.push(buf.trim());
+            buf = s;
+          } else {
+            buf = (buf + ' ' + s).trim();
+          }
+        });
+        if (buf) parts.push(buf);
+      }
+      return parts.filter(Boolean);
+    }
+    function speakPage() {
+      if (!window.speechSynthesis) return;
+      speechSynthesis.cancel();
+      if (state._pauseTimer) { clearTimeout(state._pauseTimer); state._pauseTimer = null; }
+      let text = state.pages[state.pageIndex] || '';
+      if (!state.arranged) text = text.replace(/(\w)-\s*\n\s*(\w)/g, '$1$2').replace(/([^\n])\n(?!\n)/g, '$1 ');
+      // Abstract mode: one sentence at a time; otherwise paragraph chunks
+      let rawParas;
+      if (state.sceneOn) {
+        rawParas = splitSentences(text);
+        state._sentIndex = 0;
+        try { showSentence(0); } catch (e) {}
+      } else {
+        rawParas = splitParagraphs(text);
+      }
+      const paras = rawParas.map(function (p) { return cleanForSpeech(p); }).filter(Boolean);
+      if (!paras.length) { if (state.reading) next(); return; }
+      if (state.sceneOn) {
+        try { renderPage(); } catch (e) {}
+      }
+      const voices = speechSynthesis.getVoices() || [];
+      let voice = state.voiceName ? voices.find(function (v) { return v.name === state.voiceName; }) : null;
+      if (!voice) voice = voices.find(function (v) { return /en/i.test(v.lang) && /female|samantha|zira|karen|moira|tessa|google/i.test(v.name); })
+                || voices.find(function (v) { return /en/i.test(v.lang); });
+      // Global word index across paragraphs for karaoke (page still shows full text)
+      const fullForKw = cleanForSpeech(text);
+      const allWords = fullForKw.match(/\S+/g) || [];
+      let globalWordBase = 0;
+
+      function speakPara(pi) {
+        if (!state.reading && pi > 0) return;
+        if (pi >= paras.length) {
+          if (state.reading) next();
+          return;
+        }
+        const chunk = paras[pi];
+        const u = new SpeechSynthesisUtterance(chunk);
+        u.rate = state.rate || 0.95;
+        if (voice) u.voice = voice;
+        state._kwIndex = globalWordBase;
+        u.onboundary = function (ev) {
+          if (!state.sceneOn) return;
+          if (ev.name === 'word' || ev.charIndex != null) {
+            const upto = chunk.slice(0, ev.charIndex || 0);
+            const local = (upto.match(/\S+/g) || []).length;
+            const wi = globalWordBase + local;
+            state._kwIndex = wi;
+            highlightWord(wi);
+          }
+        };
+        let fallbackTimer = null;
+        const words = chunk.match(/\S+/g) || [];
+        if (state.sceneOn && words.length) {
+          const msPerWord = Math.max(180, 60000 / (140 * (state.rate || 0.95)));
+          let fi = 0;
+          fallbackTimer = setInterval(function () {
+            if (!speechSynthesis.speaking) { clearInterval(fallbackTimer); return; }
+            highlightWord(globalWordBase + fi);
+            fi += 1;
+            if (fi >= words.length) clearInterval(fallbackTimer);
+          }, msPerWord);
+        }
+        u.onend = function () {
+          if (fallbackTimer) clearInterval(fallbackTimer);
+          globalWordBase += words.length;
+          if (state.sceneOn && sheetText) {
+            // soft clear spoken marks before next block
+            sheetText.querySelectorAll('.kw.current').forEach(function (n) { n.classList.remove('current'); });
+          }
+          if (!state.reading) return;
+          const pauseSec = Number(state.paraPause || 0);
+          if (pi < paras.length - 1 && pauseSec > 0) {
+            // Status cue during pause
+            const badge = document.getElementById('pageBadgeStatus');
+            if (badge) {
+              badge.textContent = 'Pause ' + pauseSec + 's…';
+              badge.className = 'status status-progress';
+            }
+            // Fade current sentence before next appears
+            if (state.sceneOn && sheetText) {
+              const cur = sheetText.querySelector('.ab-sentence.active');
+              if (cur) { cur.classList.add('leaving'); cur.classList.remove('active'); }
+            }
+            state._pauseTimer = setTimeout(function () {
+              state._pauseTimer = null;
+              if (state.sceneOn) {
+                try { showSentence(pi + 1); } catch (e) {}
+              }
+              if (state.reading) speakPara(pi + 1);
+            }, pauseSec * 1000);
+          } else {
+            speakPara(pi + 1);
+          }
+        };
+        u.onerror = function () {
+          if (fallbackTimer) clearInterval(fallbackTimer);
+        };
+        speechSynthesis.speak(u);
+      }
+      speakPara(0);
+    }
+    async function loadBgmList() {
+      try {
+        const r = await fetch('/member/api/kwealth/bgm', { credentials: 'same-origin' });
+        const j = await r.json();
+        state.bgmItems = (j && j.items) || [];
+      } catch (e) { state.bgmItems = []; }
+      renderBgmList();
+    }
+    function renderBgmList() {
+      const box = $('bgmList');
+      const empty = $('bgmEmpty');
+      if ($('bgmCount')) $('bgmCount').textContent = state.bgmItems.length + ' / 10';
+      if (!box) return;
+      box.innerHTML = '';
+      if (!state.bgmItems.length) {
+        if (empty) empty.style.display = 'block';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+      state.bgmItems.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'bgm-row' + (state.bgmId === item.id ? ' active' : '');
+        row.innerHTML = '<div style="flex:1;min-width:0;"><div style="color:#e2e8f0;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div></div>';
+        row.querySelector('div div').textContent = item.title;
+        const play = document.createElement('button');
+        play.type = 'button'; play.className = 'chip on'; play.textContent = 'Play';
+        play.onclick = () => playTrack(item);
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'chip'; del.textContent = 'Remove';
+        if (item.shared || String(item.id).indexOf('shared:') === 0) {
+          del.textContent = 'Shared';
+          del.disabled = true;
+          del.title = 'Shared by General Admin — cannot delete';
+        } else {
+          del.onclick = async () => {
+            if (!confirm('Remove this track?')) return;
+            const fd = new FormData(); fd.append('track_id', item.id);
+            await fetch('/member/kwealth/bgm/delete', { method: 'POST', body: fd, credentials: 'same-origin' });
+            if (state.bgmId === item.id) stopBgm();
+            loadBgmList();
+          };
+        }
+        row.appendChild(play);
+        row.appendChild(del);
+        box.appendChild(row);
+      });
+    }
+    function stopBgm() {
+      try { $('bgmAudio').pause(); $('bgmAudio').removeAttribute('src'); } catch (e) {}
+      state.bgmPlaying = false;
+      state.bgmId = '';
+      localStorage.removeItem('kw_book_bgm_id');
+      if ($('bgmDot')) $('bgmDot').className = 'off';
+      renderBgmList();
+    }
+    function playTrack(item) {
+      const a = $('bgmAudio');
+      if (!a) return;
+      a.src = item.url;
+      a.volume = state.bgmVol;
+      a.loop = true;
+      a.play().then(() => {
+        state.bgmPlaying = true;
+        state.bgmId = item.id;
+        localStorage.setItem('kw_book_bgm_id', item.id);
+        if ($('bgmDot')) $('bgmDot').className = 'live';
+        renderBgmList();
+      }).catch(() => alert('Could not play this track. Try another file.'));
+    }
+
+    
+    on('btnDelBook', 'onclick', async () => {
+      if (!state.bookId) { alert('Select a book first'); return; }
+      if (!confirm('Delete this book from your library? (Shared admin books cannot be removed here.)')) return;
+      const fd = new FormData();
+      fd.append('book_id', state.bookId);
+      const r = await fetch('/member/kwealth/books/delete', { method: 'POST', body: fd, credentials: 'same-origin' });
+      if (r.redirected) { location.href = r.url; return; }
+      location.href = '/member/kwealth/books?deleted=1';
+    });
+
+    on('btnLoad', 'onclick', () => { const f = $('filePick'); if (f) f.click(); });
+    on('filePick', 'onchange', async (ev) => {
+      const files = ev.target.files;
+      if (!files || !files.length) return;
+      $('btnLoad').textContent = 'Scanning…';
+      const fd = new FormData();
+      for (const f of files) fd.append('files', f);
+      try {
+        const r = await fetch('/member/kwealth/books/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+        location.href = r.redirected ? r.url : '/member/kwealth/books';
+      } catch (e) { alert('Could not load books'); }
+      $('btnLoad').textContent = 'Load';
+      ev.target.value = '';
+    });
+    if ($('bookSelect')) on('bookSelect', 'onchange', () => { location.href = '/member/kwealth/books?book_id=' + $('bookSelect').value; });
+    on('btnTools', 'onclick', () => {
+      const p = $('panelTools');
+      if (!p) return;
+      if (p.dataset.open === '1') { p.style.display = 'none'; p.dataset.open = '0'; }
+      else { p.style.display = 'block'; p.dataset.open = '1'; }
+    });
+    $('panelTools').style.display = 'block';
+    $('panelTools').dataset.open = '1';
+    on('btnMusic', 'onclick', () => {
+      const p = $('panelMusic');
+      if (!p) return;
+      const show = p.style.display === 'none';
+      p.style.display = show ? 'block' : 'none';
+      if (show) loadBgmList();
+    });
+
+    document.querySelectorAll('.theme-btn').forEach(b => {
+      b.onclick = () => { state.theme = b.dataset.theme; localStorage.setItem('kw_book_theme', state.theme); applyTheme(); };
+    });
+    on('fontSize', 'oninput', () => { state.fontSize = Number($('fontSize').value); applyFont(); });
+    on('fontFamily', 'onchange', () => { state.fontFamily = $('fontFamily').value; applyFont(); });
+    on('flipStyle', 'onchange', () => { state.flipStyle = $('flipStyle').value; localStorage.setItem('kw_book_flip', state.flipStyle); });
+    on('btnJump', 'onclick', () => {
+      const n = Math.max(1, Math.min(state.pages.length, parseInt($('jumpTo').value, 10) || 1));
+      animateFlip(n - 1 > state.pageIndex ? 'next' : 'prev', () => {
+        state.pageIndex = n - 1; renderPage(); saveProgress(); if (state.reading) speakPage();
+      });
+    });
+    on('voiceName', 'onchange', () => { state.voiceName = $('voiceName').value; localStorage.setItem('kw_book_voice', state.voiceName); });
+    on('rate', 'oninput', () => { state.rate = Number($('rate').value); localStorage.setItem('kw_book_rate', state.rate); });
+    if ($('paraPause')) {
+      $('paraPause').value = String(state.paraPause || 5);
+      on('paraPause', 'onchange', () => {
+        state.paraPause = Number($('paraPause').value || 0);
+        localStorage.setItem('kw_book_paraPause', state.paraPause);
+      });
+    }
+    on('btnArrange', 'onclick', () => {
+      state.pages = state.pages.map(page => {
+        let t = page || '';
+        t = t.replace(/(\w)-\s*\n\s*(\w)/g, '$1$2').replace(/([^\n])\n(?!\n)/g, '$1 ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
+        return t.trim();
+      });
+      state.arranged = true; renderPage();
+    });
+    on('btnRead', 'onclick', () => {
+      if (!state.pages.length) { alert('Load or select a book first'); return; }
+      state.reading = !state.reading;
+      if ($('btnRead')) $('btnRead').textContent = state.reading ? '⏹ Stop' : '👼 Read';
+      if (document.getElementById('fsRead')) {
+        document.getElementById('fsRead').textContent = state.reading ? '⏹ Stop' : '👼 Read';
+        document.getElementById('fsRead').classList.toggle('is-on', state.reading);
+      }
+      if (state.reading) {
+        speakPage();
+      } else {
+        if (state._pauseTimer) { clearTimeout(state._pauseTimer); state._pauseTimer = null; }
+        try { speechSynthesis.cancel(); } catch (e) {}
+      }
+    });
+    if ($('btnPrev')) on('btnPrev', 'onclick', prev);
+    if ($('btnNext')) on('btnNext', 'onclick', next);
+    if ($('btnHighlight')) on('btnHighlight', 'onclick', async () => {
+      const sel = (window.getSelection && window.getSelection().toString() || '').trim();
+      if (!sel) { alert('Highlight text on the page first'); return; }
+      const fd = new FormData();
+      fd.append('book_id', state.bookId); fd.append('text', sel); fd.append('title', 'Highlight');
+      await fetch('/member/kwealth/excerpts/from-book', { method: 'POST', body: fd, credentials: 'same-origin' });
+      alert('Saved to Excerpts');
+    });
+
+    const stage = $('stage');
+    if (stage) {
+      stage.addEventListener('touchstart', (e) => { if (e.touches[0]) state._tx = e.touches[0].clientX; }, { passive: true });
+      stage.addEventListener('touchend', (e) => {
+        if (state._tx == null) return;
+        const x = e.changedTouches[0] ? e.changedTouches[0].clientX : state._tx;
+        const dx = x - state._tx; state._tx = null;
+        if (Math.abs(dx) < 40) return;
+        if (dx < 0) next(); else prev();
+      });
+      stage.addEventListener('mousedown', (e) => { if (e.button === 0) state._mx = e.clientX; });
+      stage.addEventListener('mouseup', (e) => {
+        if (state._mx == null) return;
+        const dx = e.clientX - state._mx; state._mx = null;
+        if (Math.abs(dx) < 50) return;
+        if (dx < 0) next(); else prev();
+      });
+    }
+
+    on('btnLoadBgm', 'onclick', () => $('bgmFile').click());
+    on('bgmFile', 'onchange', async (ev) => {
+      const files = ev.target.files;
+      if (!files || !files.length) return;
+      if (state.bgmItems.length >= 10) { alert('Maximum 10 background tracks. Remove one first.'); return; }
+      const fd = new FormData();
+      for (const f of files) fd.append('files', f);
+      $('btnLoadBgm').textContent = 'Uploading…';
+      try {
+        const r = await fetch('/member/kwealth/bgm/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+        if (r.redirected) location.href = r.url + (r.url.includes('?') ? '&' : '?') + 'bgm=1';
+        else location.href = '/member/kwealth/books?bgm=1';
+      } catch (e) { alert('Upload failed'); }
+      $('btnLoadBgm').textContent = '+ Upload / sync from device';
+      ev.target.value = '';
+    });
+    on('btnBgmStop', 'onclick', stopBgm);
+    on('bgmVol', 'oninput', () => {
+      state.bgmVol = Number($('bgmVol').value);
+      localStorage.setItem('kw_book_bgmVol', state.bgmVol);
+      if ($('bgmAudio')) $('bgmAudio').volume = state.bgmVol;
+    });
+
+    applyTheme(); applyFont();
+    if ($('fontSize')) $('fontSize').value = state.fontSize;
+    if ($('fontFamily')) $('fontFamily').value = state.fontFamily;
+    if ($('flipStyle')) $('flipStyle').value = state.flipStyle;
+    if ($('rate')) $('rate').value = state.rate;
+    if ($('bgmVol')) $('bgmVol').value = state.bgmVol;
+    renderPage();
+    loadVoices();
+    // Store book on device for offline reading
+    if (window.CGOffline && state.bookId && state.pages.length) {
+      CGOffline.putBook({
+        id: state.bookId,
+        title: (document.getElementById('bookSelect') && document.getElementById('bookSelect').selectedOptions[0])
+          ? document.getElementById('bookSelect').selectedOptions[0].text : 'Book',
+        pages: state.pages,
+        pageIndex: state.pageIndex
+      }).catch(function(){});
+    }
+    // Offline fallback: if no pages from server, try device store
+    if ((!state.pages || !state.pages.length) && window.CGOffline && state.bookId) {
+      CGOffline.getBook(state.bookId).then(function(b) {
+        if (b && b.pages && b.pages.length) {
+          state.pages = b.pages;
+          state.pageIndex = b.pageIndex || 0;
+          renderPage();
+        }
+      }).catch(function(){});
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
+    }
+
+    if (window.speechSynthesis) speechSynthesis.onvoiceschanged = loadVoices;
+    
+    // —— Abstract panel (replaces book surface) ——
+                
+    function applySceneFs(force) {
+      const stage = document.getElementById('stage');
+      const btn = document.getElementById('btnSceneFs');
+      const fsBar = document.getElementById('fsControls');
+      const fsExit = document.getElementById('sceneFsExit');
+      if (typeof force === 'boolean') state.sceneFs = force;
+      const on = !!state.sceneFs;
+      if (stage) stage.classList.toggle('scene-fs', on);
+      document.body.classList.toggle('scene-fs-on', on);
+      if (btn) btn.classList.toggle('is-on', on);
+      if (fsBar) {
+        fsBar.style.setProperty('display', on ? 'flex' : 'none', 'important');
+        fsBar.style.zIndex = '2147483000';
+      }
+      if (fsExit) {
+        fsExit.style.setProperty('display', on ? 'block' : 'none', 'important');
+      }
+      if (on && !state.sceneOn) {
+        state.sceneOn = true;
+        try { applyScene(); } catch (e) {}
+      }
+      try { localStorage.setItem('kw_scene_fs', on ? '1' : '0'); } catch (e) {}
+      // Prefer browser fullscreen API when available
+      try {
+        if (on && stage && !document.fullscreenElement && stage.requestFullscreen) {
+          stage.requestFullscreen().catch(function(){});
+        } else if (!on && document.fullscreenElement) {
+          document.exitFullscreen().catch(function(){});
+        }
+      } catch (e) {}
+    }
+
+    function applyScene() {
+      const stage = document.getElementById('stage');
+      const surface = document.getElementById('sceneStage');
+      const btn = document.getElementById('btnScene');
+      const pick = document.getElementById('scenePick');
+      const styleSel = document.getElementById('wordStyle');
+      const on = !!state.sceneOn;
+      const name = state.sceneName || 'sun';
+      const wstyle = state.wordStyle || 'fill';
+      if (!stage || !surface) {
+        if (btn) btn.classList.toggle('is-on', on);
+        return;
+      }
+      stage.classList.toggle('scene-on', on);
+      document.body.classList.toggle('scene-on', on);
+      ['ws-fill','ws-write','ws-glow','ws-underline'].forEach(function (c) { stage.classList.remove(c); });
+      if (on) stage.classList.add('ws-' + wstyle);
+      surface.className = 'sc-' + name;
+      surface.setAttribute('aria-hidden', on ? 'false' : 'true');
+      if (on) {
+        surface.style.setProperty('display', 'block', 'important');
+        surface.style.visibility = 'visible';
+        surface.style.opacity = '1';
+      } else {
+        surface.style.setProperty('display', 'none', 'important');
+      }
+      // Show only bits for selected scene
+      ['sun','orbit','voyage','moon','planets','probe','deep'].forEach(function (n) {
+        const el = surface.querySelector('.sc-' + n + '-bits');
+        if (el) el.style.display = (on && n === name) ? 'block' : 'none';
+      });
+      if (btn) btn.classList.toggle('is-on', on);
+      if (pick && pick.value !== name) pick.value = name;
+      if (styleSel && styleSel.value !== wstyle) styleSel.value = wstyle;
+      try {
+        localStorage.setItem('kw_scene_on', on ? '1' : '0');
+        localStorage.setItem('kw_scene', name);
+        localStorage.setItem('kw_book_wordStyle', wstyle);
+      } catch (e) {}
+      try { renderPage(); } catch (e) {}
+      if (on && typeof state._kwIndex === 'number') {
+        try { highlightWord(state._kwIndex); } catch (e) {}
+      }
+    }
+    state.sceneOn = false;
+    state.sceneName = 'sun';
+    try {
+      state.sceneOn = localStorage.getItem('kw_scene_on') === '1';
+      state.sceneName = localStorage.getItem('kw_scene') || 'sun';
+    } catch (e) {}
+    const btnScene = document.getElementById('btnScene');
+    const scenePick = document.getElementById('scenePick');
+    if (btnScene) {
+      btnScene.addEventListener('click', function () {
+        if (!document.getElementById('stage') || !document.getElementById('sceneStage')) {
+          alert('Select or load a book first, then tap Scene.');
+          return;
+        }
+        state.sceneOn = !state.sceneOn;
+        try { applyScene(); } catch (e) { console.warn(e); }
+      });
+    }
+    if (scenePick) {
+      scenePick.value = state.sceneName || 'sun';
+      scenePick.addEventListener('change', function () {
+        state.sceneName = scenePick.value || 'sun';
+        if (!state.sceneOn) state.sceneOn = true;
+        try { applyScene(); } catch (e) { console.warn(e); }
+      });
+    }
+    const wordStyleEl = document.getElementById('wordStyle');
+    if (wordStyleEl) {
+      wordStyleEl.value = state.wordStyle || 'fill';
+      wordStyleEl.addEventListener('change', function () {
+        state.wordStyle = wordStyleEl.value || 'fill';
+        try { applyScene(); } catch (e) { console.warn(e); }
+      });
+    }
+    try {
+      state.wordStyle = localStorage.getItem('kw_book_wordStyle') || state.wordStyle || 'fill';
+    } catch (e) {}
+    try { applyScene(); } catch (e) { console.warn(e); }
+
+    const btnSceneFs = document.getElementById('btnSceneFs');
+    const sceneFsExit = document.getElementById('sceneFsExit');
+    if (btnSceneFs) {
+      btnSceneFs.addEventListener('click', function () {
+        if (!document.getElementById('stage')) {
+          alert('Select or load a book first.');
+          return;
+        }
+        state.sceneFs = !state.sceneFs;
+        applySceneFs();
+      });
+    }
+    if (sceneFsExit) {
+      sceneFsExit.addEventListener('click', function () {
+        state.sceneFs = false;
+        applySceneFs(false);
+      });
+    }
+    document.addEventListener('fullscreenchange', function () {
+      if (!document.fullscreenElement && state.sceneFs) {
+        state.sceneFs = false;
+        applySceneFs(false);
+      }
+    });
+    try {
+      if (state.sceneFs) applySceneFs(true);
+    } catch (e) {}
+
+    try {
+      loadBgmList().then(() => {
+        if (state.bgmId) {
+          const item = state.bgmItems.find(x => x.id === state.bgmId);
+        }
+      }).catch(function () {});
+    } catch (e) { console.warn(e); }
+
+    // Angel "Read ebook" → auto start reading
+    if (window.__AUTO_READ__ && state.pages.length) {
+      setTimeout(() => {
+        state.reading = true;
+        if ($('btnRead')) $('btnRead').textContent = '⏹ Stop';
+        speakPage();
+      }, 600);
+    }
+  })();
+  </script>
+</body>
+</html>

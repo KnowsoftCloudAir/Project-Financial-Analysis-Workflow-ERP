@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Church Hymnals — General Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <header class="border-b border-white/10 bg-slate-900/80">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center gap-4">
+      <a href="/admin/" class="text-teal-300 text-sm font-semibold">← Admin</a>
+      <h1 class="font-bold text-lg">Global church hymn packs</h1>
+    </div>
+  </header>
+  <main class="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <p class="text-sm text-slate-400">Load plain-text hymn books per global church. Members see public-domain hymns plus their global church pack. Format: <code class="text-amber-200">{1} TITLE</code> then verses.</p>
+    {% if request.query_params.get('ok') %}<p class="text-emerald-400 text-sm">Saved.</p>{% endif %}
+    {% if request.query_params.get('err') %}<p class="text-rose-400 text-sm">Body cannot be empty.</p>{% endif %}
+
+    <form method="post" action="/admin/church-hymnals/save" class="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3">
+      <label class="block text-xs uppercase text-slate-400">Global church</label>
+      <select name="church_id" class="w-full rounded-xl px-3 py-2 text-slate-900">
+        <option value="">Platform default (all churches)</option>
+        {% for g in globals %}
+        <option value="{{ g.id }}">{{ g.name }}</option>
+        {% endfor %}
+      </select>
+      <label class="block text-xs uppercase text-slate-400">Pack title</label>
+      <input name="title" class="w-full rounded-xl px-3 py-2 text-slate-900" value="Church Hymns">
+      <label class="block text-xs uppercase text-slate-400">Hymn text</label>
+      <textarea name="body" rows="16" class="w-full rounded-xl px-3 py-2 text-slate-900 font-mono text-sm" placeholder="{1} AMAZING GRACE&#10;1. Amazing grace! how sweet the sound…" required></textarea>
+      <button type="submit" class="rounded-xl bg-violet-600 hover:bg-violet-500 px-4 py-2 font-bold text-sm">Save hymn pack</button>
+    </form>
+
+    <section>
+      <h2 class="font-semibold mb-3">Saved packs ({{ packs|length }})</h2>
+      {% for p in packs %}
+      <div class="rounded-xl border border-white/10 p-3 mb-2">
+        <p class="font-semibold">{{ p.title }}
+          <span class="text-xs text-slate-400">· church_id={{ p.church_id or 'default' }}</span>
+          {% if p.is_active %}<span class="text-emerald-400 text-xs">active</span>{% endif %}
+        </p>
+        <p class="text-xs text-slate-500">{{ (p.body or '')|length }} chars · {{ p.updated_at }}</p>
+      </div>
+      {% else %}
+      <p class="text-slate-500 text-sm">No church packs yet. Members still get the built-in public-domain hymn list.</p>
+      {% endfor %}
+    </section>
+  </main>
+</body>
+</html>

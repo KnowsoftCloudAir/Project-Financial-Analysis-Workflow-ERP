@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Member footprints{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold text-navy-900 mb-1">Member footprints</h1>
+  <p class="text-sm text-slate-500 mb-2">General Admin only — name, email, action, IP and location when available.</p>
+  <p class="text-xs text-slate-400 mb-6">Location uses network/CDN country headers when the host provides them; otherwise IP is shown. New logins after this update store name and email on every event.</p>
+  <div class="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+    <table class="min-w-full text-sm">
+      <thead class="bg-slate-100 text-left text-xs uppercase text-slate-500">
+        <tr>
+          <th class="px-3 py-2">Time (UTC)</th>
+          <th class="px-3 py-2">Name</th>
+          <th class="px-3 py-2">Email</th>
+          <th class="px-3 py-2">Action</th>
+          <th class="px-3 py-2">Detail</th>
+          <th class="px-3 py-2">IP</th>
+          <th class="px-3 py-2">Location</th>
+          <th class="px-3 py-2">Path</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for L in logs %}
+        <tr class="border-t hover:bg-slate-50">
+          <td class="px-3 py-2 whitespace-nowrap text-xs">{{ L.created_at }}</td>
+          <td class="px-3 py-2 font-medium">{{ L.full_name or "—" }}</td>
+          <td class="px-3 py-2 text-xs">{{ L.email or "—" }}</td>
+          <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 text-xs font-semibold">{{ L.action }}</span></td>
+          <td class="px-3 py-2 text-xs text-slate-600 max-w-xs truncate">{{ L.detail or "" }}</td>
+          <td class="px-3 py-2 text-xs font-mono">{{ L.ip_address or "—" }}</td>
+          <td class="px-3 py-2 text-xs">{{ L.location_hint or "—" }}</td>
+          <td class="px-3 py-2 text-xs text-slate-400">{{ L.path or "" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="px-3 py-8 text-center text-slate-400">No activity recorded yet. Ask a member to log in, then refresh this page.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

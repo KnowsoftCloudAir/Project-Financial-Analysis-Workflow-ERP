@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Walk with the Word — Angel guide{% endblock %}
+{% block content %}
+<style>
+  .angel-wrap { max-width: 720px; margin: 0 auto; }
+  .angel-hero {
+    background: linear-gradient(145deg, #0b1a2a 0%, #0e3d4a 50%, #0b6e6e 100%);
+    color: #fff; border-radius: 1.25rem; padding: 1.5rem 1.35rem; margin-bottom: 1.25rem;
+    box-shadow: 0 20px 40px rgba(11,30,50,.25);
+  }
+  .angel-hero h1 { font-size: 1.35rem; font-weight: 800; margin: 0 0 .35rem; }
+  .angel-hero p { opacity: .9; font-size: .9rem; margin: 0; }
+  .bubble-angel {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 1.1rem 1.1rem 1.1rem .35rem;
+    padding: 1.15rem 1.2rem; line-height: 1.65; white-space: pre-wrap;
+    box-shadow: 0 8px 24px rgba(15,23,42,.06);
+  }
+  .bubble-label {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-size: .75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    color: #0b6e6e; margin-bottom: .5rem;
+  }
+  .choice-grid { display: grid; gap: .65rem; margin-top: 1.25rem; }
+  .choice-btn {
+    display: block; width: 100%; text-align: left;
+    background: #f8fafc; border: 1px solid #cbd5e1; border-radius: .9rem;
+    padding: .85rem 1rem; font-weight: 600; color: #0f172a;
+    transition: .15s ease; cursor: pointer;
+  }
+  .choice-btn:hover {
+    background: #0b6e6e; color: #fff; border-color: #0b6e6e;
+    transform: translateY(-1px); box-shadow: 0 8px 20px rgba(11,110,110,.25);
+  }
+  .choice-btn.yes { border-color: #22c55e; background: #f0fdf4; }
+  .choice-btn.yes:hover { background: #16a34a; border-color: #16a34a; }
+  .choice-btn.no { border-color: #94a3b8; }
+  .angel-footnote { font-size: .8rem; color: #64748b; margin-top: 1.5rem; text-align: center; }
+</style>
+
+<div class="angel-wrap py-6 px-3">
+  <div class="angel-hero">
+    <h1>A quiet walk through the Scriptures</h1>
+    <p>Call and response · King James text · deeper when you ask · always pointing to Christ</p>
+  </div>
+
+  <div class="bubble-label">✦ Guide</div>
+  <div class="bubble-angel">{{ angel_message }}</div>
+
+  {% if choices %}
+  <p class="text-sm font-semibold text-slate-600 mt-5 mb-2">Your response:</p>
+  <div class="choice-grid">
+    {% for c in choices %}
+    <form method="post" action="/angel/go">
+      <input type="hidden" name="next_topic" value="{{ c.id }}" />
+      <button type="submit" class="choice-btn {% if c.id == 'salvation_yes' %}yes{% elif c.id == 'salvation_no' %}no{% endif %}">
+        {{ c.label }}
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p class="angel-footnote">
+    This guide uses the Holy Bible (KJV) as the authority. Angels are servants; worship belongs to God alone (Revelation 22:8–9).
+  </p>
+</div>
+{% endblock %}

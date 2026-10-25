@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Church data export{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-10">
+  <h1 class="text-2xl font-bold mb-2">Church database export</h1>
+  <p class="text-sm text-slate-600 mb-6">Download your members in neat rows/columns (CSV for Excel) or PDF. Upload a CSV to update or add members.</p>
+  {% if request.query_params.get('uploaded') %}
+  <div class="mb-4 rounded-xl bg-emerald-50 border p-3 text-sm">Processed {{ request.query_params.get('uploaded') }} rows.</div>
+  {% endif %}
+  <div class="grid sm:grid-cols-2 gap-3 mb-8">
+    <a href="/church/export/csv" class="block text-center py-3 rounded-xl bg-indigo-700 text-white font-semibold">Download Excel (CSV)</a>
+    <a href="/church/export/pdf" class="block text-center py-3 rounded-xl bg-slate-800 text-white font-semibold">Download PDF</a>
+  </div>
+  <form method="post" action="/church/export/upload-csv" enctype="multipart/form-data" class="border rounded-2xl p-5 space-y-3 bg-slate-50">
+    <p class="font-semibold text-sm">Upload CSV back</p>
+    <input type="file" name="file" accept=".csv,text/csv" required>
+    <button class="w-full py-2.5 rounded-xl bg-navy-900 text-white font-semibold">Upload CSV</button>
+  </form>
+</div>
+{% endblock %}
